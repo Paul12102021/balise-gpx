@@ -4,7 +4,7 @@
 
 // La page et le code doivent être de la même version. Sinon (page gardée en cache
 // par le téléphone ou par GitHub), on recharge une page fraîche, au plus 3 fois.
-const APP_VERSION = 23;
+const APP_VERSION = 24;
 try {
   const meta = document.querySelector('meta[name="balise-version"]');
   const pageV = meta ? +meta.content : 0;
@@ -327,7 +327,7 @@ function openDB() {
   return dbP || (dbP = new Promise((res, rej) => {
     // un autre onglet de l'appli (ancienne version) peut bloquer l'ouverture : on n'attend pas indéfiniment
     const timer = setTimeout(() => { dbP = null; rej(new Error('blocked')); }, 3000);
-    const r = indexedDB.open('balise', 4);
+    const r = indexedDB.open('balise', 5);
     r.onblocked = () => { clearTimeout(timer); dbP = null; rej(new Error('blocked')); };
     r.onupgradeneeded = () => {
       const d = r.result;
@@ -335,6 +335,7 @@ function openDB() {
       if (!d.objectStoreNames.contains('packs')) d.createObjectStore('packs', { keyPath: 'id' });
       if (!d.objectStoreNames.contains('graphs')) d.createObjectStore('graphs', { keyPath: 'id' });
       if (!d.objectStoreNames.contains('graphChunks')) d.createObjectStore('graphChunks', { keyPath: 'id' });
+      if (!d.objectStoreNames.contains('places')) d.createObjectStore('places', { keyPath: 'code' });
     };
     r.onsuccess = () => {
       clearTimeout(timer);
@@ -876,7 +877,10 @@ async function searchPlaces(q) {
   const seq = ++searchSeq, list = $('destList');
   const c = me || (() => { const m = map.getCenter(); return { lat: m.lat, lon: m.lng }; })();
   try {
-    const r = await fetch(`https://data.geopf.fr/geocodage/search?q=${encodeURIComponent(q)}&limit=6&lat=${c.lat.toFixed(4)}&lon=${c.lon.toFixed(4)}`);
+    if (navigator.onLine === false) throw new Error('hors ligne');
+    const ctrl = new AbortController(), timer = setTimeout(() => ctrl.abort(), 6000);
+    const r = await fetch(`https://data.geopf.fr/geocodage/search?q=${encodeURIComponent(q)}&limit=6&lat=${c.lat.toFixed(4)}&lon=${c.lon.toFixed(4)}`, { signal: ctrl.signal });
+    clearTimeout(timer);
     const j = await r.json();
     if (seq !== searchSeq) return;
     list.innerHTML = '';
@@ -890,7 +894,88 @@ async function searchPlaces(q) {
       b.onclick = () => goTo({ lat, lon, label: p.name || p.label });
       li.appendChild(b); list.appendChild(li);
     }
-  } catch { if (seq === searchSeq) list.innerHTML = '<li class="note">Recherche impossible sans réseau.</li>'; }
+  } catch {
+    // pas de réseau : communes des départements téléchargés
+    const res = await searchLocalPlaces(q, c);
+    if (seq !== searchSeq) return;
+    list.innerHTML = '';
+    if (!res.length) {
+      list.innerHTML = `<li class="note">${placesCount ? 'Aucune commune trouvée parmi celles téléchargées.' : 'Sans réseau, la recherche utilise les communes des cartes téléchargées : aucune pour l\'instant.'}</li>`;
+      return;
+    }
+    for (const p of res) {
+      const li = document.createElement('li'), b = document.createElement('button');
+      b.className = 'lib-item'; b.innerHTML = '<b></b><span></span>';
+      b.querySelector('b').textContent = p.nom;
+      b.querySelector('span').textContent = `${p.cp} · commune · hors connexion` + (me ? ` · ${fmtDist(hav(me, p))} à vol d'oiseau` : '');
+      b.onclick = () => goTo({ lat: p.lat, lon: p.lon, label: p.nom });
+      li.appendChild(b); list.appendChild(li);
+    }
+  }
+}
+
+// ---------- communes enregistrées pour la recherche sans réseau ----------
+let placesCache = null, placesCount = 0;
+const normName = t => t.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[-'’]/g, ' ').replace(/\bst\b/g, 'saint').replace(/\bste\b/g, 'sainte').replace(/\s+/g, ' ').trim();
+async function loadPlaces() {
+  if (placesCache) return placesCache;
+  let all = [];
+  try { all = (await idb('readonly', st => st.getAll(), 'places')) || []; } catch {}
+  placesCache = all.flatMap(d => d.list.map(([nom, lat, lon, cp, pop]) => ({ nom, lat, lon, cp, pop, n: normName(nom) })));
+  placesCount = placesCache.length;
+  return placesCache;
+}
+async function searchLocalPlaces(q, near) {
+  const all = await loadPlaces(), nq = normName(q);
+  if (!nq) return [];
+  const scored = [];
+  for (const p of all) {
+    let sc = -1;
+    if (p.n.startsWith(nq)) sc = 0;
+    else if (p.n.includes(' ' + nq)) sc = 1;
+    else if (p.n.includes(nq)) sc = 2;
+    if (sc >= 0) scored.push([sc, -(p.pop || 0), hav(near, p), p]);
+  }
+  scored.sort((a, b) => a[0] - b[0] || a[1] - b[1] || a[2] - b[2]);
+  return scored.slice(0, 8).map(x => x[3]);
+}
+// liste des communes d'un département (geo.api.gouv.fr), quelques dizaines de Ko
+async function downloadPlaces(codes) {
+  let added = 0;
+  for (const code of codes) {
+    try {
+      if (await idb('readonly', st => st.getKey(code), 'places')) continue;
+      const r = await fetch(`https://geo.api.gouv.fr/communes?codeDepartement=${code}&fields=nom,centre,codesPostaux,population&format=json`);
+      if (!r.ok) continue;
+      const list = (await r.json()).filter(c => c.centre).map(c => [c.nom, +c.centre.coordinates[1].toFixed(5), +c.centre.coordinates[0].toFixed(5), (c.codesPostaux || [''])[0], c.population || 0]);
+      await idb('readwrite', st => st.put({ code, list }), 'places');
+      added += list.length;
+    } catch { /* on réessaiera plus tard */ }
+  }
+  if (added) placesCache = null;
+  return added;
+}
+// départements traversés par une trace
+async function depsOfLine(coords) {
+  await loadDeps();
+  const codes = new Set();
+  for (let i = 0; i < coords.length; i += Math.max(1, Math.floor(coords.length / 60))) {
+    const [lon, lat] = coords[i], d = deps.find(x => inPolys(lon, lat, x.polys));
+    if (d) codes.add(d.code);
+  }
+  return [...codes];
+}
+// pour toutes les cartes déjà téléchargées (rattrapage discret quand le réseau est là)
+async function ensurePlaces() {
+  if (navigator.onLine === false) return;
+  try {
+    const codes = new Set();
+    for (const p of await listPacks()) {
+      if (p.kind === 'dep') codes.add(p.code);
+      else if (p.line) (await depsOfLine(p.line)).forEach(c => codes.add(c));
+    }
+    if (codes.size) await downloadPlaces([...codes]);
+  } catch {}
 }
 
 // choisir l'arrivée en touchant la carte
@@ -1397,6 +1482,8 @@ async function updateStorageInfo() {
     $('storeInfo').textContent = `Espace utilisé : ${fmtMo((e.usage || 0) / 1024)}${free}`;
   } catch {}
 }
+setTimeout(ensurePlaces, 4000);
+window.addEventListener('online', () => setTimeout(ensurePlaces, 2000));
 async function openMaps() {
   toggleMore(false);
   $('maps').hidden = false;
@@ -1515,7 +1602,10 @@ $('dlTrace').onclick = async () => {
   };
   await downloadPack(pack, traceTiles(tr));
   // puis le réseau des chemins, pour calculer les itinéraires sans connexion
-  if (navigator.onLine !== false) { await downloadGraph(pack, corridorBoxes(tr)); renderPacks(); }
+  if (navigator.onLine !== false) {
+    depsOfLine(pack.line).then(downloadPlaces);
+    await downloadGraph(pack, corridorBoxes(tr)); renderPacks();
+  }
 };
 $('dlDep').onclick = async () => {
   await loadDeps();
@@ -1527,6 +1617,7 @@ $('dlDep').onclick = async () => {
   } catch {}
   const pack = { id: `dep:${d.code}:${z}`, kind: 'dep', code: d.code, name: `${d.code} · ${d.nom}`, detail: z >= 15 ? 'détaillé' : 'standard', bbox: polysBBox(d.polys) };
   await downloadPack(pack, tiles);
+  downloadPlaces([d.code]);
   if ($('depGraph').checked && navigator.onLine !== false) await downloadDepGraph(pack, d.polys);
 };
 $('depGraph').checked = store.get('depGraph') !== '0';
