@@ -4,7 +4,7 @@
 
 // La page et le code doivent être de la même version. Sinon (page gardée en cache
 // par le téléphone ou par GitHub), on recharge une page fraîche, au plus 3 fois.
-const APP_VERSION = 15;
+const APP_VERSION = 16;
 try {
   const meta = document.querySelector('meta[name="balise-version"]');
   const pageV = meta ? +meta.content : 0;
@@ -488,6 +488,11 @@ function updateHeading() {
 // Réception d'une position
 // =====================================================================
 let pendingRejoin = false, arrived = false;
+const fixWaiters = [];
+function waitFix(ms) {
+  if (me && Date.now() - me.t < 60000) return Promise.resolve(me);
+  return new Promise(res => { fixWaiters.push(res); setTimeout(() => res(null), ms); });
+}
 function onPos(pos) {
   if (sim && !pos.sim) return; // pendant la simulation on ignore le vrai GPS
   // vitesse et direction de déplacement
@@ -513,6 +518,11 @@ function onPos(pos) {
   updateHeading();
 
   if (pendingRejoin) { pendingRejoin = false; requestRejoin(true); }
+  if (fixWaiters.length && (pos.acc || 99) <= 100) { fixWaiters.splice(0).forEach(f => f(pos)); }
+  if (nav && !track && !pos.sim && (pos.acc || 0) <= 40) {
+    if (!freeRef) freeRef = pos;
+    else { const d = hav(freeRef, pos); if (d >= 8) { if (d < 500) freeD += d; freeRef = pos; } }
+  }
   if (nav) {
     offTrackLogic();
     if (rejoin && progress && progress.dist < Math.min(threshold * 0.7, 30) && !isOff) clearRejoin();
@@ -532,7 +542,7 @@ function onPos(pos) {
 // =====================================================================
 // Mode navigation
 // =====================================================================
-let nav = false, follow = true, followOv = false, navTrackId = null;
+let nav = false, follow = true, followOv = false, navTrackId = null, navStartT = 0, freeD = 0, freeRef = null;
 function navZoom() { const s = speedEma || 1.2; return s > 7 ? 15.4 : s > 3.5 ? 16.2 : 17; }
 function navCamera(dur) {
   if (!me) return;
@@ -548,21 +558,22 @@ function setFollow(v) { follow = v; $('btnCenter').classList.toggle('on', nav ? 
   if (nav) setFollow(false); else { followOv = false; $('btnCenter').classList.remove('on'); }
 }));
 
-async function startNav() {
-  if (!track) { toast('Ouvre d\'abord un fichier GPX.'); return; }
+async function startNav(free = false) {
+  if (!track && !free) { openDest(); return; }
   if (!startGPS()) return;
   nav = true; arrived = false; isOff = false; offCount = 0;
-  navTrackId = track.id;
-  document.body.classList.add('nav'); toggleMore(false);
+  navTrackId = track ? track.id : null;
+  navStartT = Date.now(); freeD = 0; freeRef = null;
+  document.body.classList.add('nav'); document.body.classList.toggle('free', !track); toggleMore(false);
   setFollow(true);
   unlockAudio(); enableCompass(); keepAwake();
   say(me ? 'C\'est parti' : 'Navigation démarrée. Recherche du signal GPS.');
-  if (me) { progress = project(track, me, true); guidance(); navCamera(800); }
+  if (me) { if (track) progress = project(track, me, true); guidance(); navCamera(800); }
   else setBanner('gps', '', 'Recherche du signal GPS…', 'gps');
   updateStats();
 }
 function stopNav() {
-  nav = false; document.body.classList.remove('nav'); toggleNavMore(false);
+  nav = false; document.body.classList.remove('nav', 'free'); toggleNavMore(false);
   stopSim(); clearRejoin(); isOff = false;
   try { speechSynthesis.cancel(); } catch {}
   setSrc('turn', EMPTY);
@@ -570,10 +581,10 @@ function stopNav() {
   if (!recording) stopGPS();
   setFollow(false);
 }
-$('btnNav').onclick = startNav;
+$('btnNav').onclick = () => track ? startNav() : openDest();
 $('btnExit').onclick = stopNav;
 $('btnOverview').onclick = () => {
-  if (!track) return;
+  if (!track) { openDest(); return; } // balade libre : choisir une destination
   setFollow(false); map.setPadding({ top: 0, bottom: 0, left: 0, right: 0 });
   fitTo(rejoin ? [track.pts, rejoin.pts] : [track.pts]);
 };
@@ -612,6 +623,11 @@ const spoken = new Map();
 function guidance() {
   if (!nav) return;
   if (!me) { setBanner('gps', '', 'Recherche du signal GPS…', 'gps'); return; }
+  if (!track) {
+    const h = heading, dir = h == null ? '' : ['N', 'NE', 'E', 'SE', 'S', 'SO', 'O', 'NO'][Math.round(h / 45) % 8];
+    setBanner('gps', h == null ? '' : `${Math.round(h)}° ${dir}`, 'Balade libre', { rot: h == null ? 0 : -Math.round(h) }, 'La flèche montre le nord · bouton en bas à droite pour choisir une destination');
+    return;
+  }
   if (!progress) return;
   if (arrived && !rejoin) { setBanner('done', '', 'Vous êtes arrivé', 'flag', `${track.name}`); setSrc('turn', EMPTY); return; }
   if (isOff && !rejoin) {
@@ -630,7 +646,7 @@ function guidance() {
   const info = next.arrive ? (rejoin ? { txt: 'Rejoignez la trace', icon: 'join' } : { txt: 'Arrivée', icon: 'flag' }) : turnInfo(next.ang);
   const tone = rejoin ? 'rejoin' : 'ok';
   const sub = rejoin ? `Retour à la trace · ${fmtDist(rejoinProg.remain)} par le chemin` : '';
-  if (dTo > 1200) setBanner(tone, fmtDist(dTo), 'Continuez sur la trace', 0, (next.arrive ? '' : `puis ${lc(info.txt)}`) + (sub ? (next.arrive ? '' : ' · ') + sub : ''));
+  if (dTo > 1200) setBanner(tone, fmtDist(dTo), track.route ? 'Continuez sur l\'itinéraire' : 'Continuez sur la trace', 0, (next.arrive ? '' : `puis ${lc(info.txt)}`) + (sub ? (next.arrive ? '' : ' · ') + sub : ''));
   else setBanner(tone, fmtDist(dTo), info.txt, info.icon, sub);
 
   const key = path.id + ':' + Math.round(next.along);
@@ -732,8 +748,8 @@ function rejoinCandidates(p, pos) {
   if (pr && Math.abs(pr.along - picked[0].along) < step * 2) { const q = pointAt(p, pr.along); picked[0] = { lat: q.lat, lon: q.lon, along: pr.along, dist: pr.dist }; }
   return picked;
 }
-async function fetchRoute(a, b) {
-  const ctrl = new AbortController(), timer = setTimeout(() => ctrl.abort(), 12000);
+async function fetchRoute(a, b, ms = 12000) {
+  const ctrl = new AbortController(), timer = setTimeout(() => ctrl.abort(), ms);
   try {
     const ll = q => `${q.lon.toFixed(6)},${q.lat.toFixed(6)}`;
     const r = await fetch(`https://brouter.de/brouter?lonlats=${ll(a)}|${ll(b)}&profile=${profile}&alternativeidx=0&format=geojson`, { signal: ctrl.signal });
@@ -745,6 +761,7 @@ async function fetchRoute(a, b) {
 }
 async function requestRejoin(manual) {
   if (!track) { toast('Ouvre d\'abord un fichier GPX.'); return; }
+  if (track.route) { reroute(); return; }
   if (!me) { pendingRejoin = true; startGPS(); toast('Recherche de ta position…'); return; }
   if (routing) return;
   routing = true; lastRoute = Date.now(); $('btnRejoin').classList.add('busy'); guidance();
@@ -791,6 +808,95 @@ $('btnRejoin').onclick = () => {
 };
 
 // =====================================================================
+// Aller à un lieu (sans GPX) : recherche d'adresse IGN, itinéraire BRouter
+// =====================================================================
+function openDest() {
+  toggleMore(false);
+  $('destProf').value = profile;
+  $('dest').hidden = false;
+  setTimeout(() => $('destQ').focus(), 50);
+}
+function closeDest() { $('dest').hidden = true; $('destQ').blur(); }
+$('destClose').onclick = closeDest;
+$('dest').onclick = e => { if (e.target === $('dest')) closeDest(); };
+$('destProf').onchange = e => { profile = e.target.value; store.set('profile', profile); $('prof').value = profile; };
+$('destFree').onclick = () => { closeDest(); startNav(true); };
+
+let searchT = 0, searchSeq = 0;
+$('destQ').oninput = () => {
+  clearTimeout(searchT);
+  const q = $('destQ').value.trim();
+  if (q.length < 3) { $('destList').innerHTML = ''; return; }
+  searchT = setTimeout(() => searchPlaces(q), 300);
+};
+async function searchPlaces(q) {
+  const seq = ++searchSeq, list = $('destList');
+  const c = me || (() => { const m = map.getCenter(); return { lat: m.lat, lon: m.lng }; })();
+  try {
+    const r = await fetch(`https://data.geopf.fr/geocodage/search?q=${encodeURIComponent(q)}&limit=6&lat=${c.lat.toFixed(4)}&lon=${c.lon.toFixed(4)}`);
+    const j = await r.json();
+    if (seq !== searchSeq) return;
+    list.innerHTML = '';
+    if (!j.features || !j.features.length) { list.innerHTML = '<li class="note">Aucun résultat.</li>'; return; }
+    for (const f of j.features) {
+      const p = f.properties, [lon, lat] = f.geometry.coordinates;
+      const li = document.createElement('li'), b = document.createElement('button');
+      b.className = 'lib-item'; b.innerHTML = '<b></b><span></span>';
+      b.querySelector('b').textContent = p.label;
+      b.querySelector('span').textContent = (p.context || '') + (me ? ` · ${fmtDist(hav(me, { lat, lon }))} à vol d'oiseau` : '');
+      b.onclick = () => goTo({ lat, lon, label: p.name || p.label });
+      li.appendChild(b); list.appendChild(li);
+    }
+  } catch { if (seq === searchSeq) list.innerHTML = '<li class="note">Recherche impossible sans réseau.</li>'; }
+}
+
+// choisir l'arrivée en touchant la carte
+let picking = false;
+$('destPick').onclick = () => { closeDest(); picking = true; $('pickBanner').hidden = false; };
+$('pickCancel').onclick = () => { picking = false; $('pickBanner').hidden = true; };
+map.on('click', e => {
+  if (!picking) return;
+  picking = false; $('pickBanner').hidden = true;
+  goTo({ lat: e.lngLat.lat, lon: e.lngLat.lng, label: 'le point choisi' });
+});
+// appui long sur la carte : y aller
+map.on('contextmenu', e => {
+  const d = { lat: e.lngLat.lat, lon: e.lngLat.lng, label: 'le point choisi' };
+  toast(me ? `À ${fmtDist(hav(me, d))} à vol d'oiseau` : 'Point choisi', 6000, { label: 'Y aller', run: () => goTo(d) });
+});
+
+async function goTo(dest) {
+  closeDest();
+  if (!startGPS()) return;
+  toast('Calcul de l\'itinéraire…', 20000);
+  const pos = await waitFix(20000);
+  if (!pos) { toast('Position GPS introuvable. Va à découvert et réessaie.', 5000); return; }
+  let r;
+  try { r = await fetchRoute(pos, dest, 25000); }
+  catch { toast('Itinéraire impossible : pas de réseau, ou lieu sans chemin pour y aller.', 5000); return; }
+  r.pts.push({ lat: dest.lat, lon: dest.lon, ele: null });
+  if (nav && !track) document.body.classList.remove('free');
+  await showTrack({ name: 'Vers ' + dest.label, pts: r.pts }, !nav);
+  track.route = dest;
+  toast(`${fmtDist(track.total)} jusqu'à ${dest.label} ${profile === 'trekking' ? 'à vélo' : 'à pied'}`, 4000);
+  if (nav) { arrived = false; guidance(); say(`Itinéraire calculé, ${speakDist(track.total)}`); }
+  else startNav();
+}
+async function reroute() {
+  if (routing || !me || !track || !track.route) return;
+  routing = true; lastRoute = Date.now(); $('btnRejoin').classList.add('busy'); guidance();
+  const dest = track.route;
+  try {
+    const r = await fetchRoute(me, dest, 20000);
+    r.pts.push({ lat: dest.lat, lon: dest.lon, ele: null });
+    await showTrack({ name: 'Vers ' + dest.label, pts: r.pts }, false);
+    track.route = dest; isOff = false; offCount = 0; arrived = false;
+    say('Itinéraire recalculé');
+  } catch { /* pas de réseau : nouvel essai automatique dans 30 s */ }
+  routing = false; $('btnRejoin').classList.remove('busy'); guidance();
+}
+
+// =====================================================================
 // Mesures affichées
 // =====================================================================
 function remainingInfo() {
@@ -814,7 +920,16 @@ function updateStats() {
   off.textContent = progress ? fmtDist(progress.dist) : '–';
   off.classList.toggle('bad', !!progress && progress.dist > threshold);
   $('sEle').textContent = me && me.ele != null ? fmtM(me.ele) : (progress && track.ele[progress.idx] != null ? '≈' + fmtM(track.ele[progress.idx]) : '–');
+  if (nav && !track) {
+    $('nbEta').textContent = me && me.ele != null ? fmtM(me.ele) : '–'; $('nbDur').textContent = 'altitude';
+    $('nbRem').textContent = fmtDist(freeD); $('nbL2').textContent = 'parcourus';
+    $('nbUp').textContent = fmtDur((Date.now() - navStartT) / 1000); $('nbL3').textContent = 'durée';
+    $('nbBar').style.width = '0%';
+    const sp = me && me.speed != null && !isNaN(me.speed) ? me.speed * 3.6 : null;
+    $('spVal').textContent = sp == null ? '–' : (sp < 10 ? sp.toFixed(1).replace('.', ',') : Math.round(sp));
+  }
   if (nav && info) {
+    $('nbL2').textContent = 'restant'; $('nbL3').textContent = 'D+ restant';
     $('nbEta').textContent = fmtClock(info.secs);
     $('nbDur').textContent = 'arrivée · ' + fmtDur(info.secs);
     $('nbRem').textContent = fmtDist(info.rem);

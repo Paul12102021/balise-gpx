@@ -267,3 +267,10 @@ body.nav .pausepill { top: calc(env(safe-area-inset-top, 0px) + 108px); }
 .progress { min-height: 24px; }
 .dl-live { font-size: 12px; color: var(--go); font-weight: 600; font-variant-numeric: tabular-nums; }
 @media (prefers-color-scheme: dark) { .dl-live { color: #6fd39b; } }
+
+/* ---------- où aller ---------- */
+.search { width: 100%; min-height: 48px; padding: 0 14px; border-radius: 12px; border: 1px solid var(--line); background: var(--paper); color: var(--ink); font: 16px var(--font); }
+.search:focus-visible { outline: 3px solid var(--me); outline-offset: 1px; }
+.dest-btns { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.pausepill.pick { background: var(--me); }
+body.free #btnRejoin { display: none; }

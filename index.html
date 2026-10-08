@@ -7,13 +7,13 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<meta name="balise-version" content="15">
+<meta name="balise-version" content="16">
 <title>Balise GPX</title>
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" href="icon.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="icon-192.png">
 <link rel="stylesheet" href="vendor/maplibre-gl.css">
-<link rel="stylesheet" href="app.css?v=15">
+<link rel="stylesheet" href="app.css?v=16">
 </head>
 <body>
 <div id="map" aria-label="Carte"></div>
@@ -71,8 +71,8 @@
     </button>
     <div class="nb-stats">
       <div class="nb-stat"><b id="nbEta">–</b><span id="nbDur">arrivée</span></div>
-      <div class="nb-stat"><b id="nbRem">–</b><span>restant</span></div>
-      <div class="nb-stat"><b id="nbUp">–</b><span>D+ restant</span></div>
+      <div class="nb-stat"><b id="nbRem">–</b><span id="nbL2">restant</span></div>
+      <div class="nb-stat"><b id="nbUp">–</b><span id="nbL3">D+ restant</span></div>
     </div>
     <button id="btnOverview" class="nb-btn" aria-label="Vue d'ensemble de la trace">
       <svg viewBox="0 0 24 24"><circle cx="6" cy="18" r="2"/><circle cx="18" cy="6" r="2"/><path d="M8 18h7.5a3.5 3.5 0 0 0 0-7h-7a3.5 3.5 0 0 1 0-7H16"/></svg>
@@ -212,9 +212,34 @@
   </div>
 </div>
 
+<div id="dest" class="lib" hidden>
+  <div class="lib-panel" role="dialog" aria-label="Où aller ?">
+    <div class="lib-head">
+      <b>Où aller ?</b>
+      <button id="destClose" class="closebtn" aria-label="Fermer"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></svg>Fermer</button>
+    </div>
+    <input id="destQ" class="search" type="search" placeholder="Adresse, ville, village…" autocomplete="off" enterkeyhint="search">
+    <ul id="destList" class="lib-list"></ul>
+    <div class="dest-btns">
+      <button id="destPick" class="btn">Choisir sur la carte</button>
+      <button id="destFree" class="btn">Balade libre</button>
+    </div>
+    <div class="row">
+      <label for="destProf">Itinéraire</label>
+      <select id="destProf"><option value="hiking-mountain">À pied</option><option value="trekking">À vélo</option></select>
+    </div>
+    <p class="note">Balade libre : la carte te suit, sans trace à suivre. Astuce : un appui long sur la carte propose d'y aller. Itinéraires BRouter (OpenStreetMap), adresses IGN.</p>
+  </div>
+</div>
+
+<div id="pickBanner" class="pausepill pick" hidden>
+  <span>Touche la carte à l'endroit où tu veux aller</span>
+  <button id="pickCancel" class="btn small">Annuler</button>
+</div>
+
 <div id="toast" class="toast" hidden></div>
 
 <script src="vendor/maplibre-gl.js"></script>
-<script src="app.js?v=15"></script>
+<script src="app.js?v=16"></script>
 </body>
 </html>
