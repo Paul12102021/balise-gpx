@@ -4,7 +4,7 @@
 
 // La page et le code doivent être de la même version. Sinon (page gardée en cache
 // par le téléphone ou par GitHub), on recharge une page fraîche, au plus 3 fois.
-const APP_VERSION = 26;
+const APP_VERSION = 27;
 try {
   const meta = document.querySelector('meta[name="balise-version"]');
   const pageV = meta ? +meta.content : 0;
@@ -170,9 +170,25 @@ const LAYERS = [
   { id: 'cyclosm', name: 'CyclOSM (vélo)', tiles: ['a', 'b', 'c'].map(sd => `https://${sd}.tile-cyclosm.openstreetmap.fr/cyclosm/{z}/{x}/{y}.png`), max: 20,
     attr: '<a href="https://www.cyclosm.org">CyclOSM</a> · © <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>' },
   { id: 'ign', name: 'IGN', tiles: [IGN_URL], max: 19, attr: '© <a href="https://www.ign.fr">IGN</a> · Plan IGN' },
+  { id: 'monde', name: 'Monde (OpenFreeMap)', vector: true, max: 14 },
   { id: 'osm', name: 'Plan OSM', tiles: ['https://tile.openstreetmap.org/{z}/{x}/{y}.png'], max: 19,
     attr: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>' }
 ];
+// Carte mondiale OpenFreeMap : gratuite, sans limite, téléchargeable ; légère car vectorielle
+const OFM_STYLE = 'https://tiles.openfreemap.org/styles/liberty';
+const OFM_TILEJSON = 'https://tiles.openfreemap.org/planet';
+const OFM_ATTR = '<a href="https://openfreemap.org">OpenFreeMap</a> · © <a href="https://www.openmaptiles.org/">OpenMapTiles</a> · © <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>';
+let ofmStyle = null, ofmLayerIds = [];
+async function getOfmStyle() {
+  if (ofmStyle) return ofmStyle;
+  try { ofmStyle = await (await fetch(OFM_STYLE)).json(); store.set('ofmStyle', JSON.stringify(ofmStyle)); }
+  catch { try { ofmStyle = JSON.parse(store.get('ofmStyle')); } catch {} }
+  return ofmStyle;
+}
+async function getOfmTiles() {
+  try { const t = (await (await fetch(OFM_TILEJSON)).json()).tiles[0]; if (t) { store.set('ofmTiles', t); return t; } } catch {}
+  return store.get('ofmTiles') || 'https://tiles.openfreemap.org/planet/20261004_113936_pt/{z}/{x}/{y}.pbf';
+}
 let layerIdx = Math.max(0, LAYERS.findIndex(l => l.id === store.get('layerId')));
 const baseSource = l => ({ type: 'raster', tiles: l.tiles, tileSize: 256, maxzoom: l.max, attribution: l.attr });
 const EMPTY = { type: 'FeatureCollection', features: [] };
@@ -181,7 +197,7 @@ const pointFeature = p => ({ type: 'Feature', properties: {}, geometry: { type: 
 
 const map = new maplibregl.Map({
   container: 'map',
-  style: { version: 8, sources: { base: baseSource(LAYERS[layerIdx]) },
+  style: { version: 8, sources: { base: baseSource(LAYERS[layerIdx].vector ? LAYERS[0] : LAYERS[layerIdx]) },
     layers: [{ id: 'bg', type: 'background', paint: { 'background-color': '#e9ede7' } }, { id: 'base', type: 'raster', source: 'base' }] },
   center: [6.6, 45.9], zoom: 9, maxPitch: 70, attributionControl: false, fadeDuration: 0
 });
@@ -210,15 +226,49 @@ map.on('load', () => {
   map.addLayer({ id: 'rejoin-casing', type: 'line', source: 'rejoin', layout: round, paint: { 'line-color': '#fff', 'line-width': w(5, 13) } });
   map.addLayer({ id: 'rejoin', type: 'line', source: 'rejoin', layout: round, paint: { 'line-color': COL.me, 'line-width': w(3, 8), 'line-dasharray': [1.2, 1] } });
   map.addLayer({ id: 'turn', type: 'circle', source: 'turn', paint: { 'circle-radius': 7, 'circle-color': '#fff', 'circle-stroke-color': '#17201c', 'circle-stroke-width': 3, 'circle-pitch-alignment': 'map' } });
+  if (LAYERS[layerIdx].vector) setLayer(layerIdx, false);
 });
 async function setSrc(id, data) { await ready; const s = map.getSource(id); if (s) s.setData(data); }
 
+const baseBefore = () => map.getLayer('packs-fill') ? 'packs-fill' : 'track-casing';
+function removeBase() {
+  if (map.getLayer('base')) map.removeLayer('base');
+  if (map.getSource('base')) map.removeSource('base');
+  for (const id of ofmLayerIds) if (map.getLayer(id)) map.removeLayer(id);
+  ofmLayerIds = [];
+  if (map.getSource('ofm')) map.removeSource('ofm');
+}
+async function addVectorBase() {
+  const st = await getOfmStyle();
+  if (!st) { toast('Carte Monde indisponible : elle n\'a encore jamais été chargée avec du réseau.', 5000); return false; }
+  const tpl = await getOfmTiles();
+  map.setGlyphs(st.glyphs); map.setSprite(st.sprite);
+  map.addSource('ofm', { type: 'vector', tiles: [tpl], minzoom: 0, maxzoom: 14, attribution: OFM_ATTR });
+  const before = baseBefore();
+  for (const L of st.layers) {
+    if (L.source && L.source !== 'openmaptiles') continue; // l'ombrage du relief mondial n'est pas repris
+    const l2 = Object.assign({}, L, { id: 'ofm-' + L.id });
+    if (L.source) l2.source = 'ofm';
+    try { map.addLayer(l2, before); ofmLayerIds.push(l2.id); } catch { /* couche non gérée */ }
+  }
+  return true;
+}
+let layerSeq = 0;
 async function setLayer(i, remember = true) {
+  const seq = ++layerSeq;
   layerIdx = i; if (remember) store.set('layerId', LAYERS[i].id);
   await ready;
-  map.removeLayer('base'); map.removeSource('base');
+  if (LAYERS[i].vector) {
+    const st = await getOfmStyle(); await getOfmTiles();
+    if (seq !== layerSeq) return;
+    removeBase();
+    if (!st || !(await addVectorBase())) { layerIdx = 0; map.addSource('base', baseSource(LAYERS[0])); map.addLayer({ id: 'base', type: 'raster', source: 'base' }, baseBefore()); }
+    return;
+  }
+  if (seq !== layerSeq) return;
+  removeBase();
   map.addSource('base', baseSource(LAYERS[i]));
-  map.addLayer({ id: 'base', type: 'raster', source: 'base' }, map.getLayer('packs-fill') ? 'packs-fill' : 'track-casing');
+  map.addLayer({ id: 'base', type: 'raster', source: 'base' }, baseBefore());
 }
 $('btnLayer').onclick = () => {
   offlineSwitched = null;
@@ -228,9 +278,15 @@ $('btnLayer').onclick = () => {
 
 // Sans réseau, on bascule tout seul sur la carte IGN téléchargée, puis on revient au fond choisi
 let offlineSwitched = null;
-function onOffline() {
-  const ign = LAYERS.findIndex(l => l.id === 'ign');
-  if (layerIdx !== ign) { offlineSwitched = layerIdx; setLayer(ign, false); toast('Pas de réseau : carte IGN hors ligne'); }
+async function onOffline() {
+  let want = 'ign';
+  try {
+    const here = me || (() => { const c = map.getCenter(); return { lat: c.lat, lon: c.lng }; })();
+    const p = (await listPacks()).find(p => p.prov === 'ofm' && here.lon >= p.bbox[0] - 0.02 && here.lon <= p.bbox[2] + 0.02 && here.lat >= p.bbox[1] - 0.02 && here.lat <= p.bbox[3] + 0.02);
+    if (p) want = 'monde';
+  } catch {}
+  const idx = LAYERS.findIndex(l => l.id === want);
+  if (layerIdx !== idx) { offlineSwitched = layerIdx; setLayer(idx, false); toast(`Pas de réseau : carte ${want === 'ign' ? 'IGN' : 'Monde'} hors ligne`); }
 }
 window.addEventListener('offline', onOffline);
 window.addEventListener('online', () => { if (offlineSwitched != null) { setLayer(offlineSwitched, false); offlineSwitched = null; toast('Réseau retrouvé'); } });
@@ -700,31 +756,13 @@ $('npVoice').onclick = () => setVoice(!voiceOn);
 $('npVib').onclick = () => setVib(!vibOn);
 setTimeout(syncAlertUI, 0);
 // ---------- voix du guidage : celles installées sur le téléphone ----------
-let voiceURI = store.get('voiceURI') || '', voiceRate = +(store.get('voiceRate') || 1.05);
+// voix : celle du téléphone par défaut, en français (le choix de voix pourra revenir si besoin)
+let voiceRate = +(store.get('voiceRate') || 1.05);
 const frVoices = () => { try { return speechSynthesis.getVoices().filter(v => /^fr/i.test(v.lang)); } catch { return []; } };
 function pickVoice() {
   const vs = frVoices();
-  return vs.find(v => v.voiceURI === voiceURI) || vs.find(v => /fr[-_]FR/i.test(v.lang) && v.localService) || vs.find(v => /fr[-_]FR/i.test(v.lang)) || vs[0] || null;
+  return vs.find(v => /fr[-_]FR/i.test(v.lang) && v.localService) || vs.find(v => /fr[-_]FR/i.test(v.lang)) || vs[0] || null;
 }
-const REGION = { FR: 'France', CA: 'Canada', BE: 'Belgique', CH: 'Suisse', LU: 'Luxembourg' };
-function fillVoiceList() {
-  const sel = $('optVoiceName'), vs = frVoices();
-  sel.innerHTML = '';
-  if (!vs.length) { const o = document.createElement('option'); o.textContent = 'Voix du téléphone (par défaut)'; sel.appendChild(o); sel.disabled = true; return; }
-  sel.disabled = false;
-  const cur = pickVoice();
-  vs.forEach((v, i) => {
-    const o = document.createElement('option'), reg = REGION[(v.lang.split(/[-_]/)[1] || '').toUpperCase()] || v.lang;
-    // les noms techniques des voix Google/Samsung sont peu parlants : on numérote par région
-    const nice = /^(Google|Microsoft|Samsung|Apple)/.test(v.name) || v.name.length > 28 ? `Voix ${i + 1}` : v.name;
-    o.value = v.voiceURI; o.textContent = `${nice} · ${reg}${v.localService ? '' : ' · en ligne'}`;
-    if (cur && v.voiceURI === cur.voiceURI) o.selected = true;
-    sel.appendChild(o);
-  });
-}
-try { speechSynthesis.addEventListener('voiceschanged', fillVoiceList); } catch {}
-setTimeout(fillVoiceList, 0);
-$('optVoiceName').onchange = e => { voiceURI = e.target.value; store.set('voiceURI', voiceURI); sayTest(); };
 $('optRate').value = String(voiceRate);
 $('optRate').onchange = e => { voiceRate = +e.target.value; store.set('voiceRate', voiceRate); sayTest(); };
 $('btnVoiceTest').onclick = () => sayTest();
@@ -951,7 +989,7 @@ async function searchPlaces(q) {
       const li = document.createElement('li'), b = document.createElement('button');
       b.className = 'lib-item'; b.innerHTML = '<b></b><span></span>';
       b.querySelector('b').textContent = p.nom;
-      b.querySelector('span').textContent = `${p.cp} · commune · hors connexion` + (me ? ` · ${fmtDist(hav(me, p))} à vol d'oiseau` : '');
+      b.querySelector('span').textContent = `${p.cp ? p.cp + ' · commune' : 'localité'} · hors connexion` + (me ? ` · ${fmtDist(hav(me, p))} à vol d'oiseau` : '');
       b.onclick = () => goTo({ lat: p.lat, lon: p.lon, label: p.nom });
       li.appendChild(b); list.appendChild(li);
     }
@@ -1580,11 +1618,14 @@ async function downloadPack(pack, tiles) {
     if (row) row.textContent = `En cours : ${pct} %${rest}`;
   };
   // une tuile : délai maximal de 20 s, un second essai, sans passer par les secours du service worker
+  const prov = pack.prov || 'ign';
+  let tileUrl = ignTileUrl;
+  if (prov === 'ofm') { const tpl = await getOfmTiles(); tileUrl = (z, x, y) => tpl.replace('{z}', z).replace('{x}', x).replace('{y}', y); await precacheOfm(); }
   const getTile = async (z, x, y) => {
     for (let attempt = 0; attempt < 2; attempt++) {
       const ctrl = new AbortController(), timer = setTimeout(() => ctrl.abort(), 20000);
       try {
-        const r = await fetch(ignTileUrl(z, x, y), { mode: 'cors', cache: 'no-store', signal: ctrl.signal });
+        const r = await fetch(tileUrl(z, x, y), { mode: 'cors', cache: 'no-store', signal: ctrl.signal });
         if (r.ok) return await r.blob();
         lastErr = 'le serveur IGN répond ' + r.status;
         if (r.status >= 400 && r.status < 500 && r.status !== 429) return null; // demande refusée : inutile d'insister
@@ -1596,7 +1637,7 @@ async function downloadPack(pack, tiles) {
   };
   const worker = async () => {
     while (queue.length && !dl.stop) {
-      const [z, x, y] = queue.shift().split('/'), key = tileKey('ign', z, x, y);
+      const [z, x, y] = queue.shift().split('/'), key = tileKey(prov, z, x, y);
       try {
         const hit = await cache.match(key);
         if (hit) bytes += +(hit.headers.get('x-size') || tileKB * 1024);
@@ -1604,7 +1645,7 @@ async function downloadPack(pack, tiles) {
           const b = await getTile(z, x, y);
           if (!b) fail++;
           else {
-            await cache.put(key, new Response(b, { headers: { 'content-type': b.type || 'image/png', 'x-size': String(b.size) } }));
+            await cache.put(key, new Response(b, { headers: { 'content-type': b.type || (prov === 'ofm' ? 'application/x-protobuf' : 'image/png'), 'x-size': String(b.size) } }));
             bytes += b.size; fetched++; fetchedBytes += b.size;
           }
         }
@@ -1619,7 +1660,7 @@ async function downloadPack(pack, tiles) {
   show();
   await Promise.all(Array.from({ length: 8 }, worker));
   const stopped = dl.stop, reason = dl.reason; dl = null;
-  if (fetched > 50) { tileKB = clamp(Math.round(fetchedBytes / fetched / 1024 * 10) / 10 || tileKB, 8, 60); store.set('tileKB', tileKB); }
+  if (fetched > 50 && prov === 'ign') { tileKB = clamp(Math.round(fetchedBytes / fetched / 1024 * 10) / 10 || tileKB, 8, 60); store.set('tileKB', tileKB); }
   await save(!stopped && fail === 0);
   $('dlStop').hidden = true; $('dlTrace').disabled = !track; $('dlDep').disabled = false; $('mapsStatus').hidden = true;
   if (reason) $('offTxt').textContent = `Téléchargement impossible : ${reason}.`;
@@ -1644,10 +1685,12 @@ $('dlTrace').onclick = async () => {
     id: 'trace:' + tr.name + '|' + Math.round(tr.total), kind: 'trace', name: tr.name, detail: 'trace',
     bbox: [Math.min(...lons), Math.min(...lats), Math.max(...lons), Math.max(...lats)], line: simplifyLine(tr.pts)
   };
-  await downloadPack(pack, traceTiles(tr));
+  const codes = await depsOfLine(pack.line);
+  if (!codes.length) pack.prov = 'ofm'; // trace à l'étranger : carte Monde
+  await downloadPack(pack, pack.prov === 'ofm' ? traceTiles(tr, 14) : traceTiles(tr));
   // puis le réseau des chemins, pour calculer les itinéraires sans connexion
   if (navigator.onLine !== false) {
-    depsOfLine(pack.line).then(downloadPlaces);
+    if (codes.length) downloadPlaces(codes); else downloadOsmPlaces(pack, corridorBoxes(tr));
     await downloadGraph(pack, corridorBoxes(tr)); renderPacks();
   }
 };
@@ -1667,6 +1710,96 @@ $('dlDep').onclick = async () => {
 $('depGraph').checked = store.get('depGraph') !== '0';
 $('depGraph').onchange = e => { store.set('depGraph', e.target.checked ? '1' : '0'); updateOfflineInfo(); };
 
+// ---------- zone affichée à l'écran (partout dans le monde) ----------
+const bboxPolys = b => [[[[b[0], b[1]], [b[2], b[1]], [b[2], b[3]], [b[0], b[3]], [b[0], b[1]]]]];
+const bboxKm2 = b => (b[2] - b[0]) * 111.32 * Math.cos(rad((b[1] + b[3]) / 2)) * (b[3] - b[1]) * 110.54;
+function zoneTiles(b, zmin, zmax) {
+  const out = [];
+  for (let z = zmin; z <= zmax; z++) {
+    const [x0, y0] = tileXY(b[3], b[0], z), [x1, y1] = tileXY(b[1], b[2], z);
+    for (let x = x0; x <= x1; x++) for (let y = y0; y <= y1; y++) out.push(`${z}/${x}/${y}`);
+  }
+  return out;
+}
+const OFM_KB = 25; // poids moyen d'une tuile vectorielle
+let zoneMode = false;
+function zoneBBox() {
+  // le cadre en pointillés laisse une marge de 10 % autour de l'écran
+  const el = map.getContainer(), w = el.clientWidth, h = el.clientHeight;
+  const top = $('zoneBar').offsetHeight + 20, bottom = h - 20;
+  const a = map.unproject([w * 0.08, top]), c = map.unproject([w * 0.92, bottom]);
+  return [Math.min(a.lng, c.lng), Math.min(a.lat, c.lat), Math.max(a.lng, c.lng), Math.max(a.lat, c.lat)];
+}
+function zoneInFrance(b) {
+  if (!deps) return false;
+  const cx = (b[0] + b[2]) / 2, cy = (b[1] + b[3]) / 2;
+  return deps.some(d => inPolys(cx, cy, d.polys));
+}
+function zonePlan() {
+  const b = zoneBBox(), prov = $('zoneProv').value === 'auto' ? (zoneInFrance(b) ? 'ign' : 'ofm') : $('zoneProv').value;
+  const tiles = prov === 'ofm' ? zoneTiles(b, 0, 14) : zoneTiles(b, 8, 14);
+  const km2 = bboxKm2(b), mapKB = tiles.length * (prov === 'ofm' ? OFM_KB : tileKB), gKB = $('zoneGraph').checked ? km2 * 8 : 0;
+  return { b, prov, tiles, km2, mapKB, gKB };
+}
+function updateZoneInfo() {
+  if (!zoneMode) return;
+  const z = zonePlan(), tooBig = z.tiles.length > 25000;
+  $('zoneInfo').textContent = tooBig
+    ? `Zone trop grande (${Math.round(z.km2).toLocaleString('fr-FR')} km²) : zoome un peu`
+    : `${Math.round(z.km2).toLocaleString('fr-FR')} km² · carte ${z.prov === 'ofm' ? 'Monde' : 'IGN'} ~${fmtMo(z.mapKB)}` + (z.gKB ? ` · chemins ~${fmtMo(z.gKB)}` : '');
+  $('zoneGo').disabled = tooBig;
+}
+$('zoneStart').onclick = async () => {
+  try { await loadDeps(); } catch {}
+  $('maps').hidden = true; zoneMode = true; document.body.classList.add('zone');
+  setTimeout(() => document.documentElement.style.setProperty('--zone-top', ($('zoneBar').offsetHeight + 20) + 'px'), 0);
+  map.easeTo({ bearing: 0, pitch: 0, duration: 300 });
+  setTimeout(updateZoneInfo, 350);
+};
+map.on('moveend', updateZoneInfo);
+$('zoneGraph').checked = store.get('zoneGraph') !== '0';
+$('zoneGraph').onchange = e => { store.set('zoneGraph', e.target.checked ? '1' : '0'); updateZoneInfo(); };
+$('zoneProv').onchange = updateZoneInfo;
+$('zoneCancel').onclick = () => { zoneMode = false; document.body.classList.remove('zone'); };
+$('zoneGo').onclick = async () => {
+  const z = zonePlan();
+  zoneMode = false; document.body.classList.remove('zone');
+  $('maps').hidden = false;
+  const id = 'zone:' + z.b.map(v => v.toFixed(3)).join(',');
+  const pack = { id, kind: 'zone', prov: z.prov, name: 'Zone', detail: 'zone', bbox: z.b };
+  // un nom parlant : la plus grande localité de la zone
+  if (navigator.onLine !== false) { $('offProg').hidden = false; $('offTxt').textContent = 'Recherche des localités de la zone…'; await downloadOsmPlaces(pack, [[z.b[1], z.b[0], z.b[3], z.b[2]]]); }
+  try {
+    const pl = await idb('readonly', st => st.get(pack.id), 'places');
+    if (pl && pl.list.length) { const big = pl.list.slice().sort((a, b) => b[4] - a[4])[0]; pack.name = 'Zone · ' + big[0]; }
+    else pack.name = `Zone ${z.b[1].toFixed(2)}, ${z.b[0].toFixed(2)}`;
+  } catch {}
+  await downloadPack(pack, z.tiles);
+  if ($('zoneGraph').checked && navigator.onLine !== false) await downloadDepGraph(pack, bboxPolys(z.b));
+  map.fitBounds([[z.b[0], z.b[1]], [z.b[2], z.b[3]]], { padding: 30, duration: 0 });
+};
+
+// ---------- carte Monde : styles, polices et pictos gardés pour le hors connexion ----------
+async function precacheOfm() {
+  const st = await getOfmStyle(); if (!st) return;
+  const urls = [OFM_STYLE, OFM_TILEJSON];
+  for (const sfx of ['.json', '.png', '@2x.json', '@2x.png']) urls.push(st.sprite + sfx);
+  for (const font of ['Noto Sans Regular', 'Noto Sans Bold', 'Noto Sans Italic'])
+    for (const r of ['0-255', '256-511', '512-767', '768-1023', '1024-1279', '8192-8447'])
+      urls.push(st.glyphs.replace('{fontstack}', encodeURIComponent(font)).replace('{range}', r));
+  await Promise.all(urls.map(u => fetch(u).catch(() => {})));
+}
+
+// ---------- localités d'une zone (OpenStreetMap), pour la recherche sans réseau ----------
+async function downloadOsmPlaces(pack, boxes) {
+  try {
+    const q = `[out:json][timeout:90];(${boxes.map(b => `node["place"~"^(city|town|village|hamlet|suburb)$"]["name"](${b.map(v => v.toFixed(4)).join(',')});`).join('')});out qt;`;
+    const j = await overpass(q, 2);
+    const list = j.elements.filter(e => e.tags && e.tags.name).map(e => [e.tags['name:fr'] || e.tags.name, +e.lat.toFixed(5), +e.lon.toFixed(5), '', +(e.tags.population || 0) || ({ city: 50000, town: 5000, village: 500, suburb: 300, hamlet: 50 }[e.tags.place] || 0)]);
+    if (list.length) { await idb('readwrite', st => st.put({ code: pack.id, list }), 'places'); placesCache = null; }
+  } catch { /* la recherche hors connexion n'aura pas cette zone */ }
+}
+
 // ---------- liste des cartes téléchargées ----------
 async function listPacks() { try { return ((await idb('readonly', st => st.getAll(), 'packs')) || []).sort((a, b) => b.date - a.date); } catch { return []; } }
 async function renderPacks() {
@@ -1677,13 +1810,18 @@ async function renderPacks() {
     const info = document.createElement('div'); info.className = 'lib-item';
     info.innerHTML = '<b></b><span></span>';
     info.querySelector('b').textContent = p.name;
-    info.querySelector('span').textContent = `${p.kind === 'trace' ? 'Le long de la trace' : 'Département, ' + p.detail} · ${fmtMo(p.bytes / 1024)} · ${fmtDate(p.date)}` + (p.complete ? '' : ` · incomplet`) + (p.graph ? (p.graph.partial ? ` · chemins incomplets (${p.graph.km} km)` : ` · itinéraires hors connexion ✓ (${p.graph.km} km de chemins)`) : '');
+    info.querySelector('span').textContent = `${p.kind === 'trace' ? 'Le long de la trace' : p.kind === 'zone' ? `Zone de ${Math.round(bboxKm2(p.bbox)).toLocaleString('fr-FR')} km²` : 'Département, ' + p.detail} · carte ${p.prov === 'ofm' ? 'Monde' : 'IGN'} · ${fmtMo(p.bytes / 1024)} · ${fmtDate(p.date)}` + (p.complete ? '' : ` · incomplet`) + (p.graph ? (p.graph.partial ? ` · chemins incomplets (${p.graph.km} km)` : ` · itinéraires hors connexion ✓ (${p.graph.km} km de chemins)`) : '');
     if (dl && dl.packId === p.id) { const live = document.createElement('span'); live.className = 'dl-live'; live.dataset.pack = p.id; live.textContent = 'En cours…'; info.appendChild(live); }
     const acts = document.createElement('div'); acts.className = 'pack-acts';
     if (!p.complete) {
       const re = document.createElement('button'); re.className = 'btn small'; re.textContent = 'Reprendre';
       if (dl && dl.packId === p.id) re.hidden = true;
       re.onclick = () => downloadPack(p, p.tiles); acts.appendChild(re);
+    }
+    if (p.kind === 'zone' && (!p.graph || p.graph.partial) && !dl) {
+      const gb = document.createElement('button'); gb.className = 'btn small'; gb.textContent = '+ Chemins';
+      gb.onclick = async () => { gb.disabled = true; await downloadDepGraph(p, bboxPolys(p.bbox)); };
+      acts.appendChild(gb);
     }
     if (p.kind === 'dep' && (!p.graph || p.graph.partial) && !dl) {
       const gb = document.createElement('button'); gb.className = 'btn small'; gb.textContent = '+ Chemins';
@@ -1723,9 +1861,11 @@ async function deletePack(p) {
   if (dl) { toast('Attends la fin du téléchargement.'); return; }
   toast('Suppression…', 8000);
   try {
-    const others = new Set(); (await listPacks()).filter(q => q.id !== p.id).forEach(q => (q.tiles || []).forEach(t => others.add(t)));
+    const prov = p.prov || 'ign', others = new Set();
+    (await listPacks()).filter(q => q.id !== p.id && (q.prov || 'ign') === prov).forEach(q => (q.tiles || []).forEach(t => others.add(t)));
     const cache = await caches.open(TILE_CACHE);
-    for (const t of p.tiles || []) if (!others.has(t)) { const [z, x, y] = t.split('/'); await cache.delete(tileKey('ign', z, x, y)); }
+    for (const t of p.tiles || []) if (!others.has(t)) { const [z, x, y] = t.split('/'); await cache.delete(tileKey(prov, z, x, y)); }
+    try { await idb('readwrite', st => st.delete(p.id), 'places'); placesCache = null; } catch {}
     await idb('readwrite', st => st.delete(p.id), 'packs');
     try { await idb('readwrite', st => st.delete(p.id), 'graphs'); graphs = null; } catch {}
     try { await idb('readwrite', st => st.delete(IDBKeyRange.bound(p.id + '#', p.id + '#\uffff')), 'graphChunks'); } catch {}
@@ -1750,6 +1890,7 @@ async function drawPacks() {
   const packs = await listPacks(), feats = [];
   for (const p of packs) {
     if (p.kind === 'trace' && p.line) feats.push({ type: 'Feature', properties: {}, geometry: { type: 'LineString', coordinates: p.line } });
+    if (p.kind === 'zone') feats.push({ type: 'Feature', properties: {}, geometry: { type: 'Polygon', coordinates: bboxPolys(p.bbox)[0] } });
     if (p.kind === 'dep') {
       try { await loadDeps(); } catch { continue; }
       const d = deps.find(x => x.code === p.code);

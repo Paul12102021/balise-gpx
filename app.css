@@ -285,3 +285,19 @@ body.free #btnRejoin { display: none; }
 .dl-check small { color: var(--muted); }
 
 .voice-sel { max-width: 62%; }
+
+/* ---------- choix d'une zone à télécharger ---------- */
+.zone-bar, .zone-frame { display: none; }
+body.zone .zone-bar {
+  display: flex; position: fixed; z-index: 15; left: 0; right: 0; top: 0; gap: 10px; align-items: center; justify-content: space-between;
+  padding: calc(env(safe-area-inset-top, 0px) + 10px) 12px 10px; background: var(--hud); color: var(--hud-ink); flex-wrap: wrap;
+}
+.zone-bar > div:first-child { display: flex; flex-direction: column; min-width: 0; }
+.zone-bar span { font-size: 13px; opacity: .85; font-variant-numeric: tabular-nums; }
+.zone-btns { display: flex; gap: 8px; }
+body.zone .zone-frame {
+  display: block; position: fixed; z-index: 14; pointer-events: none;
+  left: 8%; right: 8%; top: calc(var(--zone-top, 90px)); bottom: 20px;
+  border: 3px dashed #2f8a4c; border-radius: 10px; box-shadow: 0 0 0 9999px rgba(10, 16, 13, .28);
+}
+body.zone .hud, body.zone .sheet, body.zone .fab-col { display: none !important; }
