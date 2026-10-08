@@ -1,6 +1,6 @@
 /* Service worker : appli disponible hors ligne + tuiles de carte en cache */
-const APP = 'app-v13', TILES = 'tiles-v2';
-const SHELL = ['./', 'index.html', 'app.css?v=13', 'app.js?v=13', 'vendor/maplibre-gl.js', 'vendor/maplibre-gl.css',
+const APP = 'app-v14', TILES = 'tiles-v2';
+const SHELL = ['./', 'index.html', 'app.css?v=14', 'app.js?v=14', 'vendor/maplibre-gl.js', 'vendor/maplibre-gl.css',
   'departements.json', 'manifest.webmanifest', 'icon.svg', 'icon-192.png', 'icon-512.png'];
 
 // Clé de cache commune avec la page : https://tiles.balise/<fond>/<z>/<x>/<y>
@@ -89,7 +89,10 @@ self.addEventListener('fetch', e => {
 
   // Fichiers de l'appli : réseau d'abord (pour recevoir les mises à jour), cache si hors ligne
   if (url.origin === location.origin) {
-    e.respondWith(fetch(req, { cache: 'no-cache' }).then(r => {
+    // une page ouverte (navigation) est redemandée par son adresse : certains navigateurs refusent
+    // de modifier directement une requête de navigation
+    const fresh = req.mode === 'navigate' ? new Request(req.url, { cache: 'no-cache', credentials: 'same-origin' }) : new Request(req, { cache: 'no-cache' });
+    e.respondWith(fetch(fresh).then(r => {
       if (r.ok) { const copy = r.clone(); caches.open(APP).then(c => c.put(req, copy)); }
       return r;
     }).catch(() => caches.match(req, { ignoreSearch: true }).then(r => r || caches.match('index.html'))));

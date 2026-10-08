@@ -7,12 +7,13 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="balise-version" content="14">
 <title>Balise GPX</title>
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" href="icon.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="icon-192.png">
 <link rel="stylesheet" href="vendor/maplibre-gl.css">
-<link rel="stylesheet" href="app.css?v=13">
+<link rel="stylesheet" href="app.css?v=14">
 </head>
 <body>
 <div id="map" aria-label="Carte"></div>
@@ -140,6 +141,10 @@
       <span>Cartes hors ligne<br><small>Par trace ou par département</small></span>
       <button id="btnMaps" class="btn">Mes cartes</button>
     </div>
+    <div class="row">
+      <span>Un bouton ne répond pas ?<br><small>Recharge l'appli sans toucher à tes traces ni à tes cartes</small></span>
+      <button id="btnRepair" class="btn ghost">Réparer</button>
+    </div>
     <p class="note" id="note"></p>
   </div>
 </section>
@@ -210,6 +215,6 @@
 <div id="toast" class="toast" hidden></div>
 
 <script src="vendor/maplibre-gl.js"></script>
-<script src="app.js?v=13"></script>
+<script src="app.js?v=14"></script>
 </body>
 </html>

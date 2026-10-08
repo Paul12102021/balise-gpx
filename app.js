@@ -2,6 +2,24 @@
 (() => {
 'use strict';
 
+// La page et le code doivent être de la même version. Sinon (page gardée en cache
+// par le téléphone ou par GitHub), on recharge une page fraîche, au plus 3 fois.
+const APP_VERSION = 14;
+try {
+  const meta = document.querySelector('meta[name="balise-version"]');
+  const pageV = meta ? +meta.content : 0;
+  if (pageV !== APP_VERSION) {
+    const n = +(sessionStorage.getItem('fixVersion') || 0);
+    if (n < 3) {
+      sessionStorage.setItem('fixVersion', String(n + 1));
+      const keep = /[?&]shared=1/.test(location.search) ? '&shared=1' : '';
+      location.replace(location.pathname + '?fresh=' + Date.now() + keep);
+      throw new Error('version');
+    }
+  } else sessionStorage.removeItem('fixVersion');
+  if (/[?&]fresh=/.test(location.search)) history.replaceState(null, '', location.pathname + (/[?&]shared=1/.test(location.search) ? '?shared=1' : ''));
+} catch (e) { if (e.message === 'version') return; }
+
 // =====================================================================
 // Utilitaires
 // =====================================================================
@@ -1216,6 +1234,14 @@ async function openMaps() {
   try { await loadDeps(); updateOfflineInfo(); } catch { $('dlDepInfo').textContent = 'Liste des départements indisponible.'; }
 }
 $('btnMaps').onclick = openMaps;
+// Réparer : on oublie la copie de l'appli gardée sur le téléphone (pas les cartes ni les traces)
+$('btnRepair').onclick = async () => {
+  try {
+    for (const k of await caches.keys()) if (k.startsWith('app-')) await caches.delete(k);
+    for (const r of await navigator.serviceWorker.getRegistrations()) await r.unregister();
+  } catch {}
+  location.replace(location.pathname + '?fresh=' + Date.now());
+};
 $('mapsClose').onclick = () => $('maps').hidden = true;
 $('maps').onclick = e => { if (e.target === $('maps')) $('maps').hidden = true; };
 $('depSel').onchange = () => { store.set('depIdx', $('depSel').value); updateOfflineInfo(); };
@@ -1475,7 +1501,7 @@ try {
 const saved = store.get('gpx');
 if (saved) { try { showTrack(parseGPX(saved)); } catch { drawProfile(); } } else drawProfile();
 checkShared();
-const VERSION = '13 · 8 oct. 2026';
+const VERSION = APP_VERSION + ' · 8 oct. 2026';
 $('note').textContent = (window.isSecureContext ? '' : 'Attention : le GPS ne fonctionne qu\'en HTTPS. ') + 'Version ' + VERSION;
 // Mises à jour : on vérifie à chaque ouverture et on recharge dès qu'une nouvelle version est prête
 // (jamais pendant une navigation ou un enregistrement : on attend la fin)
