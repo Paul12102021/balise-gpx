@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<meta name="theme-color" content="#1d2a24">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<title>Balise GPX</title>
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="icon-192.png">
+<link rel="stylesheet" href="vendor/leaflet.css">
+<link rel="stylesheet" href="app.css">
+</head>
+<body>
+<div id="map" aria-label="Carte"></div>
+
+<header class="hud">
+  <div class="stat"><span class="lbl">Reste</span><span class="val" id="sDist">–</span></div>
+  <div class="stat"><span class="lbl">D+ restant</span><span class="val" id="sUp">–</span></div>
+  <div class="stat"><span class="lbl">Écart</span><span class="val" id="sOff">–</span></div>
+  <div class="stat"><span class="lbl">Altitude</span><span class="val" id="sEle">–</span></div>
+</header>
+
+<div id="alert" class="alert" hidden role="alert">
+  <strong>Hors trace</strong> <span id="alertTxt"></span>
+  <button id="btnMute" class="ghost">Couper le son</button>
+</div>
+
+<div class="fab-col">
+  <button id="btnCenter" class="fab" title="Centrer sur ma position" aria-label="Centrer sur ma position">
+    <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/></svg>
+  </button>
+  <button id="btnLayer" class="fab" title="Changer de fond de carte" aria-label="Changer de fond de carte">
+    <svg viewBox="0 0 24 24"><path d="M12 3 2 8l10 5 10-5-10-5Z"/><path d="m2 13 10 5 10-5"/></svg>
+  </button>
+</div>
+
+<section class="sheet" id="sheet">
+  <div class="grip" id="grip" role="button" aria-label="Afficher ou masquer le panneau"></div>
+  <div class="trackname" id="trackName">Aucune trace chargée</div>
+  <canvas id="profile" height="110" aria-label="Profil altimétrique"></canvas>
+  <div class="actions">
+    <label class="btn primary" for="fileIn">Ouvrir un GPX</label>
+    <input type="file" id="fileIn" accept=".gpx,application/gpx+xml,application/xml,text/xml" hidden>
+    <button id="btnFollow" class="btn">Démarrer le suivi</button>
+    <button id="btnRec" class="btn"><span class="dot"></span>Enregistrer</button>
+    <button id="btnMore" class="btn ghost">Plus</button>
+  </div>
+
+  <div id="more" class="more" hidden>
+    <div class="row">
+      <label for="thr">Alerte hors trace au-delà de</label>
+      <select id="thr">
+        <option value="25">25 m</option><option value="50" selected>50 m</option>
+        <option value="100">100 m</option><option value="200">200 m</option>
+      </select>
+    </div>
+    <div class="row">
+      <span>Cartes hors ligne le long de la trace</span>
+      <button id="btnOffline" class="btn">Télécharger</button>
+    </div>
+    <div class="progress" id="offProg" hidden><div id="offBar"></div><span id="offTxt"></span></div>
+    <div class="row">
+      <span>Ma trace enregistrée <small id="recInfo">(vide)</small></span>
+      <button id="btnExport" class="btn">Exporter GPX</button>
+    </div>
+    <div class="row">
+      <span>Pas de fichier sous la main ?</span>
+      <button id="btnDemo" class="btn ghost">Charger un exemple</button>
+    </div>
+    <p class="note" id="note"></p>
+  </div>
+</section>
+
+<div id="toast" class="toast" hidden></div>
+
+<script src="vendor/leaflet.js"></script>
+<script src="app.js"></script>
+</body>
+</html>

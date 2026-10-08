@@ -1,0 +1,109 @@
+/* Layout: carte plein écran, bandeau de mesures en haut, panneau coulissant en bas */
+:root {
+  --ink: #17201c;
+  --paper: #f3f5f1;
+  --panel: #ffffff;
+  --muted: #5d6b64;
+  --line: #d6ddd8;
+  --hud: #1d2a24;
+  --hud-ink: #eef4ef;
+  --track: #c2187a;      /* magenta : la trace à suivre */
+  --me: #1e6fd9;         /* bleu : ma position */
+  --rec: #e0571b;        /* orange : enregistrement */
+  --ok: #2f8a4c;
+  --warn: #c62828;
+  --font: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --num: ui-rounded, "SF Pro Rounded", system-ui, sans-serif;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --ink: #e7ece9; --paper: #101513; --panel: #18201c; --muted: #94a39b;
+    --line: #2b3631; --hud: #0b100e; --hud-ink: #eef4ef; --track: #ff4fae;
+    --me: #5aa2ff; color-scheme: dark;
+  }
+}
+[hidden] { display: none !important; }
+* { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+html, body { height: 100%; margin: 0; }
+body { font: 15px/1.35 var(--font); color: var(--ink); background: var(--paper); overflow: hidden; }
+#map { position: fixed; inset: 0; background: var(--paper); }
+
+.hud {
+  position: fixed; top: 0; left: 0; right: 0; z-index: 1000;
+  display: grid; grid-template-columns: repeat(4, 1fr); gap: 4px;
+  padding: calc(env(safe-area-inset-top, 0px) + 8px) 12px 8px;
+  background: var(--hud); color: var(--hud-ink);
+}
+.stat { display: flex; flex-direction: column; min-width: 0; }
+.lbl { font-size: 10px; text-transform: uppercase; letter-spacing: .08em; opacity: .65; white-space: nowrap; }
+.val { font: 600 20px/1.15 var(--num); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.val.bad { color: #ff8a80; }
+
+.alert {
+  position: fixed; z-index: 1001; left: 12px; right: 12px;
+  top: calc(env(safe-area-inset-top, 0px) + 64px);
+  display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+  padding: 10px 12px; border-radius: 10px; background: var(--warn); color: #fff;
+  box-shadow: 0 6px 20px rgba(0,0,0,.25); animation: pulse 1.2s ease-in-out infinite;
+}
+.alert.back { background: var(--ok); animation: none; }
+.alert .ghost { margin-left: auto; color: #fff; border-color: rgba(255,255,255,.6); }
+@keyframes pulse { 50% { transform: scale(1.015); } }
+
+.fab-col { position: fixed; z-index: 1000; right: 12px; bottom: 210px; display: flex; flex-direction: column; gap: 10px; transition: bottom .25s; }
+body.sheet-open .fab-col { bottom: 400px; }
+.fab {
+  width: 48px; height: 48px; border-radius: 50%; border: 1px solid var(--line);
+  background: var(--panel); color: var(--ink); display: grid; place-items: center;
+  box-shadow: 0 2px 10px rgba(0,0,0,.18);
+}
+.fab svg { width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; }
+.fab.on { background: var(--me); color: #fff; border-color: var(--me); }
+
+.sheet {
+  position: fixed; z-index: 1000; left: 0; right: 0; bottom: 0;
+  background: var(--panel); border-top: 1px solid var(--line);
+  border-radius: 16px 16px 0 0; box-shadow: 0 -6px 24px rgba(0,0,0,.15);
+  padding: 4px 16px calc(env(safe-area-inset-bottom, 0px) + 12px);
+  max-height: 75vh; overflow-y: auto;
+}
+.grip { width: 44px; height: 5px; border-radius: 3px; background: var(--line); margin: 6px auto 8px; cursor: pointer; }
+.trackname { font-weight: 600; font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-bottom: 4px; }
+#profile { width: 100%; height: 110px; display: block; }
+.actions { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 8px; }
+
+.btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+  min-height: 44px; padding: 0 14px; border-radius: 10px; font: 600 14px var(--font);
+  border: 1px solid var(--line); background: var(--paper); color: var(--ink); cursor: pointer;
+}
+.btn.primary { background: var(--hud); color: var(--hud-ink); border-color: var(--hud); }
+.btn.active { background: var(--me); color: #fff; border-color: var(--me); }
+.btn.recording { background: var(--rec); color: #fff; border-color: var(--rec); }
+.btn:disabled { opacity: .45; }
+.ghost { background: transparent; border: 1px solid var(--line); border-radius: 10px; padding: 6px 10px; font: 600 13px var(--font); color: var(--ink); }
+.dot { width: 10px; height: 10px; border-radius: 50%; background: var(--rec); }
+.btn.recording .dot { background: #fff; animation: blink 1s steps(2) infinite; }
+@keyframes blink { 50% { opacity: 0; } }
+button:focus-visible, .btn:focus-visible, select:focus-visible { outline: 3px solid var(--me); outline-offset: 2px; }
+
+.more { display: flex; flex-direction: column; gap: 10px; margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--line); }
+.row { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.row > span, .row > label { min-width: 0; }
+.row small { color: var(--muted); }
+select { min-height: 40px; border-radius: 8px; border: 1px solid var(--line); background: var(--paper); color: var(--ink); padding: 0 8px; font: inherit; }
+.progress { position: relative; height: 22px; border-radius: 6px; background: var(--paper); border: 1px solid var(--line); overflow: hidden; }
+#offBar { height: 100%; width: 0; background: var(--ok); transition: width .2s; }
+#offTxt { position: absolute; inset: 0; display: grid; place-items: center; font-size: 12px; font-variant-numeric: tabular-nums; }
+.note { margin: 0; color: var(--muted); font-size: 12px; }
+
+.toast {
+  position: fixed; z-index: 1002; left: 50%; transform: translateX(-50%);
+  top: calc(env(safe-area-inset-top, 0px) + 70px); max-width: calc(100% - 32px);
+  background: var(--hud); color: var(--hud-ink); padding: 10px 14px; border-radius: 10px; font-size: 14px;
+}
+.leaflet-control-attribution { font-size: 10px; }
+.me-dot { width: 18px; height: 18px; border-radius: 50%; background: var(--me); border: 3px solid #fff; box-shadow: 0 0 0 2px rgba(30,111,217,.35); }
+.me-acc { fill: var(--me); fill-opacity: .12; stroke: var(--me); stroke-opacity: .4; }
+@media (prefers-reduced-motion: reduce) { .alert, .btn.recording .dot { animation: none; } }
