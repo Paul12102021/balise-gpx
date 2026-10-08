@@ -7,13 +7,13 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<meta name="balise-version" content="19">
+<meta name="balise-version" content="20">
 <title>Balise GPX</title>
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" href="icon.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="icon-192.png">
 <link rel="stylesheet" href="vendor/maplibre-gl.css">
-<link rel="stylesheet" href="app.css?v=19">
+<link rel="stylesheet" href="app.css?v=20">
 </head>
 <body>
 <div id="map" aria-label="Carte"></div>
@@ -188,6 +188,7 @@
 
     <div class="dl-box">
       <div class="dl-title">Le long de la trace ouverte</div>
+      <small class="note">Carte + réseau des chemins : itinéraire de retour calculé même sans connexion.</small>
       <div class="dl-row"><small id="dlTraceInfo"></small><button id="dlTrace" class="btn">Télécharger</button></div>
     </div>
     <div class="dl-box">
@@ -257,6 +258,6 @@
 <div id="toast" class="toast" hidden></div>
 
 <script src="vendor/maplibre-gl.js"></script>
-<script src="app.js?v=19"></script>
+<script src="app.js?v=20"></script>
 </body>
 </html>

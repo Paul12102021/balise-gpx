@@ -4,7 +4,7 @@
 
 // La page et le code doivent être de la même version. Sinon (page gardée en cache
 // par le téléphone ou par GitHub), on recharge une page fraîche, au plus 3 fois.
-const APP_VERSION = 19;
+const APP_VERSION = 20;
 try {
   const meta = document.querySelector('meta[name="balise-version"]');
   const pageV = meta ? +meta.content : 0;
@@ -327,12 +327,13 @@ function openDB() {
   return dbP || (dbP = new Promise((res, rej) => {
     // un autre onglet de l'appli (ancienne version) peut bloquer l'ouverture : on n'attend pas indéfiniment
     const timer = setTimeout(() => { dbP = null; rej(new Error('blocked')); }, 3000);
-    const r = indexedDB.open('balise', 2);
+    const r = indexedDB.open('balise', 3);
     r.onblocked = () => { clearTimeout(timer); dbP = null; rej(new Error('blocked')); };
     r.onupgradeneeded = () => {
       const d = r.result;
       if (!d.objectStoreNames.contains('tracks')) d.createObjectStore('tracks', { keyPath: 'id' });
       if (!d.objectStoreNames.contains('packs')) d.createObjectStore('packs', { keyPath: 'id' });
+      if (!d.objectStoreNames.contains('graphs')) d.createObjectStore('graphs', { keyPath: 'id' });
     };
     r.onsuccess = () => {
       clearTimeout(timer);
@@ -811,17 +812,19 @@ async function requestRejoin(manual) {
       if (!best || len < best.len) best = { pts: r.value.pts, len, target: cands[k] };
     });
   }
+  // pas de réseau (ou serveur muet) : calcul sur le téléphone avec les chemins téléchargés
+  if (!best) { await loadGraphs(); const loc = localRejoin(track, me); if (loc) best = Object.assign(loc, { local: true }); }
   routing = false; $('btnRejoin').classList.remove('busy');
   if (best) {
     // on termine l'itinéraire exactement sur la trace
     best.pts.push({ lat: best.target.lat, lon: best.target.lon, ele: null });
     setRejoinPath(best.pts, best.target, false);
     const msg = `Itinéraire de retour : ${fmtDist(rejoin.total)} par le chemin`;
-    if (nav) say(`Itinéraire de retour calculé, ${speakDist(rejoin.total)}`); else { toast(msg, 4000); fitTo([rejoin.pts, [me]]); }
+    if (nav) say(`Itinéraire de retour calculé${best.local ? ' hors connexion' : ''}, ${speakDist(rejoin.total)}`); else { toast(msg + (best.local ? ' (calculé hors connexion)' : ''), 4000); fitTo([rejoin.pts, [me]]); }
   } else {
     const c = cands[0];
     setRejoinPath([{ lat: me.lat, lon: me.lon }, c], c, true);
-    const msg = `Pas de réseau : trace à ${fmtDist(c.dist)} à vol d'oiseau, cap ${Math.round(bearing(me, c))}°`;
+    const msg = `Pas de réseau ni de chemins téléchargés ici : trace à ${fmtDist(c.dist)} à vol d'oiseau, cap ${Math.round(bearing(me, c))}°`;
     if (nav) say(`Pas de réseau. Rejoignez la trace à ${speakDist(c.dist)}, à vol d'oiseau.`); else { toast(msg, 5000); fitTo([rejoin.pts]); }
   }
   guidance();
@@ -909,7 +912,11 @@ async function goTo(dest) {
   if (!pos) { toast('Position GPS introuvable. Va à découvert et réessaie.', 5000); return; }
   let r;
   try { r = await fetchRoute(pos, dest, 25000); }
-  catch { toast('Itinéraire impossible : pas de réseau, ou lieu sans chemin pour y aller.', 5000); return; }
+  catch {
+    await loadGraphs(); r = localRouteTo(pos, dest);
+    if (!r) { toast('Itinéraire impossible : pas de réseau, et cet endroit est hors des chemins téléchargés.', 5000); return; }
+    toast('Pas de réseau : itinéraire calculé avec les chemins téléchargés', 4000);
+  }
   r.pts.push({ lat: dest.lat, lon: dest.lon, ele: null });
   if (nav && !track) document.body.classList.remove('free');
   await showTrack({ name: 'Vers ' + dest.label, pts: r.pts }, !nav);
@@ -923,7 +930,9 @@ async function reroute() {
   routing = true; lastRoute = Date.now(); $('btnRejoin').classList.add('busy'); guidance();
   const dest = track.route;
   try {
-    const r = await fetchRoute(me, dest, 20000);
+    let r;
+    try { r = await fetchRoute(me, dest, 20000); }
+    catch (e) { await loadGraphs(); r = localRouteTo(me, dest); if (!r) throw e; }
     r.pts.push({ lat: dest.lat, lon: dest.lon, ele: null });
     await showTrack({ name: 'Vers ' + dest.label, pts: r.pts }, false);
     track.route = dest; isOff = false; offCount = 0; arrived = false;
@@ -1492,13 +1501,16 @@ function simplifyLine(pts, step = 50) {
   const e = pts[pts.length - 1]; out.push([e.lon, e.lat]);
   return out;
 }
-$('dlTrace').onclick = () => {
+$('dlTrace').onclick = async () => {
   if (!track) return;
-  const lons = track.pts.map(p => p.lon), lats = track.pts.map(p => p.lat);
-  downloadPack({
-    id: 'trace:' + track.name + '|' + Math.round(track.total), kind: 'trace', name: track.name, detail: 'trace',
-    bbox: [Math.min(...lons), Math.min(...lats), Math.max(...lons), Math.max(...lats)], line: simplifyLine(track.pts)
-  }, traceTiles(track));
+  const lons = track.pts.map(p => p.lon), lats = track.pts.map(p => p.lat), tr = track;
+  const pack = {
+    id: 'trace:' + tr.name + '|' + Math.round(tr.total), kind: 'trace', name: tr.name, detail: 'trace',
+    bbox: [Math.min(...lons), Math.min(...lats), Math.max(...lons), Math.max(...lats)], line: simplifyLine(tr.pts)
+  };
+  await downloadPack(pack, traceTiles(tr));
+  // puis le réseau des chemins, pour calculer les itinéraires sans connexion
+  if (navigator.onLine !== false) { await downloadGraph(pack, corridorBoxes(tr)); renderPacks(); }
 };
 $('dlDep').onclick = async () => {
   await loadDeps();
@@ -1521,13 +1533,23 @@ async function renderPacks() {
     const info = document.createElement('div'); info.className = 'lib-item';
     info.innerHTML = '<b></b><span></span>';
     info.querySelector('b').textContent = p.name;
-    info.querySelector('span').textContent = `${p.kind === 'trace' ? 'Le long de la trace' : 'Département, ' + p.detail} · ${fmtMo(p.bytes / 1024)} · ${fmtDate(p.date)}` + (p.complete ? '' : ` · incomplet`);
+    info.querySelector('span').textContent = `${p.kind === 'trace' ? 'Le long de la trace' : 'Département, ' + p.detail} · ${fmtMo(p.bytes / 1024)} · ${fmtDate(p.date)}` + (p.complete ? '' : ` · incomplet`) + (p.graph ? ` · itinéraires hors connexion ✓ (${p.graph.km} km de chemins)` : '');
     if (dl && dl.packId === p.id) { const live = document.createElement('span'); live.className = 'dl-live'; live.dataset.pack = p.id; live.textContent = 'En cours…'; info.appendChild(live); }
     const acts = document.createElement('div'); acts.className = 'pack-acts';
     if (!p.complete) {
       const re = document.createElement('button'); re.className = 'btn small'; re.textContent = 'Reprendre';
       if (dl && dl.packId === p.id) re.hidden = true;
       re.onclick = () => downloadPack(p, p.tiles); acts.appendChild(re);
+    }
+    if (p.kind === 'trace' && !p.graph && p.line && !dl) {
+      const gb = document.createElement('button'); gb.className = 'btn small'; gb.textContent = '+ Chemins';
+      gb.title = 'Télécharger le réseau de chemins pour les itinéraires hors connexion';
+      gb.onclick = async () => {
+        gb.disabled = true;
+        const lp = makePath(p.line.map(([lon, lat]) => ({ lat, lon, ele: null })), p.name);
+        await downloadGraph(p, corridorBoxes(lp)); renderPacks();
+      };
+      acts.appendChild(gb);
     }
     const see = document.createElement('button'); see.className = 'btn small'; see.textContent = 'Voir';
     see.onclick = () => {
@@ -1551,6 +1573,7 @@ async function deletePack(p) {
     const cache = await caches.open(TILE_CACHE);
     for (const t of p.tiles || []) if (!others.has(t)) { const [z, x, y] = t.split('/'); await cache.delete(tileKey('ign', z, x, y)); }
     await idb('readwrite', st => st.delete(p.id), 'packs');
+    try { await idb('readwrite', st => st.delete(p.id), 'graphs'); graphs = null; loadGraphs(); } catch {}
     toast(`${p.name} supprimée`);
   } catch { toast('Suppression impossible.'); }
   renderPacks(); updateStorageInfo(); drawPacks();
@@ -1560,6 +1583,7 @@ $('btnClearTiles').onclick = async () => {
   try {
     await caches.delete(TILE_CACHE);
     for (const p of await listPacks()) await idb('readwrite', st => st.delete(p.id), 'packs');
+    try { await idb('readwrite', st => st.clear(), 'graphs'); graphs = null; loadGraphs(); } catch {}
     toast('Toutes les cartes hors ligne sont supprimées');
   } catch {}
   renderPacks(); updateStorageInfo(); drawPacks();
@@ -1580,6 +1604,206 @@ async function drawPacks() {
   setSrc('packs', { type: 'FeatureCollection', features: feats });
 }
 drawPacks();
+
+// =====================================================================
+// Itinéraires hors connexion : réseau des chemins (OpenStreetMap, via Overpass)
+// téléchargé avec la carte, puis plus court chemin calculé sur le téléphone
+// =====================================================================
+const HW = ['trunk', 'trunk_link', 'primary', 'primary_link', 'secondary', 'secondary_link', 'tertiary', 'tertiary_link',
+  'unclassified', 'residential', 'living_street', 'service', 'pedestrian', 'track', 'path', 'footway', 'cycleway', 'bridleway', 'steps', 'road'];
+// coût relatif de chaque type de voie (1 = idéal), à pied et à vélo
+const COST = {
+  foot: [6, 6, 2.2, 2.2, 1.6, 1.6, 1.3, 1.3, 1.05, 1.05, 1, 1.1, 1, 1, 1, 1, 1.2, 1.1, 1.3, 1.2],
+  bike: [8, 8, 2.5, 2.5, 1.6, 1.6, 1.15, 1.15, 1, 1.05, 1.1, 1.15, 2.5, 1.4, 1.8, 3, 0.8, 2.2, 8, 1.3]
+};
+// drapeaux par voie : 1 interdit à pied, 2 interdit à vélo, 4 vélo autorisé, 8 accès privé,
+// 16 sens unique, 32 sens unique inverse, 64 piétons autorisés
+function wayFlags(t) {
+  let f = 0;
+  if (t.foot === 'no') f |= 1;
+  if (t.bicycle === 'no') f |= 2;
+  if (/^(yes|designated|permissive)$/.test(t.bicycle || '')) f |= 4;
+  if (/^(private|no)$/.test(t.access || '')) f |= 8;
+  if (t.oneway === 'yes' || t.oneway === '1' || t.junction === 'roundabout') f |= 16;
+  if (t.oneway === '-1') f |= 32;
+  if (t['oneway:bicycle'] === 'no' || t['cycleway'] === 'opposite' || /opposite/.test(t['cycleway:left'] || '')) f &= ~48;
+  if (/^(yes|designated|permissive)$/.test(t.foot || '')) f |= 64;
+  return f;
+}
+
+function buildGraph(json) {
+  const idx = new Map(), lat = [], lon = [];
+  for (const e of json.elements) if (e.type === 'node') { idx.set(e.id, lat.length); lat.push(e.lat); lon.push(e.lon); }
+  const ea = [], eb = [], ec = [], ef = [];
+  for (const e of json.elements) {
+    if (e.type !== 'way' || !e.tags) continue;
+    const c = HW.indexOf(e.tags.highway); if (c < 0) continue;
+    const f = wayFlags(e.tags);
+    for (let i = 1; i < e.nodes.length; i++) {
+      const a = idx.get(e.nodes[i - 1]), b = idx.get(e.nodes[i]);
+      if (a == null || b == null || a === b) continue;
+      ea.push(a); eb.push(b); ec.push(c); ef.push(f);
+    }
+  }
+  const n = lat.length, m = ea.length, start = new Uint32Array(n + 1);
+  for (let k = 0; k < m; k++) { start[ea[k] + 1]++; start[eb[k] + 1]++; }
+  for (let i = 0; i < n; i++) start[i + 1] += start[i];
+  const fill = start.slice(0, n), to = new Uint32Array(2 * m), len = new Float32Array(2 * m),
+    hw = new Uint8Array(2 * m), fl = new Uint8Array(2 * m), fwd = new Uint8Array(2 * m);
+  for (let k = 0; k < m; k++) {
+    const a = ea[k], b = eb[k], d = hav({ lat: lat[a], lon: lon[a] }, { lat: lat[b], lon: lon[b] });
+    let p = fill[a]++; to[p] = b; len[p] = d; hw[p] = ec[k]; fl[p] = ef[k]; fwd[p] = 1;
+    p = fill[b]++; to[p] = a; len[p] = d; hw[p] = ec[k]; fl[p] = ef[k]; fwd[p] = 0;
+  }
+  let w = 180, s = 90, e = -180, nn = -90;
+  for (let i = 0; i < n; i++) { w = Math.min(w, lon[i]); e = Math.max(e, lon[i]); s = Math.min(s, lat[i]); nn = Math.max(nn, lat[i]); }
+  return { n, lat: Float64Array.from(lat), lon: Float64Array.from(lon), start, to, len, hw, fl, fwd, bbox: [w, s, e, nn] };
+}
+
+// coût d'un tronçon selon le mode (Infinity = interdit)
+function edgeCost(g, p, bike) {
+  const f = g.fl[p];
+  if (f & 8 && !(bike ? f & 4 : f & 64)) return Infinity;
+  let c = (bike ? COST.bike : COST.foot)[g.hw[p]];
+  if (bike) {
+    if (f & 2) return Infinity;
+    if (f & 4) c = Math.min(c, 1);
+    if ((f & 16 && !g.fwd[p]) || (f & 32 && g.fwd[p])) c *= 4; // à contresens : on pousse le vélo
+  } else if (f & 1) return Infinity;
+  return g.len[p] * c;
+}
+
+// index spatial des nœuds (cases d'environ 50 m)
+const CELL = 0.0005;
+function gridOf(g) {
+  if (g.grid) return g.grid;
+  const grid = new Map();
+  for (let i = 0; i < g.n; i++) {
+    const k = Math.floor(g.lat[i] / CELL) + ':' + Math.floor(g.lon[i] / (CELL * 1.4));
+    let a = grid.get(k); if (!a) grid.set(k, a = []); a.push(i);
+  }
+  return g.grid = grid;
+}
+function nodesNear(g, p, radius) {
+  const grid = gridOf(g), r = Math.ceil(radius / 50) + 1, cy = Math.floor(p.lat / CELL), cx = Math.floor(p.lon / (CELL * 1.4)), out = [];
+  for (let dy = -r; dy <= r; dy++) for (let dx = -r; dx <= r; dx++) {
+    const a = grid.get((cy + dy) + ':' + (cx + dx)); if (!a) continue;
+    for (const i of a) { const d = hav(p, { lat: g.lat[i], lon: g.lon[i] }); if (d <= radius) out.push([i, d]); }
+  }
+  return out.sort((x, y) => x[1] - y[1]);
+}
+const nodePt = (g, i) => ({ lat: g.lat[i], lon: g.lon[i], ele: null });
+
+// plus court chemin (Dijkstra / A*) vers le premier nœud cible atteint
+function shortestPath(g, from, isTarget, bike, goal) {
+  const n = g.n, dist = new Float64Array(n).fill(Infinity), prev = new Int32Array(n).fill(-1), done = new Uint8Array(n);
+  const hk = [], hv = []; // tas binaire (priorité, nœud)
+  const push = (k, v) => { hk.push(k); hv.push(v); let i = hk.length - 1; while (i > 0) { const pi = (i - 1) >> 1; if (hk[pi] <= hk[i]) break; [hk[pi], hk[i]] = [hk[i], hk[pi]]; [hv[pi], hv[i]] = [hv[i], hv[pi]]; i = pi; } };
+  const pop = () => {
+    const v = hv[0], lk = hk.pop(), lv = hv.pop();
+    if (hk.length) { hk[0] = lk; hv[0] = lv; let i = 0; for (;;) { const l = 2 * i + 1, r = l + 1; let s = i; if (l < hk.length && hk[l] < hk[s]) s = l; if (r < hk.length && hk[r] < hk[s]) s = r; if (s === i) break; [hk[s], hk[i]] = [hk[i], hk[s]]; [hv[s], hv[i]] = [hv[i], hv[s]]; i = s; } }
+    return v;
+  };
+  const h = goal ? i => hav(goal, { lat: g.lat[i], lon: g.lon[i] }) * 0.8 : () => 0;
+  dist[from] = 0; push(h(from), from);
+  let steps = 0;
+  while (hk.length) {
+    const u = pop();
+    if (done[u]) continue; done[u] = 1;
+    if (isTarget(u)) {
+      const path = []; for (let v = u; v !== -1; v = prev[v]) path.push(v);
+      return { nodes: path.reverse(), cost: dist[u] };
+    }
+    if (++steps > 400000) break;
+    for (let p = g.start[u]; p < g.start[u + 1]; p++) {
+      const v = g.to[p]; if (done[v]) continue;
+      const c = edgeCost(g, p, bike); if (c === Infinity) continue;
+      const nd = dist[u] + c;
+      if (nd < dist[v]) { dist[v] = nd; prev[v] = u; push(nd + h(v), v); }
+    }
+  }
+  return null;
+}
+const pathLength = pts => { let d = 0; for (let i = 1; i < pts.length; i++) d += hav(pts[i - 1], pts[i]); return d; };
+
+// ---------- graphes en mémoire ----------
+let graphs = null;
+async function loadGraphs() {
+  if (graphs) return graphs;
+  try { graphs = (await idb('readonly', st => st.getAll(), 'graphs')) || []; } catch { graphs = []; }
+  return graphs;
+}
+function graphFor(points) {
+  if (!graphs) return null;
+  const inside = (b, p) => p.lon >= b[0] - 0.005 && p.lon <= b[2] + 0.005 && p.lat >= b[1] - 0.005 && p.lat <= b[3] + 0.005;
+  return graphs.find(g => points.every(p => inside(g.bbox, p))) || null;
+}
+
+// retour à la trace hors connexion : vers le point de la trace le plus proche PAR LES CHEMINS
+function localRejoin(tr, pos) {
+  const g = graphFor([pos]); if (!g) return null;
+  const startN = nodesNear(g, pos, 300)[0]; if (!startN) return null;
+  // nœuds du réseau situés sur la trace (à moins de 25 m)
+  const key = tr.id + ':' + g.id;
+  if (!g.targets || g.targetsKey !== key) {
+    const mask = new Uint8Array(g.n);
+    for (let d = 0; d <= tr.total; d += 10) for (const [i] of nodesNear(g, pointAt(tr, d), 25)) mask[i] = 1;
+    g.targets = mask; g.targetsKey = key;
+  }
+  const r = shortestPath(g, startN[0], i => g.targets[i] === 1, profile === 'trekking');
+  if (!r) return null;
+  const last = nodePt(g, r.nodes[r.nodes.length - 1]), pr = project(tr, last, true), tp = pointAt(tr, pr.along);
+  const pts = [{ lat: pos.lat, lon: pos.lon, ele: null }, ...r.nodes.map(i => nodePt(g, i)), { lat: tp.lat, lon: tp.lon, ele: null }];
+  return { pts, len: pathLength(pts), target: { lat: tp.lat, lon: tp.lon, along: pr.along, dist: hav(pos, tp) } };
+}
+// itinéraire vers un lieu hors connexion (dans une zone dont les chemins sont téléchargés)
+function localRouteTo(pos, dest) {
+  const g = graphFor([pos, dest]); if (!g) return null;
+  const a = nodesNear(g, pos, 300)[0], b = nodesNear(g, dest, 300)[0];
+  if (!a || !b) return null;
+  const r = shortestPath(g, a[0], i => i === b[0], profile === 'trekking', dest);
+  if (!r) return null;
+  const pts = [{ lat: pos.lat, lon: pos.lon, ele: null }, ...r.nodes.map(i => nodePt(g, i))];
+  return { pts, len: pathLength(pts) };
+}
+
+// ---------- téléchargement du réseau de chemins ----------
+function corridorBoxes(p) {
+  const boxes = []; let cur = null, from = 0;
+  const flush = () => { if (cur) { const m = 0.008, ml = m / Math.cos(rad((cur[1] + cur[3]) / 2)); boxes.push([cur[1] - m, cur[0] - ml, cur[3] + m, cur[2] + ml]); } };
+  p.pts.forEach((q, i) => {
+    if (!cur) cur = [q.lon, q.lat, q.lon, q.lat];
+    cur[0] = Math.min(cur[0], q.lon); cur[1] = Math.min(cur[1], q.lat); cur[2] = Math.max(cur[2], q.lon); cur[3] = Math.max(cur[3], q.lat);
+    if (p.cum[i] - from > 3000) { flush(); cur = [q.lon, q.lat, q.lon, q.lat]; from = p.cum[i]; }
+  });
+  flush();
+  return boxes; // [sud, ouest, nord, est]
+}
+async function downloadGraph(pack, boxes) {
+  const re = '^(' + HW.join('|') + ')$';
+  const q = `[out:json][timeout:120];(${boxes.map(b => `way["highway"~"${re}"](${b.map(v => v.toFixed(5)).join(',')});`).join('')});out body qt;>;out skel qt;`;
+  $('offTxt').textContent = 'Réseau de chemins : téléchargement…'; $('offProg').hidden = false;
+  const ctrl = new AbortController(), timer = setTimeout(() => ctrl.abort(), 150000);
+  try {
+    const r = await fetch('https://overpass-api.de/api/interpreter', { method: 'POST', body: 'data=' + encodeURIComponent(q), headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, signal: ctrl.signal });
+    if (!r.ok) throw new Error(r.status === 429 ? 'serveur OpenStreetMap saturé, réessaie dans quelques minutes' : 'erreur ' + r.status);
+    $('offTxt').textContent = 'Réseau de chemins : préparation…';
+    const g = buildGraph(await r.json());
+    if (!g.n) throw new Error('aucun chemin trouvé');
+    g.id = pack.id;
+    await idb('readwrite', st => st.put(g), 'graphs');
+    graphs = null; await loadGraphs();
+    pack.graph = { nodes: g.n, km: Math.round(g.len.reduce((a, b) => a + b, 0) / 2000) };
+    await idb('readwrite', st => st.put(pack), 'packs');
+    $('offTxt').textContent = `Réseau de chemins : ${pack.graph.km} km de chemins enregistrés ✓`;
+    return true;
+  } catch (e) {
+    $('offTxt').textContent = 'Réseau de chemins non téléchargé : ' + (e.name === 'AbortError' ? 'délai dépassé' : e.message);
+    return false;
+  } finally { clearTimeout(timer); }
+}
+
+loadGraphs();
 
 // =====================================================================
 // Simulation : parcourt la trace avec un écart volontaire, pour tester à la maison
