@@ -12,7 +12,7 @@
 <link rel="icon" href="icon.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="icon-192.png">
 <link rel="stylesheet" href="vendor/maplibre-gl.css">
-<link rel="stylesheet" href="app.css?v=10">
+<link rel="stylesheet" href="app.css?v=11">
 </head>
 <body>
 <div id="map" aria-label="Carte"></div>
@@ -53,6 +53,11 @@
   </button>
 </div>
 
+<div id="pausePill" class="pausepill" hidden>
+  <span><b>En pause</b> · chrono et enregistrement arrêtés</span>
+  <button id="pauseResume" class="btn small go">Reprendre</button>
+</div>
+
 <div id="speed" class="speed nav-only"><b id="spVal">–</b><span>km/h</span></div>
 
 <!-- Navigation : barre du bas -->
@@ -74,6 +79,7 @@
   </div>
   <div id="navMore" class="nav-more" hidden>
     <canvas id="navProfile" aria-label="Profil altimétrique et position"></canvas>
+    <button id="btnPause" class="btn pausebtn"></button>
     <div class="np-grid">
       <div><span>Parcouru</span><b id="npDone">–</b></div>
       <div><span>Restant</span><b id="npLeft">–</b></div>
@@ -81,7 +87,7 @@
       <div><span>D+ fait</span><b id="npUpDone">–</b></div>
       <div><span>D+ restant</span><b id="npUpLeft">–</b></div>
       <div><span>D− restant</span><b id="npDownLeft">–</b></div>
-      <div><span>Temps écoulé</span><b id="npTime">–</b></div>
+      <div><span>Temps actif</span><b id="npTime">–</b></div>
       <div><span>Vitesse moy.</span><b id="npAvg">–</b></div>
       <div><span>Altitude</span><b id="npEle">–</b></div>
     </div>
@@ -129,7 +135,7 @@
     </div>
     <div class="row">
       <span>Ma trace enregistrée <small id="recInfo">(vide)</small></span>
-      <button id="btnExport" class="btn">Exporter GPX</button>
+      <span class="row-btns"><button id="btnExport" class="btn">Exporter</button><button id="btnClearRec" class="btn ghost">Effacer</button></span>
     </div>
     <p class="note" id="note"></p>
   </div>
@@ -183,6 +189,6 @@
 <div id="toast" class="toast" hidden></div>
 
 <script src="vendor/maplibre-gl.js"></script>
-<script src="app.js?v=10"></script>
+<script src="app.js?v=11"></script>
 </body>
 </html>

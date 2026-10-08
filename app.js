@@ -456,7 +456,7 @@ function updateHeading() {
 // =====================================================================
 // Réception d'une position
 // =====================================================================
-let pendingRejoin = false, arrived = false, navStart = 0, movT = 0, movD = 0;
+let pendingRejoin = false, arrived = false;
 function onPos(pos) {
   if (sim && !pos.sim) return; // pendant la simulation on ignore le vrai GPS
   // vitesse et direction de déplacement
@@ -464,11 +464,8 @@ function onPos(pos) {
     const dt = (pos.t - prevFix.t) / 1000;
     if (dt > 0.5) pos.speed = hav(prevFix, pos) / dt;
   }
-  if (prevFix && nav) {
-    const dt = (pos.t - prevFix.t) / 1000, d = hav(prevFix, pos);
-    if (dt > 0 && dt < 30 && d / dt > 0.5 && d / dt < 40) { movT += dt; movD += d; }
-  }
   prevFix = pos;
+  actMove(pos);
   if (pos.speed > 0.4 && pos.speed < 45 && (pos.acc || 0) < 40) { speedEma = speedEma == null ? pos.speed : speedEma * 0.92 + pos.speed * 0.08; speedSamples++; }
   if (!moveRef) moveRef = pos;
   else if (hav(moveRef, pos) >= 8) { moveBearing = bearing(moveRef, pos); moveRef = pos; }
@@ -477,7 +474,7 @@ function onPos(pos) {
   meMk.setLngLat([pos.lon, pos.lat]);
   if (!meShown) { meMk.addTo(map); meShown = true; if (!nav) map.easeTo({ center: [pos.lon, pos.lat], zoom: Math.max(map.getZoom(), 15), duration: 800 }); }
 
-  if (recording) addRecPoint(pos);
+  if (recording && !act.paused) addRecPoint(pos);
   if (track) progress = project(track, pos);
   if (rejoin) {
     if (rejoin.straight) setRejoinPath([{ lat: pos.lat, lon: pos.lon }, rejoin.target], rejoin.target, true);
@@ -525,8 +522,11 @@ async function startNav() {
   if (!track) { toast('Ouvre d\'abord un fichier GPX.'); return; }
   if (!startGPS()) return;
   nav = true; arrived = false; isOff = false; offCount = 0;
-  if (!navStart || !track || navTrackId !== track.id) { navStart = Date.now(); movT = 0; movD = 0; navTrackId = track.id; }
-  document.body.classList.add('nav'); toggleMore(false);
+  // nouvelle trace sans enregistrement en cours : chrono remis à zéro ; sinon il continue
+  if (navTrackId !== track.id && !recording) actReset();
+  navTrackId = track.id;
+  if (act.paused) resumeActivity(true); else actStart();
+  document.body.classList.add('nav'); toggleMore(false); setTimeout(updatePauseUI, 0);
   setFollow(true);
   unlockAudio(); enableCompass(); keepAwake();
   say(me ? 'C\'est parti' : 'Navigation démarrée. Recherche du signal GPS.');
@@ -535,7 +535,7 @@ async function startNav() {
   updateStats();
 }
 function stopNav() {
-  nav = false; document.body.classList.remove('nav'); toggleNavMore(false);
+  nav = false; document.body.classList.remove('nav'); toggleNavMore(false); setTimeout(updatePauseUI, 0);
   stopSim(); clearRejoin(); isOff = false;
   try { speechSynthesis.cancel(); } catch {}
   setSrc('turn', EMPTY);
@@ -867,8 +867,9 @@ function updateNavMore() {
   $('npUpDone').textContent = track.hasEle ? fmtM(track.totalUp - upLeft) : '–';
   $('npUpLeft').textContent = track.hasEle ? fmtM(upLeft) : '–';
   $('npDownLeft').textContent = track.hasEle ? fmtM(downLeft) : '–';
-  $('npTime').textContent = navStart ? fmtDur((Date.now() - navStart) / 1000) : '–';
-  $('npAvg').textContent = movT > 60 ? (movD / movT * 3.6).toFixed(1).replace('.', ',') + ' km/h' : '–';
+  const el = actElapsed() / 1000;
+  $('npTime').textContent = el > 0 ? fmtDur(el) : '–';
+  $('npAvg').textContent = el > 60 ? (act.d / el * 3.6).toFixed(1).replace('.', ',') + ' km/h' : '–';
   $('npEle').textContent = me && me.ele != null ? fmtM(me.ele) : (pr && track.ele[pr.idx] != null ? '≈ ' + fmtM(track.ele[pr.idx]) : '–');
   if (Date.now() - navMoreT > 2000) { navMoreT = Date.now(); drawProfileOn($('navProfile')); }
 }
@@ -902,40 +903,108 @@ setInterval(() => { if (nav) updateNavMore(); }, 15000); // le temps écoulé av
 // =====================================================================
 // Enregistrement de ma trace
 // =====================================================================
+// ---------- chrono de l'activité : temps et distance hors pauses ----------
+let act = { ms: 0, since: null, d: 0, paused: false };
+try { act = Object.assign(act, JSON.parse(store.get('act') || '{}')); } catch {}
+let actRef = null;
+const saveAct = () => store.set('act', JSON.stringify(act));
+const actElapsed = () => act.ms + (act.since ? Date.now() - act.since : 0);
+function actStart() { if (act.since == null && !act.paused) { act.since = Date.now(); saveAct(); } }
+function actReset() { act = { ms: 0, since: null, d: 0, paused: false }; actRef = null; saveAct(); }
+// distance comptée par pas de 8 m, pour ne pas additionner le flottement du GPS à l'arrêt
+function actMove(pos) {
+  if (act.since == null || pos.sim || (pos.acc || 0) > 40) return;
+  if (!actRef) { actRef = pos; return; }
+  const d = hav(actRef, pos);
+  if (d >= 8) { if (d < 500) act.d += d; actRef = pos; if (Math.random() < 0.1) saveAct(); }
+}
+function pauseActivity() {
+  if (act.since != null) { act.ms += Date.now() - act.since; act.since = null; }
+  act.paused = true; actRef = null; saveAct();
+  if (recording) store.set('rec', JSON.stringify(rec));
+  if (!nav) stopGPS();
+  try { speechSynthesis.cancel(); } catch {}
+  say('Pause');
+  if (!nav && !recording) toast('En pause');
+  updatePauseUI(); updateNavMore();
+}
+function resumeActivity(quiet) {
+  act.paused = false; act.since = Date.now(); actRef = null; saveAct();
+  if (recording) recSeg++;
+  startGPS();
+  if (!quiet) { say('C\'est reparti'); toast('C\'est reparti'); }
+  updatePauseUI(); updateNavMore();
+}
+
+// ---------- enregistrement de ma trace ----------
 let recording = false, rec = [];
 try { rec = JSON.parse(store.get('rec') || '[]'); } catch { rec = []; }
-function recDist() { let d = 0; for (let i = 1; i < rec.length; i++) d += hav(rec[i - 1], rec[i]); return d; }
-function updRecInfo() { $('recInfo').textContent = rec.length ? `(${rec.length} pts · ${fmtDist(recDist())})` : '(vide)'; }
-const drawRec = () => setSrc('rec', rec.length > 1 ? lineFeature(rec) : EMPTY);
+let recSeg = rec.length ? (rec[rec.length - 1].s || 0) + 1 : 0; // un segment par reprise après une pause
+function recDist() { let d = 0; for (let i = 1; i < rec.length; i++) if ((rec[i].s || 0) === (rec[i - 1].s || 0)) d += hav(rec[i - 1], rec[i]); return d; }
+function updRecInfo() { $('recInfo').textContent = rec.length ? `(${fmtDist(recDist())})` : '(vide)'; }
+function drawRec() {
+  const segs = [];
+  rec.forEach((p, i) => { if (!i || (p.s || 0) !== (rec[i - 1].s || 0)) segs.push([]); segs[segs.length - 1].push([p.lon, p.lat]); });
+  setSrc('rec', { type: 'FeatureCollection', features: segs.filter(g => g.length > 1).map(c => ({ type: 'Feature', properties: {}, geometry: { type: 'LineString', coordinates: c } })) });
+}
 function addRecPoint(p) {
   if (p.sim || p.acc > 50) return;
   const last = rec[rec.length - 1];
-  if (last && hav(last, p) < 5) return; // évite d'accumuler des points à l'arrêt
-  rec.push({ lat: +p.lat.toFixed(6), lon: +p.lon.toFixed(6), ele: p.ele != null ? +p.ele.toFixed(1) : null, t: p.t });
+  if (last && (last.s || 0) === recSeg && hav(last, p) < 5) return; // évite d'accumuler des points à l'arrêt
+  rec.push({ lat: +p.lat.toFixed(6), lon: +p.lon.toFixed(6), ele: p.ele != null ? +p.ele.toFixed(1) : null, t: p.t, s: recSeg });
   if (rec.length % 5 === 0) store.set('rec', JSON.stringify(rec));
   drawRec(); updRecInfo();
 }
 if (rec.length) { drawRec(); updRecInfo(); }
-function toggleRec() {
+
+// Bouton Enregistrer : Enregistrer → Pause → Reprendre
+function recButton() {
   if (!recording) {
     if (!startGPS()) return;
-    recording = true; toast(rec.length ? 'Enregistrement repris' : 'Enregistrement démarré');
-  } else {
-    recording = false; store.set('rec', JSON.stringify(rec));
-    if (!nav) stopGPS();
-    toast('Enregistrement en pause · ' + fmtDist(recDist()));
-  }
-  $('btnRec').classList.toggle('recording', recording);
-  $('btnRec').querySelector('.t').textContent = recording ? 'Arrêter' : 'Enregistrer';
-  $('btnRecFab').classList.toggle('recording', recording);
+    recording = true; recSeg = rec.length ? (rec[rec.length - 1].s || 0) + 1 : 0;
+    if (act.paused) resumeActivity(true); else actStart();
+    toast(rec.length ? 'Enregistrement repris' : 'Enregistrement démarré');
+    updatePauseUI();
+  } else if (!act.paused) pauseActivity();
+  else resumeActivity();
 }
-$('btnRec').onclick = toggleRec; $('btnRecFab').onclick = toggleRec;
+$('btnRec').onclick = recButton; $('btnRecFab').onclick = recButton;
+$('btnPause').onclick = () => { if (act.paused) resumeActivity(); else { if (act.since == null) actStart(); pauseActivity(); } };
+$('pauseResume').onclick = () => resumeActivity();
+
+const ICON_PAUSE = '<svg viewBox="0 0 24 24"><path d="M8 5v14M16 5v14"/></svg>';
+const ICON_PLAY = '<svg viewBox="0 0 24 24"><path d="M7 4.5v15L19.5 12Z" fill="currentColor"/></svg>';
+function updatePauseUI() {
+  const paused = act.paused;
+  const b = $('btnRec'), f = $('btnRecFab');
+  b.classList.toggle('recording', recording && !paused); b.classList.toggle('paused', recording && paused);
+  b.querySelector('.t').textContent = !recording ? 'Enregistrer' : paused ? 'Reprendre' : 'Pause';
+  f.classList.toggle('recording', recording && !paused); f.classList.toggle('paused', recording && paused);
+  f.innerHTML = !recording ? '<span class="dot"></span>' : paused ? ICON_PLAY : ICON_PAUSE;
+  f.setAttribute('aria-label', !recording ? 'Enregistrer ma trace' : paused ? 'Reprendre' : 'Mettre en pause');
+  $('btnPause').innerHTML = (paused ? ICON_PLAY + 'Reprendre' : ICON_PAUSE + 'Pause');
+  $('pausePill').hidden = !(paused && (nav || recording));
+}
+$('btnClearRec').onclick = () => {
+  if (!rec.length) { toast('Aucune trace enregistrée.'); return; }
+  const saved = rec.slice(), savedAct = Object.assign({}, act);
+  rec = []; store.set('rec', '[]'); recording = false; recSeg = 0;
+  if (!nav) { actReset(); stopGPS(); }
+  drawRec(); updRecInfo(); updatePauseUI();
+  toast('Trace enregistrée effacée', 5000, { label: 'Annuler', run: () => {
+    rec = saved; store.set('rec', JSON.stringify(rec)); act = savedAct; saveAct(); drawRec(); updRecInfo(); updatePauseUI();
+  } });
+};
+updatePauseUI();
 
 function toGPX() {
   const esc = s => s.replace(/[<&>]/g, c => ({ '<': '&lt;', '&': '&amp;', '>': '&gt;' }[c]));
   const name = 'Ma sortie ' + new Date(rec[0]?.t || Date.now()).toLocaleDateString('fr-FR');
-  const pts = rec.map(p => `      <trkpt lat="${p.lat}" lon="${p.lon}">${p.ele != null ? `<ele>${p.ele}</ele>` : ''}<time>${new Date(p.t).toISOString()}</time></trkpt>`).join('\n');
-  return `<?xml version="1.0" encoding="UTF-8"?>\n<gpx version="1.1" creator="Balise GPX" xmlns="http://www.topografix.com/GPX/1/1">\n  <trk><name>${esc(name)}</name>\n    <trkseg>\n${pts}\n    </trkseg>\n  </trk>\n</gpx>\n`;
+  // chaque reprise après une pause devient un segment à part (trkseg) : la pause n'est pas comptée
+  const segs = [];
+  rec.forEach((p, i) => { if (!i || (p.s || 0) !== (rec[i - 1].s || 0)) segs.push([]); segs[segs.length - 1].push(p); });
+  const body = segs.map(g => '    <trkseg>\n' + g.map(p => `      <trkpt lat="${p.lat}" lon="${p.lon}">${p.ele != null ? `<ele>${p.ele}</ele>` : ''}<time>${new Date(p.t).toISOString()}</time></trkpt>`).join('\n') + '\n    </trkseg>').join('\n');
+  return `<?xml version="1.0" encoding="UTF-8"?>\n<gpx version="1.1" creator="Balise GPX" xmlns="http://www.topografix.com/GPX/1/1">\n  <trk><name>${esc(name)}</name>\n${body}\n  </trk>\n</gpx>\n`;
 }
 $('btnExport').onclick = async () => {
   if (!rec.length) { toast('Rien à exporter : lance d\'abord un enregistrement.'); return; }
@@ -1318,7 +1387,7 @@ try {
 const saved = store.get('gpx');
 if (saved) { try { showTrack(parseGPX(saved)); } catch { drawProfile(); } } else drawProfile();
 checkShared();
-const VERSION = '10 · 8 oct. 2026';
+const VERSION = '11 · 8 oct. 2026';
 $('note').textContent = (window.isSecureContext ? '' : 'Attention : le GPS ne fonctionne qu\'en HTTPS. ') + 'Version ' + VERSION;
 // Mises à jour : on vérifie à chaque ouverture et on recharge dès qu'une nouvelle version est prête
 // (jamais pendant une navigation ou un enregistrement : on attend la fin)
@@ -1335,5 +1404,5 @@ if ('serviceWorker' in navigator) {
   };
   navigator.serviceWorker.addEventListener('controllerchange', () => { if (hadController) tryReload(); hadController = true; });
 }
-window.__balise = { onPos, get state() { return { nav, isOff, rejoin: !!rejoin, straight: rejoin && rejoin.straight, progress }; } };
+window.__balise = { onPos, get state() { return { nav, isOff, rejoin: !!rejoin, straight: rejoin && rejoin.straight, progress, act: Object.assign({ elapsed: actElapsed() }, act) }; } };
 })();
