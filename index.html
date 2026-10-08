@@ -76,7 +76,12 @@
 <!-- Aperçu : panneau du bas -->
 <section class="sheet ov-only" id="sheet">
   <div class="grip" id="grip" role="button" aria-label="Afficher ou masquer les réglages"></div>
-  <div class="trackname" id="trackName">Aucune trace chargée</div>
+  <div class="trackrow">
+    <div class="trackname" id="trackName">Aucune trace chargée</div>
+    <button id="btnClose" class="closebtn" hidden aria-label="Fermer la trace">
+      <svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></svg>Fermer
+    </button>
+  </div>
   <canvas id="profile" aria-label="Profil altimétrique"></canvas>
   <div class="actions">
     <label class="btn" for="fileIn">Ouvrir un GPX</label>
@@ -104,8 +109,12 @@
       </select>
     </div>
     <div class="row">
-      <span>Cartes hors ligne le long de la trace</span>
+      <span>Cartes hors ligne le long de la trace<br><small id="offInfo"></small></span>
       <button id="btnOffline" class="btn">Télécharger</button>
+    </div>
+    <div class="row">
+      <span><small id="storeInfo"></small></span>
+      <button id="btnClearTiles" class="btn ghost">Vider les cartes</button>
     </div>
     <div class="progress" id="offProg" hidden><div id="offBar"></div><span id="offTxt"></span></div>
     <div class="row">

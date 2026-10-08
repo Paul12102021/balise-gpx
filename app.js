@@ -38,8 +38,12 @@ const store = {
 };
 const cssVar = v => getComputedStyle(document.documentElement).getPropertyValue(v).trim();
 let toastT;
-function toast(msg, ms = 2800) {
+function toast(msg, ms = 2800, action) {
   const t = $('toast'); t.textContent = msg; t.hidden = false;
+  if (action) {
+    const b = document.createElement('button'); b.className = 'toast-btn'; b.textContent = action.label;
+    b.onclick = () => { t.hidden = true; action.run(); }; t.appendChild(b);
+  }
   clearTimeout(toastT); toastT = setTimeout(() => t.hidden = true, ms);
 }
 
@@ -180,7 +184,7 @@ $('btnLayer').onclick = async () => {
   layerIdx = (layerIdx + 1) % LAYERS.length; store.set('layer', layerIdx);
   map.removeLayer('base'); map.removeSource('base');
   map.addSource('base', baseSource(LAYERS[layerIdx])); map.addLayer({ id: 'base', type: 'raster', source: 'base' }, 'track-casing');
-  toast('Fond de carte : ' + LAYERS[layerIdx].name);
+  toast('Fond de carte : ' + LAYERS[layerIdx].name); updateOfflineInfo();
 };
 
 function el(cls, html = '') { const e = document.createElement('div'); e.className = cls; e.innerHTML = html; return e; }
@@ -231,12 +235,29 @@ async function showTrack(t, fit = true) {
   if (fit) { map.setPadding({ top: 0, bottom: 0, left: 0, right: 0 }); fitTo([track.pts]); }
   $('trackName').textContent = `${t.name} · ${fmtDist(track.total)}${track.hasEle ? ' · D+ ' + fmtM(track.totalUp) : ''}`;
   if (me) progress = project(track, me, true);
-  drawProfile(); updateStats();
+  $('btnClose').hidden = false;
+  drawProfile(); updateStats(); updateOfflineInfo();
 }
+
+// Fermer la trace ouverte (avec possibilité d'annuler quelques secondes)
+function closeTrack() {
+  if (!track) return;
+  const savedText = store.get('gpx');
+  if (nav) stopNav();
+  track = null; progress = null; clearRejoin();
+  setSrc('track', EMPTY); setSrc('turn', EMPTY);
+  startMk.remove(); endMk.remove();
+  store.set('gpx', '');
+  $('trackName').textContent = 'Aucune trace chargée'; $('btnClose').hidden = true;
+  drawProfile(); updateStats(); updateOfflineInfo();
+  toast('Trace fermée', 5000, savedText ? { label: 'Annuler', run: () => loadText(savedText) } : null);
+}
+$('btnClose').onclick = closeTrack;
 function loadText(text, save = true) {
   try {
     const t = parseGPX(text);
     showTrack(t);
+    $('offProg').hidden = true;
     if (save) store.set('gpx', text.length < 4.5e6 ? text : '');
     toast(`Trace chargée : ${t.pts.length} points`);
   } catch (e) { toast(e.message, 4000); }
@@ -779,6 +800,24 @@ function tilesAlongTrack(zmin, zmax) {
     return l.tiles[(+x + +y) % l.tiles.length].replace('{z}', z).replace('{x}', x).replace('{y}', y);
   });
 }
+// Estimation avant téléchargement : une tuile OpenTopoMap pèse en moyenne ~30 Ko
+const TILE_KB = 30;
+function updateOfflineInfo() {
+  const info = $('offInfo');
+  if (!track) { info.textContent = 'Ouvre une trace pour voir la taille'; return; }
+  const n = tilesAlongTrack(11, 16).length, mb = n * TILE_KB / 1024;
+  info.textContent = `≈ ${n.toLocaleString('fr-FR')} tuiles · ~${mb < 10 ? mb.toFixed(1).replace('.', ',') : Math.round(mb)} Mo · bande d'environ 1 km autour de la trace`;
+}
+async function updateStorageInfo() {
+  try {
+    if (!navigator.storage || !navigator.storage.estimate) return;
+    const e = await navigator.storage.estimate();
+    $('storeInfo').textContent = `Espace utilisé par l'appli sur ce téléphone : ${Math.round((e.usage || 0) / 1048576)} Mo`;
+  } catch {}
+}
+$('btnClearTiles').onclick = async () => {
+  try { await caches.delete('tiles-v1'); toast('Cartes hors ligne supprimées'); updateStorageInfo(); } catch {}
+};
 let dlRunning = false;
 $('btnOffline').onclick = async () => {
   if (!track) { toast('Ouvre d\'abord un fichier GPX.'); return; }
@@ -806,6 +845,7 @@ $('btnOffline').onclick = async () => {
   };
   await Promise.all([worker(), worker(), worker()]); // 3 à la fois, pour ménager les serveurs de cartes
   dlRunning = false; $('btnOffline').disabled = false;
+  updateStorageInfo();
   $('offTxt').textContent = fail ? `Terminé · ${fail} tuiles en échec, relance pour compléter` : 'Carte disponible hors ligne ✓';
   if (navigator.storage && navigator.storage.persist) navigator.storage.persist().catch(() => {});
 };
@@ -850,10 +890,16 @@ $('btnDemo').onclick = () => {
 
 function toggleMore(open) {
   const m = $('more'); m.hidden = open === undefined ? !m.hidden : !open;
+  if (!m.hidden) { updateOfflineInfo(); updateStorageInfo(); }
   document.body.classList.toggle('sheet-open', !m.hidden);
   $('btnMore').textContent = m.hidden ? 'Réglages' : 'Fermer';
 }
 $('btnMore').onclick = () => toggleMore(); $('grip').onclick = () => toggleMore();
+
+// les boutons ronds se placent juste au-dessus du panneau du bas, quelle que soit sa hauteur
+try {
+  new ResizeObserver(() => document.documentElement.style.setProperty('--sheet-h', $('sheet').offsetHeight + 'px')).observe($('sheet'));
+} catch { /* navigateur ancien : position par défaut */ }
 
 const saved = store.get('gpx');
 if (saved) { try { showTrack(parseGPX(saved)); } catch { drawProfile(); } } else drawProfile();
