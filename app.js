@@ -4,7 +4,7 @@
 
 // La page et le code doivent être de la même version. Sinon (page gardée en cache
 // par le téléphone ou par GitHub), on recharge une page fraîche, au plus 3 fois.
-const APP_VERSION = 20;
+const APP_VERSION = 21;
 try {
   const meta = document.querySelector('meta[name="balise-version"]');
   const pageV = meta ? +meta.content : 0;
@@ -515,7 +515,7 @@ function onPos(pos) {
   onActFix(pos);
   if (track) progress = project(track, pos);
   if (rejoin) {
-    if (rejoin.straight) setRejoinPath([{ lat: pos.lat, lon: pos.lon }, rejoin.target], rejoin.target, true);
+    if (rejoin.straight) { const why = rejoin.why; setRejoinPath([{ lat: pos.lat, lon: pos.lon }, rejoin.target], rejoin.target, true); rejoin.why = why; }
     rejoinProg = project(rejoin, pos);
   }
   updateHeading();
@@ -556,6 +556,7 @@ function navCamera(dur) {
   });
 }
 function setFollow(v) { follow = v; $('btnCenter').classList.toggle('on', nav ? v : followOv); }
+map.on('rotate', () => { if (nav && (!track || (rejoin && rejoin.straight))) guidance(); });
 ['dragstart', 'rotatestart', 'pitchstart'].forEach(ev => map.on(ev, e => {
   if (!e.originalEvent) return;
   if (nav) setFollow(false); else { followOv = false; $('btnCenter').classList.remove('on'); }
@@ -636,7 +637,7 @@ function guidance() {
   if (!me) { setBanner('gps', '', 'Recherche du signal GPS…', 'gps'); return; }
   if (!track) {
     const h = heading, dir = h == null ? '' : ['N', 'NE', 'E', 'SE', 'S', 'SO', 'O', 'NO'][Math.round(h / 45) % 8];
-    setBanner('gps', h == null ? '' : `${Math.round(h)}° ${dir}`, 'Balade libre', { rot: h == null ? 0 : -Math.round(h) }, 'La flèche montre le nord · bouton en bas à droite pour choisir une destination');
+    setBanner('gps', h == null ? '' : `${Math.round(h)}° ${dir}`, 'Balade libre', { rot: -Math.round(map.getBearing()) }, 'La flèche montre le nord · bouton en bas à droite pour choisir une destination');
     return;
   }
   if (!progress) return;
@@ -646,8 +647,9 @@ function guidance() {
     return;
   }
   if (rejoin && rejoin.straight) {
-    const b = bearing(me, rejoin.target), rel = Math.round(angDiff(heading || 0, b));
-    setBanner('rejoin', fmtDist(hav(me, rejoin.target)), 'Rejoignez la trace', { rot: rel }, `À vol d'oiseau, cap ${Math.round(b)}° · pas de réseau pour le chemin`);
+    // la flèche est dessinée par rapport à l'écran : on retire l'orientation actuelle de la carte
+    const b = bearing(me, rejoin.target), rel = Math.round(angDiff(map.getBearing(), b));
+    setBanner('rejoin', fmtDist(hav(me, rejoin.target)), 'Rejoignez la trace', { rot: rel }, `À vol d'oiseau, cap ${Math.round(b)}° · ${rejoin.why || 'pas de réseau pour le chemin'}`);
     return;
   }
   const path = rejoin || track, pr = rejoin ? rejoinProg : progress;
@@ -824,7 +826,8 @@ async function requestRejoin(manual) {
   } else {
     const c = cands[0];
     setRejoinPath([{ lat: me.lat, lon: me.lon }, c], c, true);
-    const msg = `Pas de réseau ni de chemins téléchargés ici : trace à ${fmtDist(c.dist)} à vol d'oiseau, cap ${Math.round(bearing(me, c))}°`;
+    rejoin.why = 'pas de réseau, ' + whyNoLocal(me);
+    const msg = `Ligne droite : ${rejoin.why}. Trace à ${fmtDist(c.dist)}, cap ${Math.round(bearing(me, c))}°`;
     if (nav) say(`Pas de réseau. Rejoignez la trace à ${speakDist(c.dist)}, à vol d'oiseau.`); else { toast(msg, 5000); fitTo([rejoin.pts]); }
   }
   guidance();
@@ -1735,14 +1738,21 @@ async function loadGraphs() {
 }
 function graphFor(points) {
   if (!graphs) return null;
-  const inside = (b, p) => p.lon >= b[0] - 0.005 && p.lon <= b[2] + 0.005 && p.lat >= b[1] - 0.005 && p.lat <= b[3] + 0.005;
-  return graphs.find(g => points.every(p => inside(g.bbox, p))) || null;
+  const inside = (b, p) => p.lon >= b[0] - 0.01 && p.lon <= b[2] + 0.01 && p.lat >= b[1] - 0.01 && p.lat <= b[3] + 0.01;
+  return graphs.find(g => points.every(p => inside(g.bbox, p) && nodesNear(g, p, 400).length)) || null;
+}
+// pourquoi le calcul hors connexion n'est pas possible ici (affiché dans le bandeau)
+function whyNoLocal(pos) {
+  if (!graphs || !graphs.length) return 'aucun chemin téléchargé (Réglages › Mes cartes)';
+  if (!graphs.some(g => pos.lon >= g.bbox[0] - 0.01 && pos.lon <= g.bbox[2] + 0.01 && pos.lat >= g.bbox[1] - 0.01 && pos.lat <= g.bbox[3] + 0.01))
+    return 'tu es hors de la zone des chemins téléchargés';
+  return 'trop loin des chemins téléchargés';
 }
 
 // retour à la trace hors connexion : vers le point de la trace le plus proche PAR LES CHEMINS
 function localRejoin(tr, pos) {
   const g = graphFor([pos]); if (!g) return null;
-  const startN = nodesNear(g, pos, 300)[0]; if (!startN) return null;
+  const startN = nodesNear(g, pos, 400)[0]; if (!startN) return null;
   // nœuds du réseau situés sur la trace (à moins de 25 m)
   const key = tr.id + ':' + g.id;
   if (!g.targets || g.targetsKey !== key) {
@@ -1770,7 +1780,7 @@ function localRouteTo(pos, dest) {
 // ---------- téléchargement du réseau de chemins ----------
 function corridorBoxes(p) {
   const boxes = []; let cur = null, from = 0;
-  const flush = () => { if (cur) { const m = 0.008, ml = m / Math.cos(rad((cur[1] + cur[3]) / 2)); boxes.push([cur[1] - m, cur[0] - ml, cur[3] + m, cur[2] + ml]); } };
+  const flush = () => { if (cur) { const m = 0.0135, ml = m / Math.cos(rad((cur[1] + cur[3]) / 2)); boxes.push([cur[1] - m, cur[0] - ml, cur[3] + m, cur[2] + ml]); } };
   p.pts.forEach((q, i) => {
     if (!cur) cur = [q.lon, q.lat, q.lon, q.lat];
     cur[0] = Math.min(cur[0], q.lon); cur[1] = Math.min(cur[1], q.lat); cur[2] = Math.max(cur[2], q.lon); cur[3] = Math.max(cur[3], q.lat);
