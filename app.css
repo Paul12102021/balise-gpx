@@ -220,7 +220,7 @@ body.nav .toast { top: auto; bottom: calc(var(--nav-h, 92px) + 90px); }
 .dl-box select { width: 100%; }
 .pack-acts { display: flex; align-items: center; gap: 4px; flex: none; }
 .btn.small { min-height: 36px; padding: 0 10px; font-size: 13px; }
-.check { width: 22px; height: 22px; accent-color: var(--go); }
+.check { flex: none; width: 24px; height: 24px; margin: 0; accent-color: var(--go); }
 
 /* ---------- pause ---------- */
 .pausepill {
