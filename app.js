@@ -4,7 +4,7 @@
 
 // La page et le code doivent être de la même version. Sinon (page gardée en cache
 // par le téléphone ou par GitHub), on recharge une page fraîche, au plus 3 fois.
-const APP_VERSION = 41;
+const APP_VERSION = 42;
 try {
   const meta = document.querySelector('meta[name="balise-version"]');
   const pageV = meta ? +meta.content : 0;
@@ -47,7 +47,7 @@ function offsetPoint(p, brg, dist) {
 const angDiff = (a, b) => ((b - a + 540) % 360) - 180;
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 const lc = s => s.charAt(0).toLowerCase() + s.slice(1);
-const fmtDist = m => m == null || isNaN(m) ? '–' : (m >= 1000 ? (m / 1000).toFixed(m >= 10000 ? 1 : 2).replace('.', ',') + ' km' : (m >= 100 ? Math.round(m / 10) * 10 : Math.round(m)) + ' m');
+const fmtDist = m => m == null || isNaN(m) ? '–' : (m >= 99950 ? Math.round(m / 1000) + ' km' : m >= 1000 ? (m / 1000).toFixed(m >= 10000 ? 1 : 2).replace('.', ',') + ' km' : (m >= 100 ? Math.round(m / 10) * 10 : Math.round(m)) + ' m');
 const fmtM = m => m == null || isNaN(m) ? '–' : Math.round(m) + ' m';
 const fmtDur = s => { const m = Math.round(s / 60); return m < 60 ? m + ' min' : Math.floor(m / 60) + ' h ' + String(m % 60).padStart(2, '0'); };
 const fmtClock = s => new Date(Date.now() + s * 1000).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
@@ -673,7 +673,7 @@ async function startNav(free = false) {
   navTrackId = track ? track.id : null;
   navStartT = Date.now(); freeD = 0; freeRef = null;
   if (track && done && track.total - done.along < 25) { resetDone(); setDone(0, true); } // trace déjà finie : on repart de zéro
-  document.body.classList.add('nav'); document.body.classList.toggle('free', !track); toggleMore(false);
+  document.body.classList.add('nav'); document.body.classList.toggle('free', !track); toggleMore(false, true);
   setFollow(true);
   unlockAudio(); enableCompass(); keepAwake();
   say(me ? 'C\'est parti' : 'Navigation démarrée. Recherche du signal GPS.');
@@ -686,7 +686,7 @@ async function startNav(free = false) {
   updateStats();
 }
 function stopNav() {
-  nav = false; document.body.classList.remove('nav', 'free'); toggleNavMore(false);
+  nav = false; document.body.classList.remove('nav', 'free'); toggleNavMore(false, true);
   stopSim(); clearRejoin(); isOff = false;
   try { speechSynthesis.cancel(); } catch {}
   setSrc('turn', EMPTY);
@@ -1226,6 +1226,11 @@ function remainingInfo() {
   const secs = rem / v + (track.hasEle ? (1 - w) * up / climb * 3600 : 0);
   return { rem, up, secs };
 }
+// un chiffre trop long pour sa colonne est rapetissé plutôt que de déborder sur le voisin
+function fitStat(id) {
+  const el = $(id); el.style.fontSize = '';
+  for (let fs = 21; el.scrollWidth > el.clientWidth + 1 && fs > 13; fs--) el.style.fontSize = (fs - 1) + 'px';
+}
 function updateStats() {
   const info = remainingInfo();
   $('sDist').textContent = info ? fmtDist(info.rem) : '–';
@@ -1248,6 +1253,7 @@ function updateStats() {
     $('nbDur').textContent = 'arrivée · ' + fmtDur(info.secs);
     $('nbRem').textContent = fmtDist(info.rem);
     $('nbUp').textContent = track.hasEle ? fmtM(info.up) : '–';
+    ['nbEta', 'nbRem', 'nbUp'].forEach(fitStat);
     $('nbBar').style.width = clamp(doneInfo().along / track.total, 0, 1) * 100 + '%';
     const sp = me && me.speed != null && !isNaN(me.speed) ? me.speed * 3.6 : null;
     $('spVal').textContent = sp == null ? '–' : (sp < 10 ? sp.toFixed(1).replace('.', ',') : Math.round(sp));
@@ -1307,11 +1313,18 @@ window.addEventListener('resize', drawProfile);
 
 // ---------- progression détaillée en navigation (glisser la barre du bas vers le haut) ----------
 let navMoreT = 0;
-function toggleNavMore(open) {
-  const m = $('navMore'), was = !m.hidden;
-  m.hidden = open === undefined ? was : !open;
-  if (!m.hidden && !was) { navMoreT = 0; updateNavMore(); }
-  if (nav && follow && was !== !m.hidden) setTimeout(() => navCamera(400), 50);
+function applyNavMore(open) {
+  $('navMore').hidden = !open;
+  if (open) { navMoreT = 0; updateNavMore(); }
+}
+function navMotion() {
+  return navMotion.m || (navMotion.m = sheetMotion($('navBottom'), $('navMore'), applyNavMore,
+    h => { if (h) document.documentElement.style.setProperty('--nav-h', h + 'px'); },
+    () => { if (nav && follow) navCamera(400); }));
+}
+function toggleNavMore(open, instant) {
+  const want = open === undefined ? $('navMore').hidden : !!open;
+  want ? navMotion().open(instant) : navMotion().close(instant);
 }
 function updateNavMore() {
   if ($('navMore').hidden || !track) return;
@@ -1339,11 +1352,7 @@ function updateNavMore() {
 }
 $('nbGrip').onclick = () => toggleNavMore();
 (() => {
-  const bar = $('navBottom');
-  attachSwipe(bar, () => !$('navMore').hidden, open => toggleNavMore(open));
-  try {
-    new ResizeObserver(() => { if (bar.offsetHeight) document.documentElement.style.setProperty('--nav-h', bar.offsetHeight + 'px'); }).observe(bar);
-  } catch {}
+  attachSwipe($('navBottom'), navMotion());
 })();
 setInterval(() => { if (nav) updateNavMore(); }, 15000); // le temps écoulé avance même à l'arrêt
 
@@ -2378,59 +2387,110 @@ $('btnDemo').onclick = () => {
   loadText(`<gpx><trk><name>Exemple · boucle du Semnoz</name><trkseg>${pts.join('')}</trkseg></trk></gpx>`);
 };
 
-function toggleMore(open) {
-  const m = $('more'); m.hidden = open === undefined ? !m.hidden : !open;
-  $('sheet').scrollTop = 0;
-  document.body.classList.toggle('sheet-open', !m.hidden);
-  $('btnMore').textContent = m.hidden ? 'Réglages' : 'Réduire';
+function applyMore(open) {
+  $('more').hidden = !open;
+  if (!open) $('sheet').scrollTop = 0;
+  document.body.classList.toggle('sheet-open', open);
+  $('btnMore').textContent = open ? 'Réduire' : 'Réglages';
+}
+function moreMotion() {
+  return moreMotion.m || (moreMotion.m = sheetMotion($('sheet'), $('more'), applyMore,
+    h => document.documentElement.style.setProperty('--sheet-h', h + 'px')));
+}
+function toggleMore(open, instant) {
+  const want = open === undefined ? $('more').hidden : !!open;
+  want ? moreMotion().open(instant) : moreMotion().close(instant);
 }
 $('btnMore').onclick = () => toggleMore(); $('grip').onclick = () => toggleMore();
+
+// Ouvrir / réduire un panneau du bas en douceur : le panneau glisse (il suit le doigt pendant le geste),
+// puis le contenu est ajouté ou retiré une fois le mouvement fini.
+function sheetMotion(panel, content, apply, report, after) {
+  let y = 0, raf = 0;
+  const vis = () => Math.max(0, panel.offsetHeight - Math.max(0, y));
+  const setY = v => { y = v; panel.style.transform = v ? `translateY(${v}px)` : ''; report(vis()); };
+  // écart de hauteur entre ouvert et réduit (contenu affiché au moment de la mesure)
+  const gap = () => { const hOpen = panel.offsetHeight; content.hidden = true; const hClosed = panel.offsetHeight; content.hidden = false; return Math.max(0, hOpen - hClosed); };
+  const ease = t => 1 - Math.pow(1 - t, 3);
+  function animate(to, done) {
+    cancelAnimationFrame(raf);
+    const from = y, t0 = performance.now(), dur = clamp(Math.abs(to - from) * 0.9, 160, 320);
+    const step = now => {
+      const t = Math.min(1, (now - t0) / dur);
+      setY(from + (to - from) * ease(t));
+      if (t < 1) raf = requestAnimationFrame(step); else { raf = 0; done && done(); after && after(); }
+    };
+    raf = requestAnimationFrame(step);
+  }
+  const m = {
+    isOpen: () => !content.hidden,
+    open(instant) {
+      if (content.hidden) { apply(true); if (instant) { setY(0); after && after(); return; } setY(gap()); }
+      animate(0);
+    },
+    close(instant) {
+      if (content.hidden) { if (y) animate(0); return; }
+      if (instant) { cancelAnimationFrame(raf); setY(0); apply(false); report(vis()); after && after(); return; }
+      animate(gap(), () => { setY(0); apply(false); report(vis()); });
+    },
+    // pendant le geste : base = position de départ, G = course totale
+    drag: { start() { cancelAnimationFrame(raf); const was = !content.hidden; if (!was) apply(true); const G = gap(); const base = was ? y : G; setY(base); return { was, G, base }; },
+            move(st, dy) { let v = st.base + dy; if (v < 0) v *= 0.3; else if (v > st.G) v = st.G + (v - st.G) * 0.3; setY(v); },
+            end(st, dy, vy) {
+              const goOpen = st.was ? !(dy > 50 || vy > 0.5) : (dy < -40 || vy < -0.5);
+              goOpen ? animate(0) : animate(st.G, () => { setY(0); apply(false); report(vis()); });
+            } }
+  };
+  try { new ResizeObserver(() => report(vis())).observe(panel); } catch {}
+  return m;
+}
 
 // Glisser un panneau du bas : vers le haut il s'ouvre, vers le bas il se réduit.
 // Le geste part de n'importe où, boutons compris : un toucher reste un clic,
 // un mouvement vertical devient un glissement (et le clic est alors annulé).
-function attachSwipe(panel, isOpen, setOpen) {
-  let x0 = null, y0 = 0, dx = 0, dy = 0, startScroll = 0, decided = false, swiping = false;
+function attachSwipe(panel, motion) {
+  let x0 = null, y0 = 0, dy = 0, decided = false, swiping = false, st = null, lastY = 0, lastT = 0, vy = 0;
   const scrollable = () => panel.scrollHeight > panel.clientHeight + 2;
   panel.addEventListener('touchstart', e => {
     if (e.touches.length > 1 || e.target.closest('select, textarea, input[type=search], input[type=text]')) { x0 = null; return; }
-    x0 = e.touches[0].clientX; y0 = e.touches[0].clientY; dx = dy = 0;
-    startScroll = panel.scrollTop; decided = swiping = false;
+    x0 = e.touches[0].clientX; y0 = lastY = e.touches[0].clientY; lastT = performance.now(); dy = vy = 0;
+    decided = swiping = false;
   }, { passive: true });
   panel.addEventListener('touchmove', e => {
     if (x0 == null) return;
-    dx = e.touches[0].clientX - x0; dy = e.touches[0].clientY - y0;
+    const cx = e.touches[0].clientX, cy = e.touches[0].clientY, dx = cx - x0;
+    dy = cy - y0;
+    const now = performance.now(); if (now > lastT) { vy = vy * 0.6 + (cy - lastY) / (now - lastT) * 0.4; lastY = cy; lastT = now; }
     if (!decided && (Math.abs(dx) > 8 || Math.abs(dy) > 8)) {
       decided = true;
       swiping = Math.abs(dy) > Math.abs(dx) * 1.2;
-      // contenu qui défile : on le laisse défiler, sauf tirer vers le bas depuis tout en haut
-      if (swiping && isOpen() && scrollable() && dy < 0) swiping = false;
+      // contenu qui défile : on le laisse défiler vers le bas de la liste
+      if (swiping && motion.isOpen() && scrollable() && dy < 0) swiping = false;
+      if (swiping) { st = motion.drag.start(); y0 = cy; dy = 0; }
     }
     if (!swiping) return;
     if (e.cancelable) e.preventDefault();
-    panel.style.transition = 'none';
-    panel.style.transform = `translateY(${dy > 0 ? dy * 0.6 : dy * 0.25}px)`;
+    motion.drag.move(st, dy);
   }, { passive: false });
   const end = () => {
     if (x0 == null) return;
     x0 = null;
     if (!swiping) return;
-    panel.style.transition = 'transform .2s ease-out'; panel.style.transform = '';
-    if (!isOpen() && dy < -30) setOpen(true);
-    else if (isOpen() && dy > 40) setOpen(false);
+    swiping = false;
+    if (performance.now() - lastT > 120) vy = 0; // doigt immobile avant de lâcher
+    motion.drag.end(st, dy, vy);
     // le doigt s'est levé sur un bouton : ce n'était pas un clic
     const block = ev => { ev.stopPropagation(); ev.preventDefault(); };
     panel.addEventListener('click', block, true);
     setTimeout(() => panel.removeEventListener('click', block, true), 400);
-    swiping = false;
   };
   panel.addEventListener('touchend', end); panel.addEventListener('touchcancel', end);
 }
-attachSwipe($('sheet'), () => !$('more').hidden, open => toggleMore(open));
+attachSwipe($('sheet'), moreMotion());
 
 // les boutons ronds se placent juste au-dessus du panneau du bas, quelle que soit sa hauteur
 try {
-  new ResizeObserver(() => document.documentElement.style.setProperty('--sheet-h', $('sheet').offsetHeight + 'px')).observe($('sheet'));
+  document.documentElement.style.setProperty('--sheet-h', $('sheet').offsetHeight + 'px');
 } catch { /* navigateur ancien : position par défaut */ }
 
 const saved = store.get('gpx');
