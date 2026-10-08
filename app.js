@@ -4,7 +4,7 @@
 
 // La page et le code doivent être de la même version. Sinon (page gardée en cache
 // par le téléphone ou par GitHub), on recharge une page fraîche, au plus 3 fois.
-const APP_VERSION = 32;
+const APP_VERSION = 33;
 try {
   const meta = document.querySelector('meta[name="balise-version"]');
   const pageV = meta ? +meta.content : 0;
@@ -1160,7 +1160,7 @@ function updateStats() {
 const cv = $('profile');
 let profT = 0;
 function drawProfileSoon() { if (Date.now() - profT > 2000 && !nav) { profT = Date.now(); drawProfile(); } }
-function drawProfile() { document.body.classList.toggle('no-track', !track); drawProfileOn(cv); }
+function drawProfile() { drawProfileOn(cv); }
 function drawProfileOn(cv) {
   const dpr = window.devicePixelRatio || 1, W = cv.clientWidth, H = cv.clientHeight;
   if (!W) return;
@@ -2268,6 +2268,7 @@ $('btnDemo').onclick = () => {
 
 function toggleMore(open) {
   const m = $('more'); m.hidden = open === undefined ? !m.hidden : !open;
+  $('sheet').scrollTop = 0;
   document.body.classList.toggle('sheet-open', !m.hidden);
   $('btnMore').textContent = m.hidden ? 'Réglages' : 'Réduire';
 }
@@ -2291,7 +2292,7 @@ function attachSwipe(panel, isOpen, setOpen) {
       decided = true;
       swiping = Math.abs(dy) > Math.abs(dx) * 1.2;
       // contenu qui défile : on le laisse défiler, sauf tirer vers le bas depuis tout en haut
-      if (swiping && isOpen() && scrollable() && (dy < 0 || startScroll > 0)) swiping = false;
+      if (swiping && isOpen() && scrollable() && dy < 0) swiping = false;
     }
     if (!swiping) return;
     if (e.cancelable) e.preventDefault();

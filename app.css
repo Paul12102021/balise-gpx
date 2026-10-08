@@ -84,10 +84,7 @@ body { font: 15px/1.35 var(--font); color: var(--ink); background: var(--paper);
 @keyframes blink { 50% { opacity: 0; } }
 button:focus-visible, .btn:focus-visible, select:focus-visible { outline: 3px solid var(--me); outline-offset: 2px; }
 
-.more { display: flex; flex-direction: column; gap: 6px; margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--line); }
-.more .row { min-height: 40px; }
-.more select { min-height: 36px; }
-.more .btn { min-height: 40px; }
+.more { display: flex; flex-direction: column; gap: 10px; margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--line); }
 .row { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
 .row > span, .row > label { min-width: 0; }
 .row small { color: var(--muted); }
@@ -307,6 +304,5 @@ body.zone .hud, body.zone .sheet, body.zone .fab-col { display: none !important;
 
 .linkbtn { background: none; border: 0; padding: 0; color: var(--muted); font: inherit; text-decoration: underline; cursor: pointer; }
 
-/* panneau compact : sans trace, pas de profil vide ; réglages ouverts, le profil laisse la place */
-body.no-track #profile, body.sheet-open #profile { display: none; }
-body.no-track .trackrow { min-height: 24px; }
+/* réglages ouverts : le panneau monte presque tout en haut pour tout montrer d'un coup */
+body.sheet-open .sheet { max-height: calc(100% - env(safe-area-inset-top, 0px) - 12px); }
