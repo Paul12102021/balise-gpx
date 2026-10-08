@@ -57,7 +57,7 @@ body { font: 15px/1.35 var(--font); color: var(--ink); background: var(--paper);
   background: var(--panel); border-top: 1px solid var(--line);
   border-radius: 16px 16px 0 0; box-shadow: 0 -6px 24px rgba(0,0,0,.15);
   padding: 4px 16px calc(env(safe-area-inset-bottom, 0px) + 12px);
-  max-height: 78vh; overflow-y: auto;
+  max-height: 88vh; overflow-y: auto; overscroll-behavior: contain;
 }
 .grip { position: relative; height: 22px; margin: 0 -16px; cursor: pointer; touch-action: none; }
 .grip::before { content: ""; position: absolute; left: 50%; top: 8px; width: 44px; height: 5px; margin-left: -22px; border-radius: 3px; background: var(--muted); opacity: .5; }
@@ -84,7 +84,10 @@ body { font: 15px/1.35 var(--font); color: var(--ink); background: var(--paper);
 @keyframes blink { 50% { opacity: 0; } }
 button:focus-visible, .btn:focus-visible, select:focus-visible { outline: 3px solid var(--me); outline-offset: 2px; }
 
-.more { display: flex; flex-direction: column; gap: 10px; margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--line); }
+.more { display: flex; flex-direction: column; gap: 6px; margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--line); }
+.more .row { min-height: 40px; }
+.more select { min-height: 36px; }
+.more .btn { min-height: 40px; }
 .row { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
 .row > span, .row > label { min-width: 0; }
 .row small { color: var(--muted); }
@@ -303,3 +306,7 @@ body.zone .zone-frame {
 body.zone .hud, body.zone .sheet, body.zone .fab-col { display: none !important; }
 
 .linkbtn { background: none; border: 0; padding: 0; color: var(--muted); font: inherit; text-decoration: underline; cursor: pointer; }
+
+/* panneau compact : sans trace, pas de profil vide ; réglages ouverts, le profil laisse la place */
+body.no-track #profile, body.sheet-open #profile { display: none; }
+body.no-track .trackrow { min-height: 24px; }

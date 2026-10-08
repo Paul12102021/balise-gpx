@@ -4,7 +4,7 @@
 
 // La page et le code doivent être de la même version. Sinon (page gardée en cache
 // par le téléphone ou par GitHub), on recharge une page fraîche, au plus 3 fois.
-const APP_VERSION = 30;
+const APP_VERSION = 31;
 try {
   const meta = document.querySelector('meta[name="balise-version"]');
   const pageV = meta ? +meta.content : 0;
@@ -1160,7 +1160,7 @@ function updateStats() {
 const cv = $('profile');
 let profT = 0;
 function drawProfileSoon() { if (Date.now() - profT > 2000 && !nav) { profT = Date.now(); drawProfile(); } }
-function drawProfile() { drawProfileOn(cv); }
+function drawProfile() { document.body.classList.toggle('no-track', !track); drawProfileOn(cv); }
 function drawProfileOn(cv) {
   const dpr = window.devicePixelRatio || 1, W = cv.clientWidth, H = cv.clientHeight;
   if (!W) return;
@@ -2286,7 +2286,7 @@ $('btnDemo').onclick = () => {
 function toggleMore(open) {
   const m = $('more'); m.hidden = open === undefined ? !m.hidden : !open;
   document.body.classList.toggle('sheet-open', !m.hidden);
-  $('btnMore').textContent = m.hidden ? 'Réglages' : 'Fermer';
+  $('btnMore').textContent = m.hidden ? 'Réglages' : 'Réduire';
 }
 $('btnMore').onclick = () => toggleMore(); $('grip').onclick = () => toggleMore();
 
