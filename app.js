@@ -4,7 +4,7 @@
 
 // La page et le code doivent être de la même version. Sinon (page gardée en cache
 // par le téléphone ou par GitHub), on recharge une page fraîche, au plus 3 fois.
-const APP_VERSION = 40;
+const APP_VERSION = 41;
 try {
   const meta = document.querySelector('meta[name="balise-version"]');
   const pageV = meta ? +meta.content : 0;
@@ -174,7 +174,7 @@ function onTrackTol(pos) { return clamp(threshold || 50, 40, 100) + Math.min(pos
 function updateDone(pos) {
   if (!track || !progress) return;
   const tol = onTrackTol(pos);
-  if (progress.dist > tol) return;
+  if (progress.dist > tol || !rightPart()) return; // croiser la trace en allant au point visé ne compte pas
   if (!done) {
     // premier passage sur la trace : sur une boucle (départ = arrivée), on part du début
     const P = track.pts;
@@ -196,13 +196,13 @@ function updateDone(pos) {
   done.miss = 0; done.along = progress.along; done.pos = pos;
   if (save) saveDone();
 }
-function doneInfo() {
-  if (!track) return null;
-  const a = clamp(done ? done.along : 0, 0, track.total), n = track.cum.length;
+function doneInfo() { return track ? Object.assign(infoAt(done ? done.along : 0), { started: !!done }) : null; }
+function infoAt(along) {
+  const a = clamp(along, 0, track.total), n = track.cum.length;
   const i = Math.min(pointAt(track, a).i, n - 2), C = track.cum, U = track.up;
   const seg = C[i + 1] - C[i], f = seg > 0 ? clamp((a - C[i]) / seg, 0, 1) : 0;
   const upDone = U[i] + f * (U[i + 1] - U[i]), downDone = track.down[i] + f * (track.down[i + 1] - track.down[i]);
-  return { started: !!done, along: a, idx: f > 0.5 ? i + 1 : i, remain: track.total - a, upLeft: track.totalUp - upDone, downLeft: track.totalDown - downDone };
+  return { along: a, idx: f > 0.5 ? i + 1 : i, remain: track.total - a, upLeft: track.totalUp - upDone, downLeft: track.totalDown - downDone };
 }
 
 // =====================================================================
@@ -632,14 +632,14 @@ function onPos(pos) {
   }
   if (nav) {
     offTrackLogic();
-    if (rejoin && progress && progress.dist < Math.min(thrRef() * 0.7, 30) && !isOff) clearRejoin();
+    if (rejoin && progress && progress.dist < Math.min(thrRef() * 0.7, 30) && !isOff && rightPart()) clearRejoin();
     if (!rejoin && progress && done && progress.remain < 25 && track.total - done.along < 25 && !arrived) {
       arrived = true; say('Vous êtes arrivé'); vibrate([200, 100, 200]);
     }
     guidance();
     if (follow) navCamera(1000);
   } else {
-    if (rejoin && progress && progress.dist < Math.min(thrRef() * 0.7, 30)) { clearRejoin(); toast('Tu es sur la trace'); }
+    if (rejoin && progress && progress.dist < Math.min(thrRef() * 0.7, 30) && rightPart()) { clearRejoin(); toast('Tu es sur la trace'); }
     if (followOv) map.easeTo({ center: [pos.lon, pos.lat], duration: 800 });
   }
   if (track) setDone(doneInfo().along / track.total);
@@ -921,7 +921,7 @@ function offTrackLogic() {
     isOff = true;
     if (threshold) { alertOff(); say('Vous avez quitté la trace. Calcul d\'un itinéraire de retour.'); }
     requestRejoin(false);
-  } else if (isOff && progress.dist < thr * 0.7) {
+  } else if (isOff && progress.dist < thr * 0.7 && rightPart()) {
     isOff = false; offCount = 0; clearRejoin();
     vibrate(150); say('Vous avez rejoint la trace'); toast('De retour sur la trace');
   } else if (isOff) {
@@ -937,19 +937,29 @@ function offTrackLogic() {
 
 // Candidats : les points de la trace les plus proches à vol d'oiseau (minima locaux),
 // puis on garde celui qui est le plus court à rejoindre par les chemins.
+// Où rejoindre la trace : devant ce qui a déjà été parcouru (jamais en arrière), en évitant de
+// sauter une grosse partie du parcours — chaque mètre de trace sauté compte pour un demi-mètre de détour.
+// Si la trace n'est pas commencée, on vise son début (sauter du parcours y coûte bien plus cher).
+const skipW = () => done ? 0.5 : 2;
+// croiser la trace sur une partie qu'on n'a pas à faire (avant le point visé) ne compte pas comme un retour
+function rightPart() {
+  if (!rejoin || !rejoin.target || rejoin.target.along == null || !progress) return true;
+  return progress.along >= rejoinFrom(track) - 100 && progress.along <= rejoin.target.along + 300;
+}
+function rejoinFrom(p) { return p === track && done ? Math.max(0, done.along - 50) : 0; }
 function rejoinCandidates(p, pos) {
-  const step = clamp(p.total / 2000, 25, 100), samples = [];
-  for (let d = 0; d <= p.total; d += step) { const q = pointAt(p, d); samples.push({ lat: q.lat, lon: q.lon, along: d, dist: hav(pos, q) }); }
-  const minima = samples.filter((s, i) => (i === 0 || s.dist <= samples[i - 1].dist) && (i === samples.length - 1 || s.dist <= samples[i + 1].dist))
-    .sort((a, b) => a.dist - b.dist);
+  const from = rejoinFrom(p), step = clamp((p.total - from) / 2000, 25, 100), samples = [];
+  for (let d = from; d <= p.total; d += step) { const q = pointAt(p, d); const dist = hav(pos, q); samples.push({ lat: q.lat, lon: q.lon, along: d, dist, score: dist + skipW() * (d - from) }); }
+  const minima = samples.filter((s, i) => (i === 0 || s.score <= samples[i - 1].score) && (i === samples.length - 1 || s.score <= samples[i + 1].score))
+    .sort((a, b) => a.score - b.score);
   const picked = [];
   for (const m of minima) {
-    if (m.dist > minima[0].dist * 2.5 + 300) break;
+    if (m.score > minima[0].score * 1.5 + 300) break;
     if (picked.every(x => Math.abs(x.along - m.along) > 300)) picked.push(m);
     if (picked.length === 3) break;
   }
   const pr = project(p, pos, true);
-  if (pr && Math.abs(pr.along - picked[0].along) < step * 2) { const q = pointAt(p, pr.along); picked[0] = { lat: q.lat, lon: q.lon, along: pr.along, dist: pr.dist }; }
+  if (pr && pr.along >= from && Math.abs(pr.along - picked[0].along) < step * 2) { const q = pointAt(p, pr.along); picked[0] = { lat: q.lat, lon: q.lon, along: pr.along, dist: pr.dist, score: pr.dist + skipW() * (pr.along - from) }; }
   return picked;
 }
 async function fetchRoute(a, b, ms = 12000) {
@@ -975,12 +985,13 @@ async function requestRejoin(manual) {
     const res = await Promise.allSettled(cands.map(c => fetchRoute(me, c)));
     res.forEach((r, k) => {
       if (r.status !== 'fulfilled') return;
-      const len = r.value.len || makePath(r.value.pts, '').total;
-      if (!best || len < best.len) best = { pts: r.value.pts, len, target: cands[k] };
+      const len = r.value.len || makePath(r.value.pts, '').total, from = rejoinFrom(track);
+      const score = len + skipW() * (cands[k].along - from);
+      if (!best || score < best.score) best = { pts: r.value.pts, len, score, target: cands[k] };
     });
   }
   // pas de réseau (ou serveur muet) : calcul sur le téléphone avec les chemins téléchargés
-  if (!best) { await loadGraphs(); const loc = localRejoin(track, me); if (loc) best = Object.assign(loc, { local: true }); }
+  if (!best) { await loadGraphs(); const loc = localRejoin(track, me, cands); if (loc) best = Object.assign(loc, { local: true }); }
   routing = false; $('btnRejoin').classList.remove('busy');
   if (best) {
     // on termine l'itinéraire exactement sur la trace
@@ -1201,8 +1212,9 @@ function remainingInfo() {
   const di = doneInfo();
   let rem = di.remain, up = di.upLeft;
   if (progress && rejoin && rejoinProg) {
-    const pt = project(track, rejoin.target, true);
-    rem = rejoinProg.remain + (pt ? pt.remain : 0); up = pt ? pt.upLeft : up;
+    const pt = rejoin.target.along != null ? infoAt(rejoin.target.along) : project(track, rejoin.target, true);
+    rem = rejoinProg.remain + (pt ? pt.remain : 0);
+    up = (pt ? pt.upLeft : up) + (rejoin.hasEle ? rejoinProg.upLeft : 0);
   }
   // temps : allure de base selon le mode (à pied 4,5 km/h + 1 h par 600 m de D+,
   // à vélo 16 km/h + 1 h par 800 m de D+), puis de plus en plus ta vitesse réelle
@@ -2119,19 +2131,24 @@ function whyNoLocal(pos) {
 }
 
 // retour à la trace hors connexion : vers le point de la trace le plus proche PAR LES CHEMINS
-function localRejoin(tr, pos) {
+function localRejoin(tr, pos, cands) {
   const g = graphFor([pos]); if (!g) return null;
   const startN = nodesNear(g, pos, 400)[0]; if (!startN) return null;
-  // nœuds du réseau situés sur la trace (à moins de 25 m)
-  const key = tr.id + ':' + g.id;
+  // nœuds du réseau situés sur la trace (à moins de 25 m), seulement dans la partie devant soi
+  const from = rejoinFrom(tr), to = Math.min(tr.total, Math.max(from + 1000, ...(cands || []).map(c => c.along + 1000)));
+  const key = tr.id + ':' + g.id + ':' + Math.round(from / 100) + ':' + Math.round(to / 100);
   if (!g.targets || g.targetsKey !== key) {
     const mask = new Uint8Array(g.n);
-    for (let d = 0; d <= tr.total; d += 10) for (const [i] of nodesNear(g, pointAt(tr, d), 25)) mask[i] = 1;
+    for (let d = from; d <= to; d += 10) for (const [i] of nodesNear(g, pointAt(tr, d), 25)) mask[i] = 1;
     g.targets = mask; g.targetsKey = key;
   }
   const r = shortestPath(g, startN[0], i => g.targets[i] === 1, profile === 'trekking');
   if (!r) return null;
-  const last = nodePt(g, r.nodes[r.nodes.length - 1]), pr = project(tr, last, true), tp = pointAt(tr, pr.along);
+  const last = nodePt(g, r.nodes[r.nodes.length - 1]);
+  // point de la trace le plus proche de l'arrivée, dans la fenêtre [from, to]
+  let pr = { along: from, d: Infinity };
+  for (let d = from; d <= to; d += 5) { const q = pointAt(tr, d), dd = hav(q, last); if (dd < pr.d) pr = { along: d, d: dd }; }
+  const tp = pointAt(tr, pr.along);
   const pts = [{ lat: pos.lat, lon: pos.lon, ele: null }, ...r.nodes.map(i => nodePt(g, i)), { lat: tp.lat, lon: tp.lon, ele: null }];
   return { pts, len: pathLength(pts), target: { lat: tp.lat, lon: tp.lon, along: pr.along, dist: hav(pos, tp) } };
 }
