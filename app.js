@@ -4,7 +4,7 @@
 
 // La page et le code doivent être de la même version. Sinon (page gardée en cache
 // par le téléphone ou par GitHub), on recharge une page fraîche, au plus 3 fois.
-const APP_VERSION = 39;
+const APP_VERSION = 40;
 try {
   const meta = document.querySelector('meta[name="balise-version"]');
   const pageV = meta ? +meta.content : 0;
@@ -888,6 +888,23 @@ function setProfile(p, quiet) {
   updateStats();
 }
 $('prof').onchange = e => setProfile(e.target.value);
+// ---------- taille du bandeau d'indications en navigation ----------
+const BANNER_LBL = { normal: 'Indications : grandes', compact: 'Indications : réduites', hidden: 'Indications : masquées' };
+function setBannerSize(v, quiet) {
+  if (!BANNER_LBL[v]) v = 'normal';
+  store.set('banner', v); document.body.dataset.banner = v;
+  $('optBanner').value = v; $('npBanner').textContent = BANNER_LBL[v];
+  if (!quiet && v === 'hidden') toast('Indications masquées · elles reviennent hors trace', 3500);
+  if (nav && follow) setTimeout(() => navCamera(400), 50);
+}
+$('optBanner').onchange = e => setBannerSize(e.target.value);
+$('npBanner').onclick = () => setBannerSize({ normal: 'compact', compact: 'hidden', hidden: 'normal' }[store.get('banner') || 'normal']);
+$('navTop').onclick = () => { if (nav) setBannerSize((store.get('banner') || 'normal') === 'normal' ? 'compact' : 'normal'); };
+setBannerSize(store.get('banner') || 'normal', true);
+try {
+  new ResizeObserver(() => { const h = $('navTop').offsetHeight; document.documentElement.style.setProperty('--nt-h', h ? h + 'px' : 'env(safe-area-inset-top, 0px)'); }).observe($('navTop'));
+} catch {}
+
 $('npMode').onclick = () => setProfile(profile === 'trekking' ? 'hiking-mountain' : 'trekking');
 setTimeout(() => setProfile(profile, true), 0);
 

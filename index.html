@@ -8,13 +8,13 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<meta name="balise-version" content="39">
+<meta name="balise-version" content="40">
 <title>Pisteo</title>
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" href="icon.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
 <link rel="stylesheet" href="vendor/maplibre-gl.css">
-<link rel="stylesheet" href="app.css?v=39">
+<link rel="stylesheet" href="app.css?v=40">
 </head>
 <body>
 <div id="map" aria-label="Carte"></div>
@@ -92,6 +92,7 @@
       <button id="npVoice" class="chip"></button>
       <button id="npVib" class="chip"></button>
       <button id="npMode" class="chip"></button>
+      <button id="npBanner" class="chip"></button>
     </div>
     <div id="npBack" class="np-back" hidden>
       <svg viewBox="0 0 24 24"><path d="M9 14 4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11"/></svg>
@@ -157,6 +158,10 @@
     <div class="row">
       <label for="autoRec">Enregistrer la sortie dès que la navigation démarre</label>
       <input type="checkbox" id="autoRec" class="check">
+    </div>
+    <div class="row">
+      <label for="optBanner">Indications en navigation<br><small>Toucher le bandeau le réduit ou l'agrandit</small></label>
+      <select id="optBanner"><option value="normal">Grandes</option><option value="compact">Réduites</option><option value="hidden">Masquées</option></select>
     </div>
     <div class="row">
       <label for="optTheme">Thème</label>
@@ -286,6 +291,6 @@
 <div id="toast" class="toast" hidden></div>
 
 <script src="vendor/maplibre-gl.js"></script>
-<script src="app.js?v=39"></script>
+<script src="app.js?v=40"></script>
 </body>
 </html>
