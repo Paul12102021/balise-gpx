@@ -4,7 +4,7 @@
 
 // La page et le code doivent être de la même version. Sinon (page gardée en cache
 // par le téléphone ou par GitHub), on recharge une page fraîche, au plus 3 fois.
-const APP_VERSION = 34;
+const APP_VERSION = 35;
 try {
   const meta = document.querySelector('meta[name="balise-version"]');
   const pageV = meta ? +meta.content : 0;
@@ -737,6 +737,7 @@ function guidance() {
 let voiceOn = store.get('voice') !== '0', vibOn = store.get('vib') !== '0';
 function syncAlertUI() {
   $('btnVoice').classList.toggle('muted', !voiceOn);
+  $('btnVibFab').classList.toggle('muted', !vibOn);
   $('optVoice').checked = voiceOn; $('optVib').checked = vibOn;
   $('npVoice').classList.toggle('off', !voiceOn); $('npVoice').textContent = voiceOn ? 'Son activé' : 'Son coupé';
   $('npVib').classList.toggle('off', !vibOn); $('npVib').textContent = vibOn ? 'Vibrations activées' : 'Vibrations coupées';
@@ -750,6 +751,7 @@ function setVib(on) {
   if (on) vibrate(120); toast(on ? 'Vibrations activées' : 'Vibrations coupées');
 }
 $('btnVoice').onclick = () => setVoice(!voiceOn);
+$('btnVibFab').onclick = () => setVib(!vibOn);
 $('optVoice').onchange = e => setVoice(e.target.checked);
 $('optVib').onchange = e => setVib(e.target.checked);
 $('npVoice').onclick = () => setVoice(!voiceOn);

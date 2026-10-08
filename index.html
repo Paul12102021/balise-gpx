@@ -7,13 +7,13 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<meta name="balise-version" content="34">
+<meta name="balise-version" content="35">
 <title>Pisteo</title>
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" href="icon.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="icon-192.png">
 <link rel="stylesheet" href="vendor/maplibre-gl.css">
-<link rel="stylesheet" href="app.css?v=34">
+<link rel="stylesheet" href="app.css?v=35">
 </head>
 <body>
 <div id="map" aria-label="Carte"></div>
@@ -42,6 +42,9 @@
   </button>
   <button id="btnVoice" class="fab nav-only" title="Guidage vocal" aria-label="Activer ou couper le guidage vocal">
     <svg viewBox="0 0 24 24"><path d="M4 9v6h4l5 4V5L8 9H4Z"/><path class="wave" d="M16.5 8.5a5 5 0 0 1 0 7M19 6a8.5 8.5 0 0 1 0 12"/><path class="cross" d="m16 9 6 6m0-6-6 6"/></svg>
+  </button>
+  <button id="btnVibFab" class="fab nav-only" title="Vibrations" aria-label="Activer ou couper les vibrations">
+    <svg viewBox="0 0 24 24"><rect x="8" y="4" width="8" height="16" rx="1.6"/><path class="wave" d="M4.5 9v6M19.5 9v6M2 11v2M22 11v2"/><path class="cross" d="M3 3l18 18"/></svg>
   </button>
   <button id="btnRecFab" class="fab nav-only" title="Enregistrer ma trace" aria-label="Enregistrer ma trace">
     <span class="dot"></span>
@@ -273,6 +276,6 @@
 <div id="toast" class="toast" hidden></div>
 
 <script src="vendor/maplibre-gl.js"></script>
-<script src="app.js?v=34"></script>
+<script src="app.js?v=35"></script>
 </body>
 </html>

@@ -108,9 +108,9 @@ body.nav .fab-col { bottom: calc(var(--nav-h, 92px) + 12px); top: auto; }
 .fab.on { background: var(--me); color: #fff; border-color: var(--me); }
 .fab .dot { width: 16px; height: 16px; }
 .fab.recording { background: var(--rec); border-color: var(--rec); }
-#btnVoice .cross { display: none; }
-#btnVoice.muted .cross { display: inline; }
-#btnVoice.muted .wave { display: none; }
+#btnVoice .cross, #btnVibFab .cross { display: none; }
+#btnVoice.muted .cross, #btnVibFab.muted .cross { display: inline; }
+#btnVoice.muted .wave, #btnVibFab.muted .wave { display: none; }
 #btnRejoin.on { background: var(--me); color: #fff; border-color: var(--me); }
 #btnRejoin.busy svg { animation: spin 1s linear infinite; }
 @keyframes spin { to { transform: rotate(360deg); } }
