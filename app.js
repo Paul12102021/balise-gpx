@@ -4,7 +4,7 @@
 
 // La page et le code doivent être de la même version. Sinon (page gardée en cache
 // par le téléphone ou par GitHub), on recharge une page fraîche, au plus 3 fois.
-const APP_VERSION = 27;
+const APP_VERSION = 28;
 try {
   const meta = document.querySelector('meta[name="balise-version"]');
   const pageV = meta ? +meta.content : 0;
@@ -757,19 +757,11 @@ $('npVib').onclick = () => setVib(!vibOn);
 setTimeout(syncAlertUI, 0);
 // ---------- voix du guidage : celles installées sur le téléphone ----------
 // voix : celle du téléphone par défaut, en français (le choix de voix pourra revenir si besoin)
-let voiceRate = +(store.get('voiceRate') || 1.05);
+const voiceRate = 1.05;
 const frVoices = () => { try { return speechSynthesis.getVoices().filter(v => /^fr/i.test(v.lang)); } catch { return []; } };
 function pickVoice() {
   const vs = frVoices();
   return vs.find(v => /fr[-_]FR/i.test(v.lang) && v.localService) || vs.find(v => /fr[-_]FR/i.test(v.lang)) || vs[0] || null;
-}
-$('optRate').value = String(voiceRate);
-$('optRate').onchange = e => { voiceRate = +e.target.value; store.set('voiceRate', voiceRate); sayTest(); };
-$('btnVoiceTest').onclick = () => sayTest();
-function sayTest() {
-  const was = voiceOn; voiceOn = true;
-  say('Dans 200 mètres, tournez à gauche.');
-  voiceOn = was;
 }
 function say(text) {
   if (!voiceOn || !('speechSynthesis' in window)) return;
