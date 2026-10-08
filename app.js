@@ -4,7 +4,7 @@
 
 // La page et le code doivent être de la même version. Sinon (page gardée en cache
 // par le téléphone ou par GitHub), on recharge une page fraîche, au plus 3 fois.
-const APP_VERSION = 22;
+const APP_VERSION = 23;
 try {
   const meta = document.querySelector('meta[name="balise-version"]');
   const pageV = meta ? +meta.content : 0;
@@ -327,13 +327,14 @@ function openDB() {
   return dbP || (dbP = new Promise((res, rej) => {
     // un autre onglet de l'appli (ancienne version) peut bloquer l'ouverture : on n'attend pas indéfiniment
     const timer = setTimeout(() => { dbP = null; rej(new Error('blocked')); }, 3000);
-    const r = indexedDB.open('balise', 3);
+    const r = indexedDB.open('balise', 4);
     r.onblocked = () => { clearTimeout(timer); dbP = null; rej(new Error('blocked')); };
     r.onupgradeneeded = () => {
       const d = r.result;
       if (!d.objectStoreNames.contains('tracks')) d.createObjectStore('tracks', { keyPath: 'id' });
       if (!d.objectStoreNames.contains('packs')) d.createObjectStore('packs', { keyPath: 'id' });
       if (!d.objectStoreNames.contains('graphs')) d.createObjectStore('graphs', { keyPath: 'id' });
+      if (!d.objectStoreNames.contains('graphChunks')) d.createObjectStore('graphChunks', { keyPath: 'id' });
     };
     r.onsuccess = () => {
       clearTimeout(timer);
@@ -1591,7 +1592,8 @@ async function deletePack(p) {
     const cache = await caches.open(TILE_CACHE);
     for (const t of p.tiles || []) if (!others.has(t)) { const [z, x, y] = t.split('/'); await cache.delete(tileKey('ign', z, x, y)); }
     await idb('readwrite', st => st.delete(p.id), 'packs');
-    try { await idb('readwrite', st => st.delete(p.id), 'graphs'); graphs = null; loadGraphs(); } catch {}
+    try { await idb('readwrite', st => st.delete(p.id), 'graphs'); graphs = null; } catch {}
+    try { await idb('readwrite', st => st.delete(IDBKeyRange.bound(p.id + '#', p.id + '#\uffff')), 'graphChunks'); } catch {}
     toast(`${p.name} supprimée`);
   } catch { toast('Suppression impossible.'); }
   renderPacks(); updateStorageInfo(); drawPacks();
@@ -1601,7 +1603,7 @@ $('btnClearTiles').onclick = async () => {
   try {
     await caches.delete(TILE_CACHE);
     for (const p of await listPacks()) await idb('readwrite', st => st.delete(p.id), 'packs');
-    try { await idb('readwrite', st => st.clear(), 'graphs'); graphs = null; loadGraphs(); } catch {}
+    try { await idb('readwrite', st => st.clear(), 'graphs'); await idb('readwrite', st => st.clear(), 'graphChunks'); graphs = null; } catch {}
     toast('Toutes les cartes hors ligne sont supprimées');
   } catch {}
   renderPacks(); updateStorageInfo(); drawPacks();
@@ -1821,9 +1823,24 @@ function overpassQuery(box, light) {
     : `way["highway"~"${HW_RE}"](${b});`;
   return `[out:json][timeout:180];(${parts});out body qt;>;out skel qt;`;
 }
-async function overpass(q, tries = 2) {
+// Overpass limite chaque appareil à quelques demandes à la fois : on lui demande quand revenir
+async function overpassWait(onWait) {
+  for (let i = 0; i < 10; i++) {
+    let secs = 0;
+    try {
+      const txt = await (await fetch('https://overpass-api.de/api/status', { cache: 'no-store' })).text();
+      if (/\d+ slots? available now/.test(txt)) return;
+      const ws = [...txt.matchAll(/in (\d+) seconds/g)].map(m => +m[1]);
+      secs = ws.length ? Math.min(...ws) + 1 : 15;
+    } catch { return; } // statut illisible : on tente quand même
+    if (onWait) onWait(secs);
+    await new Promise(r => setTimeout(r, Math.min(secs, 120) * 1000));
+  }
+}
+async function overpass(q, tries = 2, onWait) {
   let last;
   for (let t = 0; t < tries; t++) {
+    await overpassWait(onWait);
     const ctrl = new AbortController(), timer = setTimeout(() => ctrl.abort(), 190000);
     try {
       const r = await fetch(OVERPASS, { method: 'POST', body: 'data=' + encodeURIComponent(q), headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, signal: ctrl.signal });
@@ -1831,7 +1848,10 @@ async function overpass(q, tries = 2) {
       last = new Error(r.status === 429 || r.status === 504 ? 'serveur OpenStreetMap saturé, réessaie dans quelques minutes' : 'erreur ' + r.status);
     } catch (e) { last = e.name === 'AbortError' ? new Error('délai dépassé') : new Error('pas de connexion'); }
     finally { clearTimeout(timer); }
-    await new Promise(r => setTimeout(r, 8000)); // on laisse respirer le serveur avant de réessayer
+    // serveur saturé : on patiente de plus en plus longtemps avant de réessayer
+    const pause = 15 * (t + 1);
+    if (onWait) onWait(pause);
+    await new Promise(r => setTimeout(r, pause * 1000));
   }
   throw last;
 }
@@ -1884,28 +1904,73 @@ function polysAreaKm2(polys) {
   return Math.abs(a / 2);
 }
 const depGraphMo = polys => Math.round(polysAreaKm2(polys) * 8 / 1024); // ≈ 8 Ko par km²
+// un morceau réussi est gardé en mémoire du téléphone sous forme compacte
+function packChunk(json) {
+  const nodes = json.elements.filter(e => e.type === 'node'), ways = json.elements.filter(e => e.type === 'way' && e.tags && HW.includes(e.tags.highway));
+  const wn = []; ways.forEach(w => wn.push(...w.nodes));
+  return {
+    nid: Float64Array.from(nodes, n => n.id), nlat: Float32Array.from(nodes, n => n.lat), nlon: Float32Array.from(nodes, n => n.lon),
+    wid: Float64Array.from(ways, w => w.id), whw: Uint8Array.from(ways, w => HW.indexOf(w.tags.highway)), wfl: Uint8Array.from(ways, w => wayFlags(w.tags)),
+    wcount: Uint32Array.from(ways, w => w.nodes.length), wnodes: Float64Array.from(wn)
+  };
+}
+function addChunkToGraph(acc, c) {
+  for (let i = 0; i < c.nid.length; i++) if (!acc.idx.has(c.nid[i])) { acc.idx.set(c.nid[i], acc.lat.length); acc.lat.push(c.nlat[i]); acc.lon.push(c.nlon[i]); }
+  let off = 0;
+  for (let w = 0; w < c.wid.length; w++) {
+    const cnt = c.wcount[w];
+    if (!acc.ways.has(c.wid[w])) {
+      acc.ways.add(c.wid[w]);
+      for (let i = 1; i < cnt; i++) {
+        const a = acc.idx.get(c.wnodes[off + i - 1]), b = acc.idx.get(c.wnodes[off + i]);
+        if (a == null || b == null || a === b) continue;
+        acc.ea.push(a); acc.eb.push(b); acc.ec.push(c.whw[w]); acc.ef.push(c.wfl[w]);
+      }
+    }
+    off += cnt;
+  }
+}
 async function downloadDepGraph(pack, polys) {
   if (dl) { toast('Un téléchargement est déjà en cours.'); return false; }
-  const chunks = depChunks(polys), acc = newGraphAcc();
+  const chunks = depChunks(polys);
   dl = { stop: false, packId: pack.id }; keepAwake();
   $('offProg').hidden = false; $('dlStop').hidden = false; $('dlTrace').disabled = $('dlDep').disabled = true;
-  let fail = 0, lastErr = '';
-  for (let k = 0; k < chunks.length && !dl.stop; k++) {
-    const txt = `Chemins : morceau ${k + 1} / ${chunks.length}` + (fail ? ` · ${fail} en échec` : '');
-    $('offTxt').textContent = txt; $('offBar').style.width = (k / chunks.length * 100) + '%';
+  const key = k => pack.id + '#' + k;
+  // morceaux déjà récupérés lors d'un essai précédent
+  const have = new Set();
+  for (let k = 0; k < chunks.length; k++) { try { if (await idb('readonly', st => st.getKey(key(k)), 'graphChunks')) have.add(k); } catch {} }
+  let fail = 0, lastErr = '', done = have.size;
+  const status = extra => {
+    const txt = `Chemins : ${done} / ${chunks.length} morceaux` + (fail ? ` · ${fail} en échec` : '') + (extra ? ` · ${extra}` : '');
+    $('offTxt').textContent = txt; $('offBar').style.width = (done / chunks.length * 100) + '%';
     $('mapsStatus').textContent = `${pack.name} · ${txt}`; $('mapsStatus').hidden = false;
-    try { addToGraph(acc, await overpass(overpassQuery(chunks[k], true))); }
-    catch (e) { fail++; lastErr = e.message; if (fail >= 3 && fail > k / 2) { lastErr += ' (arrêt)'; break; } }
+  };
+  status();
+  for (let k = 0; k < chunks.length && !dl.stop; k++) {
+    if (have.has(k)) continue;
+    status('téléchargement…');
+    try {
+      const json = await overpass(overpassQuery(chunks[k], true), 3, secs => status(`le serveur OpenStreetMap demande d'attendre ${secs} s`));
+      await idb('readwrite', st => st.put(Object.assign(packChunk(json), { id: key(k) })), 'graphChunks');
+      have.add(k); done++;
+    } catch (e) { fail++; lastErr = e.message; }
+    status();
   }
   const stopped = dl.stop; dl = null;
   $('dlStop').hidden = true; $('dlTrace').disabled = !track; $('dlDep').disabled = false; $('mapsStatus').hidden = true;
-  if (!acc.lat.length) { $('offTxt').textContent = 'Chemins non téléchargés : ' + (lastErr || 'arrêté'); renderPacks(); return false; }
+  if (!have.size) { $('offTxt').textContent = 'Chemins non téléchargés : ' + (lastErr || 'arrêté'); renderPacks(); return false; }
+  // assemblage du réseau à partir de tous les morceaux disponibles
   $('offTxt').textContent = 'Chemins : assemblage sur le téléphone…'; $('offBar').style.width = '100%';
   await new Promise(r => setTimeout(r, 50));
-  await saveGraph(pack, finishGraph(acc), stopped || fail > 0);
-  $('offTxt').textContent = pack.graph.partial
-    ? `Chemins : ${pack.graph.km} km enregistrés, mais incomplets (${lastErr || 'arrêté'}). Touche « + Chemins » pour réessayer.`
-    : `Chemins : ${pack.graph.km} km enregistrés ✓ · itinéraires hors connexion dans tout le département`;
+  const acc = newGraphAcc();
+  for (const k of have) { const c = await idb('readonly', st => st.get(key(k)), 'graphChunks'); if (c) addChunkToGraph(acc, c); }
+  const complete = have.size === chunks.length;
+  await saveGraph(pack, finishGraph(acc), !complete);
+  // complet : les morceaux ne servent plus
+  if (complete) for (let k = 0; k < chunks.length; k++) { try { await idb('readwrite', st => st.delete(key(k)), 'graphChunks'); } catch {} }
+  $('offTxt').textContent = complete
+    ? `Chemins : ${pack.graph.km} km enregistrés ✓ · itinéraires hors connexion dans tout le département`
+    : `Chemins : ${have.size} / ${chunks.length} morceaux (${pack.graph.km} km). ${stopped ? 'Arrêté.' : lastErr + '.'} Touche « + Chemins » plus tard : seuls les morceaux manquants seront téléchargés.`;
   renderPacks(); updateStorageInfo();
   return true;
 }

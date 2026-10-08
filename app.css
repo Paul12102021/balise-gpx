@@ -89,9 +89,9 @@ button:focus-visible, .btn:focus-visible, select:focus-visible { outline: 3px so
 .row > span, .row > label { min-width: 0; }
 .row small { color: var(--muted); }
 select { min-height: 40px; border-radius: 8px; border: 1px solid var(--line); background: var(--paper); color: var(--ink); padding: 0 8px; font: inherit; }
-.progress { position: relative; height: 22px; border-radius: 6px; background: var(--paper); border: 1px solid var(--line); overflow: hidden; }
-#offBar { height: 100%; width: 0; background: var(--ok); transition: width .2s; }
-#offTxt { position: absolute; inset: 0; display: grid; place-items: center; font-size: 12px; font-variant-numeric: tabular-nums; }
+.progress { position: relative; min-height: 22px; border-radius: 6px; background: var(--paper); border: 1px solid var(--line); overflow: hidden; }
+#offBar { position: absolute; left: 0; top: 0; bottom: 0; width: 0; background: var(--ok); opacity: .55; transition: width .2s; }
+#offTxt { position: relative; display: block; padding: 4px 10px; text-align: center; font-size: 12px; line-height: 1.35; font-variant-numeric: tabular-nums; }
 .note { margin: 0; color: var(--muted); font-size: 12px; }
 
 /* ---------- boutons ronds ---------- */
