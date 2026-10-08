@@ -8,13 +8,13 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<meta name="balise-version" content="43">
+<meta name="balise-version" content="44">
 <title>Pisteo</title>
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" href="icon.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
 <link rel="stylesheet" href="vendor/maplibre-gl.css">
-<link rel="stylesheet" href="app.css?v=43">
+<link rel="stylesheet" href="app.css?v=44">
 </head>
 <body>
 <div id="map" aria-label="Carte"></div>
@@ -101,12 +101,12 @@
     </div>
     <div class="np-grid">
       <div><span>Parcouru</span><b id="npDone">–</b></div>
-      <div><span>Restant</span><b id="npLeft">–</b></div>
-      <div><span>Progression</span><b id="npPct">–</b></div>
-      <div><span>D+ fait</span><b id="npUpDone">–</b></div>
-      <div><span>D+ restant</span><b id="npUpLeft">–</b></div>
-      <div><span>D− restant</span><b id="npDownLeft">–</b></div>
-      <div><span>Temps (sortie)</span><b id="npTime">–</b></div>
+      <div class="trk"><span>Restant</span><b id="npLeft">–</b></div>
+      <div class="trk"><span>Progression</span><b id="npPct">–</b></div>
+      <div class="trk"><span>D+ fait</span><b id="npUpDone">–</b></div>
+      <div class="trk"><span>D+ restant</span><b id="npUpLeft">–</b></div>
+      <div class="trk"><span>D− restant</span><b id="npDownLeft">–</b></div>
+      <div><span id="npTimeL">Temps (sortie)</span><b id="npTime">–</b></div>
       <div><span>Vitesse moy.</span><b id="npAvg">–</b></div>
       <div><span>Altitude</span><b id="npEle">–</b></div>
     </div>
@@ -291,6 +291,6 @@
 <div id="toast" class="toast" hidden></div>
 
 <script src="vendor/maplibre-gl.js"></script>
-<script src="app.js?v=43"></script>
+<script src="app.js?v=44"></script>
 </body>
 </html>

@@ -4,7 +4,7 @@
 
 // La page et le code doivent être de la même version. Sinon (page gardée en cache
 // par le téléphone ou par GitHub), on recharge une page fraîche, au plus 3 fois.
-const APP_VERSION = 43;
+const APP_VERSION = 44;
 try {
   const meta = document.querySelector('meta[name="balise-version"]');
   const pageV = meta ? +meta.content : 0;
@@ -1328,7 +1328,18 @@ function toggleNavMore(open, instant) {
   want ? navMotion().open(instant) : navMotion().close(instant);
 }
 function updateNavMore() {
-  if ($('navMore').hidden || !track) return;
+  if ($('navMore').hidden) return;
+  if (!track) { // balade libre : distance, durée et vitesse depuis le départ
+    const navS = (Date.now() - navStartT) / 1000, rec = actState !== 'idle';
+    const el = rec ? actElapsed() / 1000 : navS, d = rec ? act.d : freeD;
+    $('npDone').textContent = fmtDist(d);
+    $('npTimeL').textContent = rec ? 'Temps (sortie)' : 'Durée';
+    $('npTime').textContent = el > 0 ? fmtDur(el) : '–';
+    $('npAvg').textContent = el > 60 ? (d / el * 3.6).toFixed(1).replace('.', ',') + ' km/h' : '–';
+    $('npEle').textContent = me && me.ele != null ? fmtM(me.ele) : '–';
+    return;
+  }
+  $('npTimeL').textContent = 'Temps (sortie)';
   const pr = progress, di = doneInfo(), upLeft = di.upLeft, downLeft = di.downLeft;
   $('npDone').textContent = fmtDist(di.along);
   $('npLeft').textContent = fmtDist(di.remain);

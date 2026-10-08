@@ -302,6 +302,8 @@ body.nav .pausepill { top: calc(var(--nt-h, 100px) + 8px); }
 .dest-btns { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
 .pausepill.pick { background: var(--me); }
 body.free #btnRejoin { display: none; }
+/* balade libre : pas de trace, donc ni profil ni chiffres de parcours */
+body.free #navProfile, body.free .np-grid .trk, body.free #npBack { display: none !important; }
 
 .actions .wide { grid-column: 1 / -1; }
 
