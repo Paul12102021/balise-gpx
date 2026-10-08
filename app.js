@@ -340,13 +340,16 @@ async function renderLib() {
   for (const it of items) {
     const li = document.createElement('li');
     const open = document.createElement('button'); open.className = 'lib-item';
-    open.innerHTML = `<b></b><span>${fmtDist(it.dist)}${it.up != null ? ' · D+ ' + fmtM(it.up) : ''} · ouverte le ${fmtDate(it.date)}</span>`;
+    open.innerHTML = `<b></b><span>${fmtDist(it.dist)}${it.up != null ? ' · D+ ' + fmtM(it.up) : ''} · ${/^Sortie du /.test(it.name) ? 'enregistrée' : 'ouverte'} le ${fmtDate(it.date)}</span>`;
     open.querySelector('b').textContent = it.name;
     open.onclick = () => { closeLib(); loadText(it.text); };
+    const share = document.createElement('button'); share.className = 'lib-del'; share.setAttribute('aria-label', 'Exporter ' + it.name);
+    share.innerHTML = '<svg viewBox="0 0 24 24"><path d="M12 15V3M7 8l5-5 5 5"/><path d="M5 13v7h14v-7"/></svg>';
+    share.onclick = () => shareGPX(it.text, it.name);
     const del = document.createElement('button'); del.className = 'lib-del'; del.setAttribute('aria-label', 'Retirer ' + it.name);
     del.innerHTML = '<svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></svg>';
     del.onclick = async () => { await idb('readwrite', st => st.delete(it.id)).catch(() => {}); renderLib(); };
-    li.append(open, del); list.appendChild(li);
+    li.append(open, share, del); list.appendChild(li);
   }
 }
 async function openLib() {
@@ -465,7 +468,6 @@ function onPos(pos) {
     if (dt > 0.5) pos.speed = hav(prevFix, pos) / dt;
   }
   prevFix = pos;
-  actMove(pos);
   if (pos.speed > 0.4 && pos.speed < 45 && (pos.acc || 0) < 40) { speedEma = speedEma == null ? pos.speed : speedEma * 0.92 + pos.speed * 0.08; speedSamples++; }
   if (!moveRef) moveRef = pos;
   else if (hav(moveRef, pos) >= 8) { moveBearing = bearing(moveRef, pos); moveRef = pos; }
@@ -474,7 +476,7 @@ function onPos(pos) {
   meMk.setLngLat([pos.lon, pos.lat]);
   if (!meShown) { meMk.addTo(map); meShown = true; if (!nav) map.easeTo({ center: [pos.lon, pos.lat], zoom: Math.max(map.getZoom(), 15), duration: 800 }); }
 
-  if (recording && !act.paused) addRecPoint(pos);
+  onActFix(pos);
   if (track) progress = project(track, pos);
   if (rejoin) {
     if (rejoin.straight) setRejoinPath([{ lat: pos.lat, lon: pos.lon }, rejoin.target], rejoin.target, true);
@@ -522,11 +524,8 @@ async function startNav() {
   if (!track) { toast('Ouvre d\'abord un fichier GPX.'); return; }
   if (!startGPS()) return;
   nav = true; arrived = false; isOff = false; offCount = 0;
-  // nouvelle trace sans enregistrement en cours : chrono remis à zéro ; sinon il continue
-  if (navTrackId !== track.id && !recording) actReset();
   navTrackId = track.id;
-  if (act.paused) resumeActivity(true); else actStart();
-  document.body.classList.add('nav'); toggleMore(false); setTimeout(updatePauseUI, 0);
+  document.body.classList.add('nav'); toggleMore(false);
   setFollow(true);
   unlockAudio(); enableCompass(); keepAwake();
   say(me ? 'C\'est parti' : 'Navigation démarrée. Recherche du signal GPS.');
@@ -535,7 +534,7 @@ async function startNav() {
   updateStats();
 }
 function stopNav() {
-  nav = false; document.body.classList.remove('nav'); toggleNavMore(false); setTimeout(updatePauseUI, 0);
+  nav = false; document.body.classList.remove('nav'); toggleNavMore(false);
   stopSim(); clearRejoin(); isOff = false;
   try { speechSynthesis.cancel(); } catch {}
   setSrc('turn', EMPTY);
@@ -867,7 +866,8 @@ function updateNavMore() {
   $('npUpDone').textContent = track.hasEle ? fmtM(track.totalUp - upLeft) : '–';
   $('npUpLeft').textContent = track.hasEle ? fmtM(upLeft) : '–';
   $('npDownLeft').textContent = track.hasEle ? fmtM(downLeft) : '–';
-  const el = actElapsed() / 1000;
+  // temps et vitesse de la sortie enregistrée (hors pauses)
+  const el = actState === 'idle' ? 0 : actElapsed() / 1000;
   $('npTime').textContent = el > 0 ? fmtDur(el) : '–';
   $('npAvg').textContent = el > 60 ? (act.d / el * 3.6).toFixed(1).replace('.', ',') + ' km/h' : '–';
   $('npEle').textContent = me && me.ele != null ? fmtM(me.ele) : (pr && track.ele[pr.idx] != null ? '≈ ' + fmtM(track.ele[pr.idx]) : '–');
@@ -901,47 +901,76 @@ $('nbGrip').onclick = () => toggleNavMore();
 setInterval(() => { if (nav) updateNavMore(); }, 15000); // le temps écoulé avance même à l'arrêt
 
 // =====================================================================
-// Enregistrement de ma trace
+// Activité enregistrée : attente du GPS → en cours ⇄ en pause → terminer
 // =====================================================================
-// ---------- chrono de l'activité : temps et distance hors pauses ----------
-let act = { ms: 0, since: null, d: 0, paused: false };
+let actState = store.get('actState') || 'idle'; // idle | waiting | on | paused
+let act = { ms: 0, since: null, d: 0, start: null };
 try { act = Object.assign(act, JSON.parse(store.get('act') || '{}')); } catch {}
+let rec = [];
+try { rec = JSON.parse(store.get('rec') || '[]'); } catch { rec = []; }
+// ancienne version : une trace en mémoire sans état connu → on la propose en pause pour pouvoir la terminer
+if (!store.get('actState') && rec.length) actState = 'paused';
+if (actState === 'waiting') actState = 'idle';
+let recording = actState !== 'idle';
+let recSeg = rec.length ? (rec[rec.length - 1].s || 0) : 0;
 let actRef = null;
 const saveAct = () => store.set('act', JSON.stringify(act));
+const saveRec = () => store.set('rec', JSON.stringify(rec));
 const actElapsed = () => act.ms + (act.since ? Date.now() - act.since : 0);
-function actStart() { if (act.since == null && !act.paused) { act.since = Date.now(); saveAct(); } }
-function actReset() { act = { ms: 0, since: null, d: 0, paused: false }; actRef = null; saveAct(); }
-// distance comptée par pas de 8 m, pour ne pas additionner le flottement du GPS à l'arrêt
-function actMove(pos) {
-  if (act.since == null || pos.sim || (pos.acc || 0) > 40) return;
-  if (!actRef) { actRef = pos; return; }
-  const d = hav(actRef, pos);
-  if (d >= 8) { if (d < 500) act.d += d; actRef = pos; if (Math.random() < 0.1) saveAct(); }
-}
-function pauseActivity() {
-  if (act.since != null) { act.ms += Date.now() - act.since; act.since = null; }
-  act.paused = true; actRef = null; saveAct();
-  if (recording) store.set('rec', JSON.stringify(rec));
-  if (!nav) stopGPS();
-  try { speechSynthesis.cancel(); } catch {}
-  say('Pause');
-  if (!nav && !recording) toast('En pause');
-  updatePauseUI(); updateNavMore();
-}
-function resumeActivity(quiet) {
-  act.paused = false; act.since = Date.now(); actRef = null; saveAct();
-  if (recording) recSeg++;
-  startGPS();
-  if (!quiet) { say('C\'est reparti'); toast('C\'est reparti'); }
-  updatePauseUI(); updateNavMore();
+function setActState(st) {
+  actState = st; recording = st !== 'idle'; store.set('actState', st);
+  updateActUI(); updateNavMore();
 }
 
-// ---------- enregistrement de ma trace ----------
-let recording = false, rec = [];
-try { rec = JSON.parse(store.get('rec') || '[]'); } catch { rec = []; }
-let recSeg = rec.length ? (rec[rec.length - 1].s || 0) + 1 : 0; // un segment par reprise après une pause
+function startActivity() {
+  if (actState !== 'idle') return;
+  if (!startGPS()) return;
+  rec = []; saveRec(); recSeg = 0; actRef = null;
+  act = { ms: 0, since: null, d: 0, start: null }; saveAct();
+  drawRec(); unlockAudio(); keepAwake();
+  setActState('waiting');
+  // si une position précise est déjà connue, on démarre tout de suite
+  if (me && !me.sim && (me.acc || 99) <= 30 && Date.now() - me.t < 10000) beginRecording(me);
+}
+function beginRecording(pos) {
+  act.since = Date.now(); act.start = act.start || Date.now(); saveAct();
+  actRef = pos; addRecPoint(pos);
+  setActState('on'); vibrate(120); say('Enregistrement démarré');
+}
+// appelée à chaque position GPS
+function onActFix(pos) {
+  if (pos.sim) return;
+  if (actState === 'waiting' && (pos.acc || 99) <= 30) { beginRecording(pos); return; }
+  if (actState !== 'on' || (pos.acc || 0) > 40) return;
+  // distance comptée par pas de 8 m, pour ne pas additionner le flottement du GPS à l'arrêt
+  if (!actRef) actRef = pos;
+  const d = hav(actRef, pos);
+  if (d >= 8) { if (d < 500) act.d += d; actRef = pos; saveAct(); }
+  addRecPoint(pos);
+}
+function pauseActivity() {
+  if (actState !== 'on') return;
+  act.ms += Date.now() - act.since; act.since = null; actRef = null; saveAct(); saveRec();
+  setActState('paused');
+  if (!nav) stopGPS();
+  say('Pause');
+}
+function resumeActivity() {
+  if (actState !== 'paused') return;
+  if (!startGPS()) return;
+  act.since = Date.now(); actRef = null; recSeg++; saveAct();
+  setActState('on'); say('C\'est reparti');
+}
+function cancelWaiting() { setActState('idle'); if (!nav) stopGPS(); toast('Enregistrement annulé'); }
+function togglePause() { if (actState === 'on') pauseActivity(); else if (actState === 'paused') resumeActivity(); }
+
+// ---------- points de la trace enregistrée ----------
 function recDist() { let d = 0; for (let i = 1; i < rec.length; i++) if ((rec[i].s || 0) === (rec[i - 1].s || 0)) d += hav(rec[i - 1], rec[i]); return d; }
-function updRecInfo() { $('recInfo').textContent = rec.length ? `(${fmtDist(recDist())})` : '(vide)'; }
+function recUp() {
+  let up = 0, last = null;
+  for (const p of rec) { if (p.ele == null) continue; if (last != null && p.ele - last > 3) { up += p.ele - last; last = p.ele; } else if (last == null || p.ele < last) last = p.ele; }
+  return up;
+}
 function drawRec() {
   const segs = [];
   rec.forEach((p, i) => { if (!i || (p.s || 0) !== (rec[i - 1].s || 0)) segs.push([]); segs[segs.length - 1].push([p.lon, p.lat]); });
@@ -952,69 +981,107 @@ function addRecPoint(p) {
   const last = rec[rec.length - 1];
   if (last && (last.s || 0) === recSeg && hav(last, p) < 5) return; // évite d'accumuler des points à l'arrêt
   rec.push({ lat: +p.lat.toFixed(6), lon: +p.lon.toFixed(6), ele: p.ele != null ? +p.ele.toFixed(1) : null, t: p.t, s: recSeg });
-  if (rec.length % 5 === 0) store.set('rec', JSON.stringify(rec));
-  drawRec(); updRecInfo();
+  if (rec.length % 5 === 0) saveRec();
+  drawRec();
 }
-if (rec.length) { drawRec(); updRecInfo(); }
+if (rec.length) drawRec();
 
-// Bouton Enregistrer : Enregistrer → Pause → Reprendre
-function recButton() {
-  if (!recording) {
-    if (!startGPS()) return;
-    recording = true; recSeg = rec.length ? (rec[rec.length - 1].s || 0) + 1 : 0;
-    if (act.paused) resumeActivity(true); else actStart();
-    toast(rec.length ? 'Enregistrement repris' : 'Enregistrement démarré');
-    updatePauseUI();
-  } else if (!act.paused) pauseActivity();
-  else resumeActivity();
-}
-$('btnRec').onclick = recButton; $('btnRecFab').onclick = recButton;
-$('btnPause').onclick = () => { if (act.paused) resumeActivity(); else { if (act.since == null) actStart(); pauseActivity(); } };
-$('pauseResume').onclick = () => resumeActivity();
-
-const ICON_PAUSE = '<svg viewBox="0 0 24 24"><path d="M8 5v14M16 5v14"/></svg>';
-const ICON_PLAY = '<svg viewBox="0 0 24 24"><path d="M7 4.5v15L19.5 12Z" fill="currentColor"/></svg>';
-function updatePauseUI() {
-  const paused = act.paused;
-  const b = $('btnRec'), f = $('btnRecFab');
-  b.classList.toggle('recording', recording && !paused); b.classList.toggle('paused', recording && paused);
-  b.querySelector('.t').textContent = !recording ? 'Enregistrer' : paused ? 'Reprendre' : 'Pause';
-  f.classList.toggle('recording', recording && !paused); f.classList.toggle('paused', recording && paused);
-  f.innerHTML = !recording ? '<span class="dot"></span>' : paused ? ICON_PLAY : ICON_PAUSE;
-  f.setAttribute('aria-label', !recording ? 'Enregistrer ma trace' : paused ? 'Reprendre' : 'Mettre en pause');
-  $('btnPause').innerHTML = (paused ? ICON_PLAY + 'Reprendre' : ICON_PAUSE + 'Pause');
-  $('pausePill').hidden = !(paused && (nav || recording));
-}
-$('btnClearRec').onclick = () => {
-  if (!rec.length) { toast('Aucune trace enregistrée.'); return; }
-  const saved = rec.slice(), savedAct = Object.assign({}, act);
-  rec = []; store.set('rec', '[]'); recording = false; recSeg = 0;
-  if (!nav) { actReset(); stopGPS(); }
-  drawRec(); updRecInfo(); updatePauseUI();
-  toast('Trace enregistrée effacée', 5000, { label: 'Annuler', run: () => {
-    rec = saved; store.set('rec', JSON.stringify(rec)); act = savedAct; saveAct(); drawRec(); updRecInfo(); updatePauseUI();
-  } });
-};
-updatePauseUI();
-
-function toGPX() {
+function actName() { const d = new Date(act.start || (rec[0] && rec[0].t) || Date.now()); return 'Sortie du ' + d.toLocaleDateString('fr-FR', { day: 'numeric', month: 'long' }) + ' à ' + d.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' }).replace(':', 'h'); }
+function toGPX(name) {
   const esc = s => s.replace(/[<&>]/g, c => ({ '<': '&lt;', '&': '&amp;', '>': '&gt;' }[c]));
-  const name = 'Ma sortie ' + new Date(rec[0]?.t || Date.now()).toLocaleDateString('fr-FR');
   // chaque reprise après une pause devient un segment à part (trkseg) : la pause n'est pas comptée
   const segs = [];
   rec.forEach((p, i) => { if (!i || (p.s || 0) !== (rec[i - 1].s || 0)) segs.push([]); segs[segs.length - 1].push(p); });
   const body = segs.map(g => '    <trkseg>\n' + g.map(p => `      <trkpt lat="${p.lat}" lon="${p.lon}">${p.ele != null ? `<ele>${p.ele}</ele>` : ''}<time>${new Date(p.t).toISOString()}</time></trkpt>`).join('\n') + '\n    </trkseg>').join('\n');
   return `<?xml version="1.0" encoding="UTF-8"?>\n<gpx version="1.1" creator="Balise GPX" xmlns="http://www.topografix.com/GPX/1/1">\n  <trk><name>${esc(name)}</name>\n${body}\n  </trk>\n</gpx>\n`;
 }
-$('btnExport').onclick = async () => {
-  if (!rec.length) { toast('Rien à exporter : lance d\'abord un enregistrement.'); return; }
-  const fname = 'sortie-' + new Date(rec[0].t).toISOString().slice(0, 10) + '.gpx';
-  const file = new File([toGPX()], fname, { type: 'application/gpx+xml' });
-  try { if (navigator.canShare && navigator.canShare({ files: [file] })) { await navigator.share({ files: [file], title: fname }); return; } }
+async function shareGPX(text, name) {
+  const fname = name.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') + '.gpx';
+  const file = new File([text], fname, { type: 'application/gpx+xml' });
+  try { if (navigator.canShare && navigator.canShare({ files: [file] })) { await navigator.share({ files: [file], title: name }); return; } }
   catch (e) { if (e.name === 'AbortError') return; }
   const a = document.createElement('a'); a.href = URL.createObjectURL(file); a.download = fname;
   document.body.appendChild(a); a.click(); setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 1000);
+}
+
+// ---------- terminer : bilan, puis garder, exporter ou supprimer ----------
+function openFinish() {
+  if (actState === 'waiting') { cancelWaiting(); return; }
+  if (actState === 'idle') return;
+  const el = actElapsed() / 1000;
+  $('finDist').textContent = fmtDist(act.d);
+  $('finTime').textContent = fmtDur(el);
+  $('finAvg').textContent = el > 30 ? (act.d / el * 3.6).toFixed(1).replace('.', ',') + ' km/h' : '–';
+  $('finUp').textContent = rec.some(p => p.ele != null) ? fmtM(recUp()) : '–';
+  $('finTitle').textContent = actName();
+  $('finDelete').textContent = 'Supprimer cette sortie'; $('finDelete').dataset.armed = '';
+  $('finish').hidden = false;
+}
+async function endActivity(keep) {
+  if (actState === 'on') { act.ms += Date.now() - act.since; act.since = null; }
+  const name = actName();
+  if (keep && rec.length > 1) {
+    const text = toGPX(name);
+    await saveRecent({ name, total: recDist(), hasEle: rec.some(p => p.ele != null), totalUp: recUp() }, text);
+  }
+  rec = []; saveRec(); drawRec(); recSeg = 0;
+  act = { ms: 0, since: null, d: 0, start: null }; saveAct();
+  setActState('idle');
+  if (!nav) stopGPS();
+  $('finish').hidden = true;
+  toast(keep ? 'Sortie terminée · gardée dans Mes traces' : 'Sortie supprimée', 4000);
+}
+$('finSave').onclick = () => endActivity(true);
+$('finExport').onclick = () => { if (rec.length > 1) shareGPX(toGPX(actName()), actName()); else toast('Pas encore assez de points à exporter.'); };
+$('finContinue').onclick = () => { $('finish').hidden = true; };
+$('finDelete').onclick = () => {
+  const b = $('finDelete');
+  if (!b.dataset.armed) { b.dataset.armed = '1'; b.textContent = 'Toucher encore pour supprimer définitivement'; return; }
+  endActivity(false);
 };
+$('finish').onclick = e => { if (e.target === $('finish')) $('finish').hidden = true; };
+
+// ---------- boutons ----------
+// écran principal : Enregistrer / Terminer ; bandeau d'activité avec Pause / Reprendre
+$('btnRec').onclick = () => actState === 'idle' ? startActivity() : openFinish();
+$('actPause').onclick = () => actState === 'waiting' ? cancelWaiting() : togglePause();
+// navigation : bouton rond ● → ⏸ → ▶, et Pause / Terminer dans le panneau de progression
+$('btnRecFab').onclick = () => actState === 'idle' ? startActivity() : actState === 'waiting' ? cancelWaiting() : togglePause();
+$('npRec').onclick = () => actState === 'idle' ? startActivity() : actState === 'waiting' ? cancelWaiting() : togglePause();
+$('npEnd').onclick = openFinish;
+$('pauseResume').onclick = resumeActivity;
+
+const ICON_PAUSE = '<svg viewBox="0 0 24 24"><path d="M8 5v14M16 5v14"/></svg>';
+const ICON_PLAY = '<svg viewBox="0 0 24 24"><path d="M7 4.5v15L19.5 12Z"/></svg>';
+function updateActUI() {
+  const st = actState;
+  // écran principal
+  const b = $('btnRec');
+  b.classList.toggle('ending', st !== 'idle');
+  b.querySelector('.t').textContent = st === 'idle' ? 'Enregistrer' : st === 'waiting' ? 'Annuler' : 'Terminer';
+  $('actBar').hidden = st === 'idle';
+  $('actBar').dataset.state = st;
+  $('actLabel').textContent = st === 'waiting' ? 'Recherche du signal GPS…' : st === 'paused' ? 'En pause' : 'Enregistrement';
+  $('actPause').innerHTML = st === 'waiting' ? 'Annuler' : st === 'paused' ? ICON_PLAY + 'Reprendre' : ICON_PAUSE + 'Pause';
+  // navigation
+  const f = $('btnRecFab');
+  f.className = 'fab nav-only' + (st === 'on' ? ' recording' : st === 'paused' ? ' paused' : st === 'waiting' ? ' waiting' : '');
+  f.innerHTML = st === 'on' ? ICON_PAUSE : st === 'paused' ? ICON_PLAY : '<span class="dot"></span>';
+  f.setAttribute('aria-label', st === 'idle' ? 'Enregistrer ma sortie' : st === 'waiting' ? 'Annuler (recherche GPS)' : st === 'on' ? 'Mettre en pause' : 'Reprendre');
+  $('npRec').innerHTML = st === 'idle' ? '<span class="dot"></span>Enregistrer ma sortie' : st === 'waiting' ? 'Recherche GPS… Annuler' : st === 'on' ? ICON_PAUSE + 'Pause' : ICON_PLAY + 'Reprendre';
+  $('npEnd').hidden = st === 'idle' || st === 'waiting';
+  $('pausePill').hidden = st !== 'paused';
+  updateActStats();
+}
+function updateActStats() {
+  if (actState === 'idle') return;
+  const el = actElapsed() / 1000;
+  $('actStats').textContent = actState === 'waiting' ? 'Le chrono démarrera dès que la position est précise'
+    : `${fmtDist(act.d)} · ${fmtDur(el)}` + (el > 60 ? ` · ${(act.d / el * 3.6).toFixed(1).replace('.', ',')} km/h` : '');
+}
+setInterval(() => { if (actState === 'on') updateActStats(); }, 5000);
+if (actState === 'on') { act.since = act.since || Date.now(); setTimeout(startGPS, 0); }
+updateActUI();
 
 // =====================================================================
 // Cartes hors ligne : Plan IGN, le long d'une trace ou par département
@@ -1387,7 +1454,7 @@ try {
 const saved = store.get('gpx');
 if (saved) { try { showTrack(parseGPX(saved)); } catch { drawProfile(); } } else drawProfile();
 checkShared();
-const VERSION = '11 · 8 oct. 2026';
+const VERSION = '12 · 8 oct. 2026';
 $('note').textContent = (window.isSecureContext ? '' : 'Attention : le GPS ne fonctionne qu\'en HTTPS. ') + 'Version ' + VERSION;
 // Mises à jour : on vérifie à chaque ouverture et on recharge dès qu'une nouvelle version est prête
 // (jamais pendant une navigation ou un enregistrement : on attend la fin)
@@ -1404,5 +1471,5 @@ if ('serviceWorker' in navigator) {
   };
   navigator.serviceWorker.addEventListener('controllerchange', () => { if (hadController) tryReload(); hadController = true; });
 }
-window.__balise = { onPos, get state() { return { nav, isOff, rejoin: !!rejoin, straight: rejoin && rejoin.straight, progress, act: Object.assign({ elapsed: actElapsed() }, act) }; } };
+window.__balise = { onPos, get state() { return { nav, isOff, rejoin: !!rejoin, straight: rejoin && rejoin.straight, progress, act: Object.assign({ elapsed: actElapsed(), state: actState, points: rec.length }, act) }; } };
 })();

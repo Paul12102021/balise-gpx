@@ -12,7 +12,7 @@
 <link rel="icon" href="icon.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="icon-192.png">
 <link rel="stylesheet" href="vendor/maplibre-gl.css">
-<link rel="stylesheet" href="app.css?v=11">
+<link rel="stylesheet" href="app.css?v=12">
 </head>
 <body>
 <div id="map" aria-label="Carte"></div>
@@ -54,7 +54,7 @@
 </div>
 
 <div id="pausePill" class="pausepill" hidden>
-  <span><b>En pause</b> · chrono et enregistrement arrêtés</span>
+  <span><b>Sortie en pause</b> · chrono arrêté</span>
   <button id="pauseResume" class="btn small go">Reprendre</button>
 </div>
 
@@ -79,7 +79,10 @@
   </div>
   <div id="navMore" class="nav-more" hidden>
     <canvas id="navProfile" aria-label="Profil altimétrique et position"></canvas>
-    <button id="btnPause" class="btn pausebtn"></button>
+    <div class="np-acts">
+      <button id="npRec" class="btn"></button>
+      <button id="npEnd" class="btn ghost" hidden>Terminer</button>
+    </div>
     <div class="np-grid">
       <div><span>Parcouru</span><b id="npDone">–</b></div>
       <div><span>Restant</span><b id="npLeft">–</b></div>
@@ -87,7 +90,7 @@
       <div><span>D+ fait</span><b id="npUpDone">–</b></div>
       <div><span>D+ restant</span><b id="npUpLeft">–</b></div>
       <div><span>D− restant</span><b id="npDownLeft">–</b></div>
-      <div><span>Temps actif</span><b id="npTime">–</b></div>
+      <div><span>Temps (sortie)</span><b id="npTime">–</b></div>
       <div><span>Vitesse moy.</span><b id="npAvg">–</b></div>
       <div><span>Altitude</span><b id="npEle">–</b></div>
     </div>
@@ -104,6 +107,10 @@
     </button>
   </div>
   <canvas id="profile" aria-label="Profil altimétrique"></canvas>
+  <div id="actBar" class="actbar" hidden>
+    <div class="ab-text"><b id="actLabel">Enregistrement</b><span id="actStats"></span></div>
+    <button id="actPause" class="btn small"></button>
+  </div>
   <div class="actions">
     <button id="btnOpen" class="btn">Ouvrir un GPX</button>
     <input type="file" id="fileIn" accept=".gpx,application/gpx+xml,application/xml,text/xml" hidden>
@@ -132,10 +139,6 @@
     <div class="row">
       <span>Cartes hors ligne<br><small>Par trace ou par département</small></span>
       <button id="btnMaps" class="btn">Mes cartes</button>
-    </div>
-    <div class="row">
-      <span>Ma trace enregistrée <small id="recInfo">(vide)</small></span>
-      <span class="row-btns"><button id="btnExport" class="btn">Exporter</button><button id="btnClearRec" class="btn ghost">Effacer</button></span>
     </div>
     <p class="note" id="note"></p>
   </div>
@@ -186,9 +189,26 @@
   </div>
 </div>
 
+<div id="finish" class="lib" hidden>
+  <div class="lib-panel" role="dialog" aria-label="Terminer la sortie">
+    <div class="lib-head"><b>Terminer la sortie ?</b></div>
+    <div class="note" id="finTitle"></div>
+    <div class="np-grid fin-grid">
+      <div><span>Distance</span><b id="finDist">–</b></div>
+      <div><span>Temps (hors pauses)</span><b id="finTime">–</b></div>
+      <div><span>Vitesse moy.</span><b id="finAvg">–</b></div>
+      <div><span>D+</span><b id="finUp">–</b></div>
+    </div>
+    <button id="finSave" class="btn go">Terminer et garder dans Mes traces</button>
+    <button id="finExport" class="btn">Exporter le GPX</button>
+    <button id="finContinue" class="btn ghost">Continuer la sortie</button>
+    <button id="finDelete" class="btn ghost danger">Supprimer cette sortie</button>
+  </div>
+</div>
+
 <div id="toast" class="toast" hidden></div>
 
 <script src="vendor/maplibre-gl.js"></script>
-<script src="app.js?v=11"></script>
+<script src="app.js?v=12"></script>
 </body>
 </html>
