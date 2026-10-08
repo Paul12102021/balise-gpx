@@ -1,6 +1,6 @@
 /* Service worker : appli disponible hors ligne + tuiles de carte en cache */
-const APP = 'app-v5', TILES = 'tiles-v1';
-const SHELL = ['./', 'index.html', 'app.css', 'app.js', 'vendor/maplibre-gl.js', 'vendor/maplibre-gl.css',
+const APP = 'app-v6', TILES = 'tiles-v1';
+const SHELL = ['./', 'index.html', 'app.css?v=6', 'app.js?v=6', 'vendor/maplibre-gl.js', 'vendor/maplibre-gl.css',
   'manifest.webmanifest', 'icon.svg', 'icon-192.png', 'icon-512.png'];
 const TILE_HOSTS = /(^|\.)(tile\.opentopomap\.org|tile\.openstreetmap\.org)$/;
 // a/b/c.tile.opentopomap.org servent les mêmes tuiles : une seule clé de cache

@@ -5,7 +5,13 @@
 // =====================================================================
 // Utilitaires
 // =====================================================================
-const $ = id => document.getElementById(id);
+// Un élément absent (page et code de versions différentes) ne doit jamais bloquer toute l'appli
+const $ = id => document.getElementById(id) || (console.warn('Élément absent :', id), document.createElement('div'));
+window.addEventListener('error', e => {
+  const t = document.getElementById('toast');
+  if (t) { t.textContent = 'Un problème est survenu. Recharge la page si un bouton ne répond plus.'; t.hidden = false; }
+  console.error(e.error || e.message);
+});
 const R = 6371000, rad = d => d * Math.PI / 180, deg = r => r * 180 / Math.PI;
 function hav(a, b) {
   const dLat = rad(b.lat - a.lat), dLon = rad(b.lon - a.lon);
@@ -1007,7 +1013,7 @@ try {
 const saved = store.get('gpx');
 if (saved) { try { showTrack(parseGPX(saved)); } catch { drawProfile(); } } else drawProfile();
 checkShared();
-const VERSION = '5 · 8 oct. 2026';
+const VERSION = '6 · 8 oct. 2026';
 $('note').textContent = (window.isSecureContext ? '' : 'Attention : le GPS ne fonctionne qu\'en HTTPS. ') + 'Version ' + VERSION;
 // Mises à jour : on vérifie à chaque ouverture et on recharge dès qu'une nouvelle version est prête
 // (jamais pendant une navigation ou un enregistrement : on attend la fin)
