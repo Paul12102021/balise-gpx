@@ -305,13 +305,22 @@ function loadText(text, save = true) {
 let dbP = null;
 function openDB() {
   return dbP || (dbP = new Promise((res, rej) => {
+    // un autre onglet de l'appli (ancienne version) peut bloquer l'ouverture : on n'attend pas indéfiniment
+    const timer = setTimeout(() => { dbP = null; rej(new Error('blocked')); }, 3000);
     const r = indexedDB.open('balise', 2);
+    r.onblocked = () => { clearTimeout(timer); dbP = null; rej(new Error('blocked')); };
     r.onupgradeneeded = () => {
       const d = r.result;
       if (!d.objectStoreNames.contains('tracks')) d.createObjectStore('tracks', { keyPath: 'id' });
       if (!d.objectStoreNames.contains('packs')) d.createObjectStore('packs', { keyPath: 'id' });
     };
-    r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error);
+    r.onsuccess = () => {
+      clearTimeout(timer);
+      // si une version plus récente de l'appli s'ouvre ailleurs, on libère la base pour elle
+      r.result.onversionchange = () => { r.result.close(); dbP = null; };
+      res(r.result);
+    };
+    r.onerror = () => { clearTimeout(timer); dbP = null; rej(r.error); };
   }));
 }
 async function idb(mode, fn, storeName = 'tracks') {
@@ -324,13 +333,14 @@ async function idb(mode, fn, storeName = 'tracks') {
 async function listRecent() {
   try { return ((await idb('readonly', st => st.getAll())) || []).sort((a, b) => b.date - a.date); } catch { return []; }
 }
-async function saveRecent(p, text) {
+async function saveRecent(p, text, mustSucceed = false) {
   try {
     const id = p.name + '|' + Math.round(p.total);
     await idb('readwrite', st => st.put({ id, name: p.name, dist: p.total, up: p.hasEle ? p.totalUp : null, date: Date.now(), text }));
     const all = await listRecent();
     for (const old of all.slice(30)) await idb('readwrite', st => st.delete(old.id)); // on garde les 30 dernières
-  } catch { /* stockage indisponible */ }
+    return true;
+  } catch (e) { if (mustSucceed) throw e; return false; }
 }
 const fmtDate = t => new Date(t).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' });
 async function renderLib() {
@@ -1015,14 +1025,25 @@ function openFinish() {
   $('finUp').textContent = rec.some(p => p.ele != null) ? fmtM(recUp()) : '–';
   $('finTitle').textContent = actName();
   $('finDelete').textContent = 'Supprimer cette sortie'; $('finDelete').dataset.armed = '';
+  $('finMsg').hidden = true;
   $('finish').hidden = false;
 }
 async function endActivity(keep) {
   if (actState === 'on') { act.ms += Date.now() - act.since; act.since = null; }
   const name = actName();
   if (keep && rec.length > 1) {
-    const text = toGPX(name);
-    await saveRecent({ name, total: recDist(), hasEle: rec.some(p => p.ele != null), totalUp: recUp() }, text);
+    const btn = $('finSave'); btn.disabled = true; btn.textContent = 'Enregistrement…';
+    try {
+      await saveRecent({ name, total: recDist(), hasEle: rec.some(p => p.ele != null), totalUp: recUp() }, toGPX(name), true);
+    } catch {
+      // on ne perd rien : la sortie reste en cours (en pause) et peut être exportée
+      if (actState === 'on') { act.since = Date.now(); }
+      btn.disabled = false; btn.textContent = 'Terminer et garder dans Mes traces';
+      $('finMsg').textContent = 'Impossible de ranger la sortie : un autre onglet de Balise GPX est ouvert. Ferme les autres onglets puis réessaie, ou touche « Exporter le GPX ».';
+      $('finMsg').hidden = false;
+      return;
+    }
+    btn.disabled = false; btn.textContent = 'Terminer et garder dans Mes traces';
   }
   rec = []; saveRec(); drawRec(); recSeg = 0;
   act = { ms: 0, since: null, d: 0, start: null }; saveAct();
@@ -1454,7 +1475,7 @@ try {
 const saved = store.get('gpx');
 if (saved) { try { showTrack(parseGPX(saved)); } catch { drawProfile(); } } else drawProfile();
 checkShared();
-const VERSION = '12 · 8 oct. 2026';
+const VERSION = '13 · 8 oct. 2026';
 $('note').textContent = (window.isSecureContext ? '' : 'Attention : le GPS ne fonctionne qu\'en HTTPS. ') + 'Version ' + VERSION;
 // Mises à jour : on vérifie à chaque ouverture et on recharge dès qu'une nouvelle version est prête
 // (jamais pendant une navigation ou un enregistrement : on attend la fin)

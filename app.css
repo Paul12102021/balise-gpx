@@ -258,3 +258,6 @@ body.nav .pausepill { top: calc(env(safe-area-inset-top, 0px) + 108px); }
 .fab svg path[d^="M7 4.5"] { fill: currentColor; }
 .fin-grid { grid-template-columns: repeat(2, 1fr); }
 .btn.danger { color: var(--warn); }
+
+.fin-msg { margin: 0; padding: 10px 12px; border-radius: 10px; background: #fdecea; color: #8a1c1c; font-size: 14px; }
+@media (prefers-color-scheme: dark) { .fin-msg { background: #3a1716; color: #ffb4ab; } }

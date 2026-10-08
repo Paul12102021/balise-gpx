@@ -1,6 +1,6 @@
 /* Service worker : appli disponible hors ligne + tuiles de carte en cache */
-const APP = 'app-v12', TILES = 'tiles-v2';
-const SHELL = ['./', 'index.html', 'app.css?v=12', 'app.js?v=12', 'vendor/maplibre-gl.js', 'vendor/maplibre-gl.css',
+const APP = 'app-v13', TILES = 'tiles-v2';
+const SHELL = ['./', 'index.html', 'app.css?v=13', 'app.js?v=13', 'vendor/maplibre-gl.js', 'vendor/maplibre-gl.css',
   'departements.json', 'manifest.webmanifest', 'icon.svg', 'icon-192.png', 'icon-512.png'];
 
 // Clé de cache commune avec la page : https://tiles.balise/<fond>/<z>/<x>/<y>
