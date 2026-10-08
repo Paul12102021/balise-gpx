@@ -283,3 +283,5 @@ body.free #btnRejoin { display: none; }
 
 .dl-check { display: flex; align-items: center; gap: 10px; font-size: 14px; }
 .dl-check small { color: var(--muted); }
+
+.voice-sel { max-width: 62%; }

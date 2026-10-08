@@ -7,13 +7,13 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<meta name="balise-version" content="25">
+<meta name="balise-version" content="26">
 <title>Balise GPX</title>
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" href="icon.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="icon-192.png">
 <link rel="stylesheet" href="vendor/maplibre-gl.css">
-<link rel="stylesheet" href="app.css?v=25">
+<link rel="stylesheet" href="app.css?v=26">
 </head>
 <body>
 <div id="map" aria-label="Carte"></div>
@@ -141,6 +141,18 @@
       <input type="checkbox" id="optVoice" class="check">
     </div>
     <div class="row">
+      <label for="optVoiceName">Voix</label>
+      <select id="optVoiceName" class="voice-sel"></select>
+    </div>
+    <div class="row">
+      <label for="optRate">Vitesse de la voix</label>
+      <span class="row-btns">
+        <select id="optRate"><option value="0.85">Lente</option><option value="1.05">Normale</option><option value="1.3">Rapide</option></select>
+        <button id="btnVoiceTest" class="btn ghost">Écouter</button>
+      </span>
+    </div>
+    <p class="note">D'autres voix s'installent dans les réglages du téléphone : Paramètres › Gestion globale › Synthèse vocale (ou Langue et saisie › Sortie de synthèse vocale), puis le moteur de synthèse › Installer des données vocales › Français.</p>
+    <div class="row">
       <label for="optVib">Vibrations (virages, sortie de trace)</label>
       <input type="checkbox" id="optVib" class="check">
     </div>
@@ -260,6 +272,6 @@
 <div id="toast" class="toast" hidden></div>
 
 <script src="vendor/maplibre-gl.js"></script>
-<script src="app.js?v=25"></script>
+<script src="app.js?v=26"></script>
 </body>
 </html>

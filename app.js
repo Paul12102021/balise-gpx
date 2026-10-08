@@ -4,7 +4,7 @@
 
 // La page et le code doivent être de la même version. Sinon (page gardée en cache
 // par le téléphone ou par GitHub), on recharge une page fraîche, au plus 3 fois.
-const APP_VERSION = 25;
+const APP_VERSION = 26;
 try {
   const meta = document.querySelector('meta[name="balise-version"]');
   const pageV = meta ? +meta.content : 0;
@@ -699,12 +699,46 @@ $('optVib').onchange = e => setVib(e.target.checked);
 $('npVoice').onclick = () => setVoice(!voiceOn);
 $('npVib').onclick = () => setVib(!vibOn);
 setTimeout(syncAlertUI, 0);
+// ---------- voix du guidage : celles installées sur le téléphone ----------
+let voiceURI = store.get('voiceURI') || '', voiceRate = +(store.get('voiceRate') || 1.05);
+const frVoices = () => { try { return speechSynthesis.getVoices().filter(v => /^fr/i.test(v.lang)); } catch { return []; } };
+function pickVoice() {
+  const vs = frVoices();
+  return vs.find(v => v.voiceURI === voiceURI) || vs.find(v => /fr[-_]FR/i.test(v.lang) && v.localService) || vs.find(v => /fr[-_]FR/i.test(v.lang)) || vs[0] || null;
+}
+const REGION = { FR: 'France', CA: 'Canada', BE: 'Belgique', CH: 'Suisse', LU: 'Luxembourg' };
+function fillVoiceList() {
+  const sel = $('optVoiceName'), vs = frVoices();
+  sel.innerHTML = '';
+  if (!vs.length) { const o = document.createElement('option'); o.textContent = 'Voix du téléphone (par défaut)'; sel.appendChild(o); sel.disabled = true; return; }
+  sel.disabled = false;
+  const cur = pickVoice();
+  vs.forEach((v, i) => {
+    const o = document.createElement('option'), reg = REGION[(v.lang.split(/[-_]/)[1] || '').toUpperCase()] || v.lang;
+    // les noms techniques des voix Google/Samsung sont peu parlants : on numérote par région
+    const nice = /^(Google|Microsoft|Samsung|Apple)/.test(v.name) || v.name.length > 28 ? `Voix ${i + 1}` : v.name;
+    o.value = v.voiceURI; o.textContent = `${nice} · ${reg}${v.localService ? '' : ' · en ligne'}`;
+    if (cur && v.voiceURI === cur.voiceURI) o.selected = true;
+    sel.appendChild(o);
+  });
+}
+try { speechSynthesis.addEventListener('voiceschanged', fillVoiceList); } catch {}
+setTimeout(fillVoiceList, 0);
+$('optVoiceName').onchange = e => { voiceURI = e.target.value; store.set('voiceURI', voiceURI); sayTest(); };
+$('optRate').value = String(voiceRate);
+$('optRate').onchange = e => { voiceRate = +e.target.value; store.set('voiceRate', voiceRate); sayTest(); };
+$('btnVoiceTest').onclick = () => sayTest();
+function sayTest() {
+  const was = voiceOn; voiceOn = true;
+  say('Dans 200 mètres, tournez à gauche.');
+  voiceOn = was;
+}
 function say(text) {
   if (!voiceOn || !('speechSynthesis' in window)) return;
   try {
     const u = new SpeechSynthesisUtterance(text);
-    u.lang = 'fr-FR'; u.rate = 1.05;
-    const v = speechSynthesis.getVoices().find(v => /^fr/i.test(v.lang)); if (v) u.voice = v;
+    u.lang = 'fr-FR'; u.rate = voiceRate;
+    const v = pickVoice(); if (v) { u.voice = v; u.lang = v.lang; }
     if (speechSynthesis.speaking) speechSynthesis.cancel();
     speechSynthesis.speak(u);
   } catch { /* synthèse vocale indisponible */ }
