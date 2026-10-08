@@ -1254,7 +1254,7 @@ try {
 const saved = store.get('gpx');
 if (saved) { try { showTrack(parseGPX(saved)); } catch { drawProfile(); } } else drawProfile();
 checkShared();
-const VERSION = '8 · 8 oct. 2026';
+const VERSION = '9 · 8 oct. 2026';
 $('note').textContent = (window.isSecureContext ? '' : 'Attention : le GPS ne fonctionne qu\'en HTTPS. ') + 'Version ' + VERSION;
 // Mises à jour : on vérifie à chaque ouverture et on recharge dès qu'une nouvelle version est prête
 // (jamais pendant une navigation ou un enregistrement : on attend la fin)
