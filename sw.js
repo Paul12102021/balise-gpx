@@ -1,10 +1,20 @@
 /* Service worker : appli disponible hors ligne + tuiles de carte en cache */
-const APP = 'app-v6', TILES = 'tiles-v1';
-const SHELL = ['./', 'index.html', 'app.css?v=6', 'app.js?v=6', 'vendor/maplibre-gl.js', 'vendor/maplibre-gl.css',
-  'manifest.webmanifest', 'icon.svg', 'icon-192.png', 'icon-512.png'];
-const TILE_HOSTS = /(^|\.)(tile\.opentopomap\.org|tile\.openstreetmap\.org)$/;
-// a/b/c.tile.opentopomap.org servent les mêmes tuiles : une seule clé de cache
-const tileKey = u => u.replace(/^https:\/\/[abc]\.tile\.opentopomap\.org/, 'https://tile.opentopomap.org');
+const APP = 'app-v7', TILES = 'tiles-v2';
+const SHELL = ['./', 'index.html', 'app.css?v=7', 'app.js?v=7', 'vendor/maplibre-gl.js', 'vendor/maplibre-gl.css',
+  'departements.json', 'manifest.webmanifest', 'icon.svg', 'icon-192.png', 'icon-512.png'];
+
+// Clé de cache commune avec la page : https://tiles.balise/<fond>/<z>/<x>/<y>
+const tileKey = (prov, z, x, y) => `https://tiles.balise/${prov}/${z}/${x}/${y}`;
+function parseTile(url) {
+  let m;
+  if (/(^|\.)tile\.opentopomap\.org$/.test(url.hostname) && (m = url.pathname.match(/^\/(\d+)\/(\d+)\/(\d+)\.png$/)))
+    return { prov: 'topo', z: +m[1], x: +m[2], y: +m[3] };
+  if (url.hostname === 'tile.openstreetmap.org' && (m = url.pathname.match(/^\/(\d+)\/(\d+)\/(\d+)\.png$/)))
+    return { prov: 'osm', z: +m[1], x: +m[2], y: +m[3] };
+  if (url.hostname === 'data.geopf.fr' && /GetTile/i.test(url.searchParams.get('REQUEST') || ''))
+    return { prov: 'ign', z: +url.searchParams.get('TILEMATRIX'), x: +url.searchParams.get('TILECOL'), y: +url.searchParams.get('TILEROW') };
+  return null;
+}
 
 self.addEventListener('install', e => {
   e.waitUntil(caches.open(APP).then(c => c.addAll(SHELL.map(u => new Request(u, { cache: 'reload' })))).then(() => self.skipWaiting()));
@@ -13,6 +23,46 @@ self.addEventListener('activate', e => {
   e.waitUntil(caches.keys().then(ks => Promise.all(ks.filter(k => k !== APP && k !== TILES && k !== 'shared').map(k => caches.delete(k))))
     .then(() => self.clients.claim()));
 });
+
+async function fetchWithTimeout(req, ms) {
+  const ctrl = new AbortController(), t = setTimeout(() => ctrl.abort(), ms);
+  try { return await fetch(req, { signal: ctrl.signal }); } finally { clearTimeout(t); }
+}
+
+// Sans tuile à ce zoom : on agrandit une tuile moins détaillée déjà en mémoire (un peu floue, mais lisible)
+async function overzoom(cache, t) {
+  if (typeof OffscreenCanvas === 'undefined' || typeof createImageBitmap === 'undefined') return null;
+  const provs = t.prov === 'ign' ? ['ign'] : [t.prov, 'ign'];
+  for (let d = 1; d <= 5 && t.z - d >= 0; d++) {
+    const pz = t.z - d, px = t.x >> d, py = t.y >> d;
+    for (const prov of provs) {
+      const hit = await cache.match(tileKey(prov, pz, px, py));
+      if (!hit) continue;
+      try {
+        const bmp = await createImageBitmap(await hit.blob());
+        const size = bmp.width / 2 ** d, sx = (t.x - (px << d)) * size, sy = (t.y - (py << d)) * size;
+        const cv = new OffscreenCanvas(256, 256), ctx = cv.getContext('2d');
+        ctx.imageSmoothingQuality = 'high';
+        ctx.drawImage(bmp, sx, sy, size, size, 0, 0, 256, 256);
+        return new Response(await cv.convertToBlob({ type: 'image/png' }), { headers: { 'content-type': 'image/png' } });
+      } catch { /* image illisible : on essaie la suivante */ }
+    }
+  }
+  return null;
+}
+
+async function serveTile(req, t) {
+  const cache = await caches.open(TILES), key = tileKey(t.prov, t.z, t.x, t.y);
+  const own = await cache.match(key);
+  if (own) return own;
+  try {
+    const r = await fetchWithTimeout(req, 8000);
+    if (r.ok) { cache.put(key, r.clone()); return r; }
+  } catch { /* pas de réseau */ }
+  // hors ligne : la même tuile en version IGN téléchargée, sinon une tuile moins détaillée agrandie
+  if (t.prov !== 'ign') { const alt = await cache.match(tileKey('ign', t.z, t.x, t.y)); if (alt) return alt; }
+  return (await overzoom(cache, t)) || new Response('', { status: 504 });
+}
 
 self.addEventListener('fetch', e => {
   const req = e.request, url = new URL(req.url);
@@ -30,20 +80,8 @@ self.addEventListener('fetch', e => {
   }
   if (req.method !== 'GET') return;
 
-  // Tuiles : cache d'abord, sinon réseau puis mise en cache
-  if (TILE_HOSTS.test(url.hostname)) {
-    const key = tileKey(req.url);
-    e.respondWith(caches.open(TILES).then(async c => {
-      const hit = await c.match(key);
-      if (hit) return hit;
-      try {
-        const r = await fetch(req);
-        if (r.ok) c.put(key, r.clone());
-        return r;
-      } catch { return new Response('', { status: 504 }); }
-    }));
-    return;
-  }
+  const t = parseTile(url);
+  if (t) { e.respondWith(serveTile(req, t)); return; }
 
   // Fichiers de l'appli : réseau d'abord (pour recevoir les mises à jour), cache si hors ligne
   if (url.origin === location.origin) {

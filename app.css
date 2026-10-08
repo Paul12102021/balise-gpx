@@ -203,3 +203,13 @@ body.nav .toast { top: auto; bottom: calc(env(safe-area-inset-bottom, 0px) + 180
 .lib-item span { font-size: 13px; color: var(--muted); font-variant-numeric: tabular-nums; }
 .lib-del { flex: none; width: 40px; height: 40px; border: 0; background: none; color: var(--muted); display: grid; place-items: center; cursor: pointer; }
 .lib-del svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 2.4; stroke-linecap: round; }
+
+/* ---------- Cartes hors ligne ---------- */
+.dl-box { display: flex; flex-direction: column; gap: 8px; padding: 12px; border: 1px solid var(--line); border-radius: 12px; }
+.dl-title { font-weight: 700; font-size: 14px; }
+.dl-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.dl-row small { color: var(--muted); min-width: 0; }
+.dl-box select { width: 100%; }
+.pack-acts { display: flex; align-items: center; gap: 4px; flex: none; }
+.btn.small { min-height: 36px; padding: 0 10px; font-size: 13px; }
+.check { width: 22px; height: 22px; accent-color: var(--go); }

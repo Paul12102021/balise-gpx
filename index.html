@@ -12,7 +12,7 @@
 <link rel="icon" href="icon.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="icon-192.png">
 <link rel="stylesheet" href="vendor/maplibre-gl.css">
-<link rel="stylesheet" href="app.css?v=6">
+<link rel="stylesheet" href="app.css?v=7">
 </head>
 <body>
 <div id="map" aria-label="Carte"></div>
@@ -109,14 +109,9 @@
       </select>
     </div>
     <div class="row">
-      <span>Cartes hors ligne le long de la trace<br><small id="offInfo"></small></span>
-      <button id="btnOffline" class="btn">Télécharger</button>
+      <span>Cartes hors ligne<br><small>Par trace ou par département</small></span>
+      <button id="btnMaps" class="btn">Mes cartes</button>
     </div>
-    <div class="row">
-      <span><small id="storeInfo"></small></span>
-      <button id="btnClearTiles" class="btn ghost">Vider les cartes</button>
-    </div>
-    <div class="progress" id="offProg" hidden><div id="offBar"></div><span id="offTxt"></span></div>
     <div class="row">
       <span>Ma trace enregistrée <small id="recInfo">(vide)</small></span>
       <button id="btnExport" class="btn">Exporter GPX</button>
@@ -146,9 +141,41 @@
   </div>
 </div>
 
+<div id="maps" class="lib" hidden>
+  <div class="lib-panel" role="dialog" aria-label="Cartes hors ligne">
+    <div class="lib-head">
+      <b>Cartes hors ligne</b>
+      <button id="mapsClose" class="closebtn" aria-label="Fermer"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></svg>Fermer</button>
+    </div>
+
+    <div class="dl-box">
+      <div class="dl-title">Le long de la trace ouverte</div>
+      <div class="dl-row"><small id="dlTraceInfo"></small><button id="dlTrace" class="btn">Télécharger</button></div>
+    </div>
+    <div class="dl-box">
+      <div class="dl-title">Un département entier</div>
+      <select id="depSel" aria-label="Département"><option>Chargement…</option></select>
+      <select id="depDetail" aria-label="Niveau de détail">
+        <option value="14">Standard (routes, chemins, relief)</option>
+        <option value="15">Détaillé (≈ 4× plus lourd)</option>
+      </select>
+      <div class="dl-row"><small id="dlDepInfo"></small><button id="dlDep" class="btn">Télécharger</button></div>
+    </div>
+    <div class="progress" id="offProg" hidden><div id="offBar"></div><span id="offTxt"></span></div>
+    <button id="dlStop" class="btn ghost" hidden>Arrêter le téléchargement</button>
+
+    <div class="dl-title">Téléchargées</div>
+    <ul id="packList" class="lib-list"></ul>
+    <p id="packEmpty" class="note">Aucune carte téléchargée pour l'instant.</p>
+    <div class="row"><label for="showPacks">Montrer ces zones sur la carte</label><input type="checkbox" id="showPacks" class="check"></div>
+    <div class="row"><small id="storeInfo"></small><button id="btnClearTiles" class="btn ghost">Tout supprimer</button></div>
+    <p class="note">Carte téléchargée : Plan IGN (France), libre d'utilisation hors ligne. Sans réseau, l'appli passe toute seule sur cette carte. Garde l'écran allumé pendant un téléchargement.</p>
+  </div>
+</div>
+
 <div id="toast" class="toast" hidden></div>
 
 <script src="vendor/maplibre-gl.js"></script>
-<script src="app.js?v=6"></script>
+<script src="app.js?v=7"></script>
 </body>
 </html>

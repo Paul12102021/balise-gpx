@@ -143,13 +143,16 @@ function project(p, pos, global = false) {
 // =====================================================================
 // Carte (MapLibre : rotation et inclinaison pour le mode navigation)
 // =====================================================================
+// Plan IGN : données ouvertes, seul fond que l'on télécharge pour le hors ligne
+const IGN_URL = 'https://data.geopf.fr/wmts?SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0&LAYER=GEOGRAPHICALGRIDSYSTEMS.PLANIGNV2&STYLE=normal&TILEMATRIXSET=PM_0_19&TILEMATRIX={z}&TILEROW={y}&TILECOL={x}&FORMAT=image/png';
 const LAYERS = [
-  { name: 'Topo', tiles: ['a', 'b', 'c'].map(s => `https://${s}.tile.opentopomap.org/{z}/{x}/{y}.png`), max: 17,
+  { id: 'topo', name: 'Topo', tiles: ['a', 'b', 'c'].map(s => `https://${s}.tile.opentopomap.org/{z}/{x}/{y}.png`), max: 17,
     attr: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>, SRTM · © <a href="https://opentopomap.org">OpenTopoMap</a>' },
-  { name: 'Plan', tiles: ['https://tile.openstreetmap.org/{z}/{x}/{y}.png'], max: 19,
+  { id: 'ign', name: 'IGN', tiles: [IGN_URL], max: 19, attr: '© <a href="https://www.ign.fr">IGN</a> · Plan IGN' },
+  { id: 'osm', name: 'Plan OSM', tiles: ['https://tile.openstreetmap.org/{z}/{x}/{y}.png'], max: 19,
     attr: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>' }
 ];
-let layerIdx = (+(store.get('layer') || 0)) % LAYERS.length;
+let layerIdx = Math.max(0, LAYERS.findIndex(l => l.id === store.get('layerId')));
 const baseSource = l => ({ type: 'raster', tiles: l.tiles, tileSize: 256, maxzoom: l.max, attribution: l.attr });
 const EMPTY = { type: 'FeatureCollection', features: [] };
 const lineFeature = pts => ({ type: 'Feature', properties: {}, geometry: { type: 'LineString', coordinates: pts.map(p => [p.lon, p.lat]) } });
@@ -174,6 +177,10 @@ map.on('load', () => {
   map.addSource('rejoin', { type: 'geojson', data: EMPTY });
   map.addSource('rec', { type: 'geojson', data: EMPTY });
   map.addSource('turn', { type: 'geojson', data: EMPTY });
+  map.addSource('packs', { type: 'geojson', data: EMPTY });
+  map.addLayer({ id: 'packs-fill', type: 'fill', source: 'packs', filter: ['==', ['geometry-type'], 'Polygon'], paint: { 'fill-color': '#2f8a4c', 'fill-opacity': .07 } });
+  map.addLayer({ id: 'packs-line', type: 'line', source: 'packs', filter: ['==', ['geometry-type'], 'Polygon'], paint: { 'line-color': '#2f8a4c', 'line-width': 2, 'line-dasharray': [3, 2], 'line-opacity': .8 } });
+  map.addLayer({ id: 'packs-trace', type: 'line', source: 'packs', filter: ['==', ['geometry-type'], 'LineString'], layout: { 'line-join': 'round', 'line-cap': 'round' }, paint: { 'line-color': '#2f8a4c', 'line-width': ['interpolate', ['exponential', 2], ['zoom'], 8, 3, 16, 600], 'line-opacity': .1 } });
   const round = { 'line-join': 'round', 'line-cap': 'round' };
   const w = (a, b) => ['interpolate', ['linear'], ['zoom'], 10, a, 18, b];
   map.addLayer({ id: 'track-casing', type: 'line', source: 'track', layout: round, paint: { 'line-color': '#fff', 'line-width': w(5, 14), 'line-opacity': .9 } });
@@ -185,13 +192,28 @@ map.on('load', () => {
 });
 async function setSrc(id, data) { await ready; const s = map.getSource(id); if (s) s.setData(data); }
 
-$('btnLayer').onclick = async () => {
+async function setLayer(i, remember = true) {
+  layerIdx = i; if (remember) store.set('layerId', LAYERS[i].id);
   await ready;
-  layerIdx = (layerIdx + 1) % LAYERS.length; store.set('layer', layerIdx);
   map.removeLayer('base'); map.removeSource('base');
-  map.addSource('base', baseSource(LAYERS[layerIdx])); map.addLayer({ id: 'base', type: 'raster', source: 'base' }, 'track-casing');
-  toast('Fond de carte : ' + LAYERS[layerIdx].name); updateOfflineInfo();
+  map.addSource('base', baseSource(LAYERS[i]));
+  map.addLayer({ id: 'base', type: 'raster', source: 'base' }, map.getLayer('packs-fill') ? 'packs-fill' : 'track-casing');
+}
+$('btnLayer').onclick = () => {
+  offlineSwitched = null;
+  const next = (layerIdx + 1) % LAYERS.length;
+  setLayer(next); toast('Fond de carte : ' + LAYERS[next].name);
 };
+
+// Sans réseau, on bascule tout seul sur la carte IGN téléchargée, puis on revient au fond choisi
+let offlineSwitched = null;
+function onOffline() {
+  const ign = LAYERS.findIndex(l => l.id === 'ign');
+  if (layerIdx !== ign) { offlineSwitched = layerIdx; setLayer(ign, false); toast('Pas de réseau : carte IGN hors ligne'); }
+}
+window.addEventListener('offline', onOffline);
+window.addEventListener('online', () => { if (offlineSwitched != null) { setLayer(offlineSwitched, false); offlineSwitched = null; toast('Réseau retrouvé'); } });
+if (navigator.onLine === false) onOffline();
 
 function el(cls, html = '') { const e = document.createElement('div'); e.className = cls; e.innerHTML = html; return e; }
 const startMk = new maplibregl.Marker({ element: el('mk mk-start') });
@@ -280,15 +302,19 @@ function loadText(text, save = true) {
 let dbP = null;
 function openDB() {
   return dbP || (dbP = new Promise((res, rej) => {
-    const r = indexedDB.open('balise', 1);
-    r.onupgradeneeded = () => r.result.createObjectStore('tracks', { keyPath: 'id' });
+    const r = indexedDB.open('balise', 2);
+    r.onupgradeneeded = () => {
+      const d = r.result;
+      if (!d.objectStoreNames.contains('tracks')) d.createObjectStore('tracks', { keyPath: 'id' });
+      if (!d.objectStoreNames.contains('packs')) d.createObjectStore('packs', { keyPath: 'id' });
+    };
     r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error);
   }));
 }
-async function idb(mode, fn) {
+async function idb(mode, fn, storeName = 'tracks') {
   const d = await openDB();
   return new Promise((res, rej) => {
-    const tx = d.transaction('tracks', mode), req = fn(tx.objectStore('tracks'));
+    const tx = d.transaction(storeName, mode), req = fn(tx.objectStore(storeName));
     tx.oncomplete = () => res(req && req.result); tx.onerror = () => rej(tx.error);
   });
 }
@@ -856,78 +882,263 @@ $('btnExport').onclick = async () => {
 };
 
 // =====================================================================
-// Cartes hors ligne (tuiles mises en cache le long de la trace)
+// Cartes hors ligne : Plan IGN, le long d'une trace ou par département
+// (OpenStreetMap et OpenTopoMap interdisent le téléchargement de zones)
 // =====================================================================
-const tileKey = u => u.replace(/^https:\/\/[abc]\.tile\.opentopomap\.org/, 'https://tile.opentopomap.org');
+const TILE_CACHE = 'tiles-v2';
+// clé de cache partagée avec le service worker, indépendante du serveur
+const tileKey = (prov, z, x, y) => `https://tiles.balise/${prov}/${z}/${x}/${y}`;
+const ignTileUrl = (z, x, y) => IGN_URL.replace('{z}', z).replace('{x}', x).replace('{y}', y);
+let tileKB = clamp(+(store.get('tileKB') || 20), 8, 60); // poids moyen d'une tuile, affiné après chaque téléchargement
+
 function tileXY(lat, lon, z) {
   const n = 2 ** z, x = Math.floor((lon + 180) / 360 * n);
   const y = Math.floor((1 - Math.log(Math.tan(rad(lat)) + 1 / Math.cos(rad(lat))) / Math.PI) / 2 * n);
   return [x, y];
 }
-function tilesAlongTrack(zmin, zmax) {
-  const set = new Set(), l = LAYERS[layerIdx];
-  for (let z = zmin; z <= Math.min(zmax, l.max); z++) {
-    let lastKey = '';
-    for (const p of track.pts) {
-      const [x, y] = tileXY(p.lat, p.lon, z), key = x + '/' + y;
-      if (key === lastKey) continue; lastKey = key;
+const tile2lon = (x, z) => x / 2 ** z * 360 - 180;
+const tile2lat = (y, z) => deg(Math.atan(Math.sinh(Math.PI - 2 * Math.PI * y / 2 ** z)));
+const fmtMo = kb => { const mb = kb / 1024; return mb < 10 ? mb.toFixed(1).replace('.', ',') + ' Mo' : mb < 1000 ? Math.round(mb) + ' Mo' : (mb / 1024).toFixed(1).replace('.', ',') + ' Go'; };
+
+// Le long d'une trace : la tuile traversée et ses voisines, zooms 10 à 16 (bande d'environ 1 km)
+function traceTiles(p, zmax = 16) {
+  const set = new Set();
+  for (let z = 10; z <= zmax; z++) {
+    let last = '';
+    for (const q of p.pts) {
+      const [x, y] = tileXY(q.lat, q.lon, z), k = x + '/' + y;
+      if (k === last) continue; last = k;
       for (let dx = -1; dx <= 1; dx++) for (let dy = -1; dy <= 1; dy++) set.add(`${z}/${x + dx}/${y + dy}`);
     }
   }
-  return [...set].map(k => {
-    const [z, x, y] = k.split('/');
-    return l.tiles[(+x + +y) % l.tiles.length].replace('{z}', z).replace('{x}', x).replace('{y}', y);
-  });
+  return [...set];
 }
-// Estimation avant téléchargement : une tuile OpenTopoMap pèse en moyenne ~30 Ko
-const TILE_KB = 30;
+
+// Département : toutes les tuiles qui touchent son contour
+function inRing(lon, lat, ring) {
+  let inside = false;
+  for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+    const [xi, yi] = ring[i], [xj, yj] = ring[j];
+    if ((yi > lat) !== (yj > lat) && lon < (xj - xi) * (lat - yi) / (yj - yi) + xi) inside = !inside;
+  }
+  return inside;
+}
+const inPolys = (lon, lat, polys) => polys.some(p => inRing(lon, lat, p[0]) && !p.slice(1).some(h => inRing(lon, lat, h)));
+function polysBBox(polys) {
+  let w = 180, s = 90, e = -180, n = -90;
+  polys.forEach(p => p[0].forEach(([x, y]) => { w = Math.min(w, x); e = Math.max(e, x); s = Math.min(s, y); n = Math.max(n, y); }));
+  return [w, s, e, n];
+}
+function polyTiles(polys, zmax) {
+  const [w, s, e, n] = polysBBox(polys), out = [];
+  for (let z = 8; z <= zmax; z++) {
+    const [x0, y0] = tileXY(n, w, z), [x1, y1] = tileXY(s, e, z);
+    for (let x = x0; x <= x1; x++) for (let y = y0; y <= y1; y++) {
+      if (z <= 11) { out.push(`${z}/${x}/${y}`); continue; }
+      const L = tile2lon(x, z), Rr = tile2lon(x + 1, z), T = tile2lat(y, z), B = tile2lat(y + 1, z);
+      const pts = [[(L + Rr) / 2, (T + B) / 2], [L, T], [Rr, T], [L, B], [Rr, B]];
+      if (pts.some(([lo, la]) => inPolys(lo, la, polys))) out.push(`${z}/${x}/${y}`);
+    }
+  }
+  return out;
+}
+
+// ---------- départements ----------
+let deps = null;
+async function loadDeps() {
+  if (deps) return deps;
+  const r = await fetch('departements.json');
+  deps = await r.json();
+  const sel = $('depSel'); sel.innerHTML = '';
+  deps.forEach((d, i) => { const o = document.createElement('option'); o.value = i; o.textContent = `${d.code} · ${d.nom}`; sel.appendChild(o); });
+  // présélection : le département où l'on se trouve, sinon celui au centre de la carte
+  const c = me ? { lon: me.lon, lat: me.lat } : (() => { const m = map.getCenter(); return { lon: m.lng, lat: m.lat }; })();
+  const here = deps.findIndex(d => inPolys(c.lon, c.lat, d.polys));
+  const saved = store.get('depIdx');
+  sel.value = String(here >= 0 ? here : saved != null ? saved : 0);
+  return deps;
+}
+
+// ---------- panneau « Cartes hors ligne » ----------
+let depTilesCache = { key: '', tiles: [] };
+function currentDepTiles() {
+  const d = deps[+$('depSel').value], z = +$('depDetail').value, key = d.code + ':' + z;
+  if (depTilesCache.key !== key) depTilesCache = { key, tiles: polyTiles(d.polys, z) };
+  return { d, z, tiles: depTilesCache.tiles };
+}
 function updateOfflineInfo() {
-  const info = $('offInfo');
-  if (!track) { info.textContent = 'Ouvre une trace pour voir la taille'; return; }
-  const n = tilesAlongTrack(11, 16).length, mb = n * TILE_KB / 1024;
-  info.textContent = `≈ ${n.toLocaleString('fr-FR')} tuiles · ~${mb < 10 ? mb.toFixed(1).replace('.', ',') : Math.round(mb)} Mo · bande d'environ 1 km autour de la trace`;
+  if (track) {
+    const n = traceTiles(track).length;
+    $('dlTraceInfo').textContent = `${track.name} · ≈ ${n.toLocaleString('fr-FR')} tuiles · ~${fmtMo(n * tileKB)}`;
+    $('dlTrace').disabled = false;
+  } else { $('dlTraceInfo').textContent = 'Ouvre d\'abord une trace GPX.'; $('dlTrace').disabled = true; }
+  if (deps) {
+    const { tiles } = currentDepTiles();
+    $('dlDepInfo').textContent = `≈ ${tiles.length.toLocaleString('fr-FR')} tuiles · ~${fmtMo(tiles.length * tileKB)}`;
+  }
 }
 async function updateStorageInfo() {
   try {
     if (!navigator.storage || !navigator.storage.estimate) return;
     const e = await navigator.storage.estimate();
-    $('storeInfo').textContent = `Espace utilisé par l'appli sur ce téléphone : ${Math.round((e.usage || 0) / 1048576)} Mo`;
+    const free = e.quota ? ` · ${fmtMo((e.quota - e.usage) / 1024)} encore disponibles` : '';
+    $('storeInfo').textContent = `Espace utilisé : ${fmtMo((e.usage || 0) / 1024)}${free}`;
   } catch {}
 }
-$('btnClearTiles').onclick = async () => {
-  try { await caches.delete('tiles-v1'); toast('Cartes hors ligne supprimées'); updateStorageInfo(); } catch {}
-};
-let dlRunning = false;
-$('btnOffline').onclick = async () => {
-  if (!track) { toast('Ouvre d\'abord un fichier GPX.'); return; }
+async function openMaps() {
+  toggleMore(false);
+  $('maps').hidden = false;
+  $('showPacks').checked = store.get('showPacks') !== '0';
+  updateOfflineInfo(); updateStorageInfo(); renderPacks();
+  try { await loadDeps(); updateOfflineInfo(); } catch { $('dlDepInfo').textContent = 'Liste des départements indisponible.'; }
+}
+$('btnMaps').onclick = openMaps;
+$('mapsClose').onclick = () => $('maps').hidden = true;
+$('maps').onclick = e => { if (e.target === $('maps')) $('maps').hidden = true; };
+$('depSel').onchange = () => { store.set('depIdx', $('depSel').value); updateOfflineInfo(); };
+$('depDetail').onchange = updateOfflineInfo;
+$('showPacks').onchange = e => { store.set('showPacks', e.target.checked ? '1' : '0'); drawPacks(); };
+
+// ---------- téléchargement ----------
+let dl = null;
+async function downloadPack(pack, tiles) {
+  if (dl) { toast('Un téléchargement est déjà en cours.'); return; }
   if (!('caches' in window)) { toast('Ce navigateur ne permet pas le stockage hors ligne.', 4000); return; }
-  if (dlRunning) return;
-  const urls = tilesAlongTrack(11, 16);
-  if (urls.length > 5000) { toast(`Trace trop longue (${urls.length} tuiles). Découpe-la en étapes.`, 5000); return; }
-  dlRunning = true; $('btnOffline').disabled = true; $('offProg').hidden = false;
-  const cache = await caches.open('tiles-v1');
-  let done = 0, fail = 0;
+  if (navigator.onLine === false) { toast('Pas de réseau : connecte-toi pour télécharger.', 4000); return; }
+  dl = { stop: false };
+  keepAwake();
+  if (navigator.storage && navigator.storage.persist) navigator.storage.persist().catch(() => {});
+  $('offProg').hidden = false; $('dlStop').hidden = false; $('dlTrace').disabled = $('dlDep').disabled = true;
+  const cache = await caches.open(TILE_CACHE), queue = tiles.slice(), total = tiles.length;
+  let done = 0, fail = 0, bytes = 0, fetched = 0, fetchedBytes = 0;
+  const show = () => {
+    $('offBar').style.width = (done / total * 100) + '%';
+    $('offTxt').textContent = `${pack.name} · ${done.toLocaleString('fr-FR')} / ${total.toLocaleString('fr-FR')}`;
+  };
   const worker = async () => {
-    while (urls.length) {
-      const u = urls.shift();
+    while (queue.length && !dl.stop) {
+      const [z, x, y] = queue.shift().split('/'), key = tileKey('ign', z, x, y);
       try {
-        if (!(await cache.match(tileKey(u)))) {
-          const r = await fetch(u, { mode: 'cors' });
-          if (r.ok) await cache.put(tileKey(u), r); else fail++;
+        const hit = await cache.match(key);
+        if (hit) bytes += +(hit.headers.get('x-size') || tileKB * 1024);
+        else {
+          const r = await fetch(ignTileUrl(z, x, y), { mode: 'cors' });
+          if (!r.ok) throw new Error(r.status);
+          const b = await r.blob();
+          await cache.put(key, new Response(b, { headers: { 'content-type': b.type || 'image/png', 'x-size': String(b.size) } }));
+          bytes += b.size; fetched++; fetchedBytes += b.size;
         }
       } catch { fail++; }
       done++;
-      const tot = done + urls.length;
-      $('offBar').style.width = (done / tot * 100) + '%';
-      $('offTxt').textContent = `${done} / ${tot} tuiles`;
+      if (done % 10 === 0 || !queue.length) show();
     }
   };
-  await Promise.all([worker(), worker(), worker()]); // 3 à la fois, pour ménager les serveurs de cartes
-  dlRunning = false; $('btnOffline').disabled = false;
-  updateStorageInfo();
-  $('offTxt').textContent = fail ? `Terminé · ${fail} tuiles en échec, relance pour compléter` : 'Carte disponible hors ligne ✓';
-  if (navigator.storage && navigator.storage.persist) navigator.storage.persist().catch(() => {});
+  show();
+  await Promise.all(Array.from({ length: 6 }, worker));
+  const stopped = dl.stop; dl = null;
+  if (fetched > 50) { tileKB = clamp(Math.round(fetchedBytes / fetched / 1024 * 10) / 10 || tileKB, 8, 60); store.set('tileKB', tileKB); }
+  pack.tiles = tiles; pack.count = total; pack.bytes = bytes; pack.date = Date.now();
+  pack.complete = !stopped && fail === 0; pack.missing = stopped ? total - done + fail : fail;
+  try { await idb('readwrite', st => st.put(pack), 'packs'); } catch {}
+  $('dlStop').hidden = true; $('dlTrace').disabled = !track; $('dlDep').disabled = false;
+  $('offTxt').textContent = pack.complete ? `${pack.name} : disponible hors ligne ✓` : `${pack.name} : ${pack.missing.toLocaleString('fr-FR')} tuiles manquantes · touche « Reprendre »`;
+  toast(pack.complete ? 'Carte téléchargée ✓' : 'Téléchargement incomplet, tu peux le reprendre.', 4000);
+  renderPacks(); updateStorageInfo(); updateOfflineInfo(); drawPacks();
+}
+$('dlStop').onclick = () => { if (dl) { dl.stop = true; toast('Arrêt du téléchargement…'); } };
+
+function simplifyLine(pts, step = 50) {
+  const out = []; let last = null;
+  for (const p of pts) if (!last || hav(last, p) >= step) { out.push([+p.lon.toFixed(5), +p.lat.toFixed(5)]); last = p; }
+  const e = pts[pts.length - 1]; out.push([e.lon, e.lat]);
+  return out;
+}
+$('dlTrace').onclick = () => {
+  if (!track) return;
+  const lons = track.pts.map(p => p.lon), lats = track.pts.map(p => p.lat);
+  downloadPack({
+    id: 'trace:' + track.name + '|' + Math.round(track.total), kind: 'trace', name: track.name, detail: 'trace',
+    bbox: [Math.min(...lons), Math.min(...lats), Math.max(...lons), Math.max(...lats)], line: simplifyLine(track.pts)
+  }, traceTiles(track));
 };
+$('dlDep').onclick = async () => {
+  await loadDeps();
+  const { d, z, tiles } = currentDepTiles();
+  if (tiles.length > 40000) { toast('Zone trop grande.', 4000); return; }
+  try {
+    const e = navigator.storage && navigator.storage.estimate ? await navigator.storage.estimate() : null;
+    if (e && e.quota && tiles.length * tileKB * 1024 > (e.quota - e.usage) * 0.9) { toast('Pas assez de place sur le téléphone pour cette carte.', 5000); return; }
+  } catch {}
+  downloadPack({ id: `dep:${d.code}:${z}`, kind: 'dep', code: d.code, name: `${d.code} · ${d.nom}`, detail: z >= 15 ? 'détaillé' : 'standard', bbox: polysBBox(d.polys) }, tiles);
+};
+
+// ---------- liste des cartes téléchargées ----------
+async function listPacks() { try { return ((await idb('readonly', st => st.getAll(), 'packs')) || []).sort((a, b) => b.date - a.date); } catch { return []; } }
+async function renderPacks() {
+  const list = $('packList'), packs = await listPacks();
+  list.innerHTML = ''; $('packEmpty').hidden = packs.length > 0;
+  for (const p of packs) {
+    const li = document.createElement('li');
+    const info = document.createElement('div'); info.className = 'lib-item';
+    info.innerHTML = '<b></b><span></span>';
+    info.querySelector('b').textContent = p.name;
+    info.querySelector('span').textContent = `${p.kind === 'trace' ? 'Le long de la trace' : 'Département, ' + p.detail} · ${fmtMo(p.bytes / 1024)} · ${fmtDate(p.date)}` + (p.complete ? '' : ` · incomplet`);
+    const acts = document.createElement('div'); acts.className = 'pack-acts';
+    if (!p.complete) {
+      const re = document.createElement('button'); re.className = 'btn small'; re.textContent = 'Reprendre';
+      re.onclick = () => downloadPack(p, p.tiles); acts.appendChild(re);
+    }
+    const see = document.createElement('button'); see.className = 'btn small'; see.textContent = 'Voir';
+    see.onclick = () => {
+      $('maps').hidden = true;
+      if (!$('showPacks').checked) { $('showPacks').checked = true; store.set('showPacks', '1'); drawPacks(); }
+      const [w, s, e, n] = p.bbox;
+      map.fitBounds([[w, s], [e, n]], { padding: { top: 90, bottom: $('sheet').offsetHeight + 20, left: 30, right: 76 }, bearing: 0, pitch: 0, duration: 700 });
+    };
+    const del = document.createElement('button'); del.className = 'lib-del'; del.setAttribute('aria-label', 'Supprimer ' + p.name);
+    del.innerHTML = '<svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></svg>';
+    del.onclick = () => deletePack(p);
+    acts.append(see, del);
+    li.append(info, acts); list.appendChild(li);
+  }
+}
+async function deletePack(p) {
+  if (dl) { toast('Attends la fin du téléchargement.'); return; }
+  toast('Suppression…', 8000);
+  try {
+    const others = new Set(); (await listPacks()).filter(q => q.id !== p.id).forEach(q => (q.tiles || []).forEach(t => others.add(t)));
+    const cache = await caches.open(TILE_CACHE);
+    for (const t of p.tiles || []) if (!others.has(t)) { const [z, x, y] = t.split('/'); await cache.delete(tileKey('ign', z, x, y)); }
+    await idb('readwrite', st => st.delete(p.id), 'packs');
+    toast(`${p.name} supprimée`);
+  } catch { toast('Suppression impossible.'); }
+  renderPacks(); updateStorageInfo(); drawPacks();
+}
+$('btnClearTiles').onclick = async () => {
+  if (dl) { toast('Attends la fin du téléchargement.'); return; }
+  try {
+    await caches.delete(TILE_CACHE);
+    for (const p of await listPacks()) await idb('readwrite', st => st.delete(p.id), 'packs');
+    toast('Toutes les cartes hors ligne sont supprimées');
+  } catch {}
+  renderPacks(); updateStorageInfo(); drawPacks();
+};
+
+// zones téléchargées dessinées sur la carte
+async function drawPacks() {
+  if (store.get('showPacks') === '0') { setSrc('packs', EMPTY); return; }
+  const packs = await listPacks(), feats = [];
+  for (const p of packs) {
+    if (p.kind === 'trace' && p.line) feats.push({ type: 'Feature', properties: {}, geometry: { type: 'LineString', coordinates: p.line } });
+    if (p.kind === 'dep') {
+      try { await loadDeps(); } catch { continue; }
+      const d = deps.find(x => x.code === p.code);
+      if (d) d.polys.forEach(poly => feats.push({ type: 'Feature', properties: {}, geometry: { type: 'Polygon', coordinates: poly } }));
+    }
+  }
+  setSrc('packs', { type: 'FeatureCollection', features: feats });
+}
+drawPacks();
 
 // =====================================================================
 // Simulation : parcourt la trace avec un écart volontaire, pour tester à la maison
@@ -969,7 +1180,6 @@ $('btnDemo').onclick = () => {
 
 function toggleMore(open) {
   const m = $('more'); m.hidden = open === undefined ? !m.hidden : !open;
-  if (!m.hidden) { updateOfflineInfo(); updateStorageInfo(); }
   document.body.classList.toggle('sheet-open', !m.hidden);
   $('btnMore').textContent = m.hidden ? 'Réglages' : 'Fermer';
 }
@@ -1013,7 +1223,7 @@ try {
 const saved = store.get('gpx');
 if (saved) { try { showTrack(parseGPX(saved)); } catch { drawProfile(); } } else drawProfile();
 checkShared();
-const VERSION = '6 · 8 oct. 2026';
+const VERSION = '7 · 8 oct. 2026';
 $('note').textContent = (window.isSecureContext ? '' : 'Attention : le GPS ne fonctionne qu\'en HTTPS. ') + 'Version ' + VERSION;
 // Mises à jour : on vérifie à chaque ouverture et on recharge dès qu'une nouvelle version est prête
 // (jamais pendant une navigation ou un enregistrement : on attend la fin)
