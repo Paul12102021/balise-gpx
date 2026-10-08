@@ -301,3 +301,5 @@ body.zone .zone-frame {
   border: 3px dashed #2f8a4c; border-radius: 10px; box-shadow: 0 0 0 9999px rgba(10, 16, 13, .28);
 }
 body.zone .hud, body.zone .sheet, body.zone .fab-col { display: none !important; }
+
+.linkbtn { background: none; border: 0; padding: 0; color: var(--muted); font: inherit; text-decoration: underline; cursor: pointer; }
