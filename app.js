@@ -4,7 +4,7 @@
 
 // La page et le code doivent être de la même version. Sinon (page gardée en cache
 // par le téléphone ou par GitHub), on recharge une page fraîche, au plus 3 fois.
-const APP_VERSION = 24;
+const APP_VERSION = 25;
 try {
   const meta = document.querySelector('meta[name="balise-version"]');
   const pageV = meta ? +meta.content : 0;
@@ -530,14 +530,14 @@ function onPos(pos) {
   }
   if (nav) {
     offTrackLogic();
-    if (rejoin && progress && progress.dist < Math.min(threshold * 0.7, 30) && !isOff) clearRejoin();
+    if (rejoin && progress && progress.dist < Math.min(thrRef() * 0.7, 30) && !isOff) clearRejoin();
     if (!rejoin && progress && progress.remain < 25 && !arrived) {
       arrived = true; say('Vous êtes arrivé'); vibrate([200, 100, 200]);
     }
     guidance();
     if (follow) navCamera(1000);
   } else {
-    if (rejoin && progress && progress.dist < Math.min(threshold * 0.7, 30)) { clearRejoin(); toast('Tu es sur la trace'); }
+    if (rejoin && progress && progress.dist < Math.min(thrRef() * 0.7, 30)) { clearRejoin(); toast('Tu es sur la trace'); }
     if (followOv) map.easeTo({ center: [pos.lon, pos.lat], duration: 800 });
   }
   if (progress) setDone(progress.along / track.total);
@@ -729,11 +729,18 @@ const vibrate = p => { if (!vibOn) return; try { navigator.vibrate && navigator.
 // =====================================================================
 // Hors trace et itinéraire de retour
 // =====================================================================
-let threshold = +(store.get('thr') || 50), offCount = 0, isOff = false, lastAlert = 0;
+// 0 = aucune alerte (le retour à la trace reste possible avec le bouton ↩)
+const savedThr = store.get('thr');
+let threshold = savedThr == null ? 50 : +savedThr, offCount = 0, isOff = false, lastAlert = 0;
 let rejoin = null, rejoinProg = null, routing = false, lastRoute = 0, rejoinOff = 0;
 let profile = store.get('profile') || 'hiking-mountain';
 $('thr').value = String(threshold);
-$('thr').onchange = e => { threshold = +e.target.value; store.set('thr', threshold); };
+$('thr').onchange = e => {
+  threshold = +e.target.value; store.set('thr', threshold);
+  if (!threshold && isOff) { isOff = false; offCount = 0; clearRejoin(); guidance(); }
+  toast(threshold ? `Alerte au-delà de ${threshold} m de la trace` : 'Alerte hors trace désactivée');
+};
+const thrRef = () => threshold || 50; // distance « sur la trace » quand l'alerte est coupée
 $('prof').value = profile;
 $('autoRec').checked = store.get('autoRec') === '1';
 $('autoRec').onchange = e => store.set('autoRec', e.target.checked ? '1' : '0');
@@ -752,13 +759,16 @@ function alertOff() { vibrate([400, 150, 400, 150, 400]); beep(); lastAlert = Da
 
 function offTrackLogic() {
   if (!progress || arrived) return;
-  const acc = me.acc || 0, tol = threshold + Math.min(acc, 60) * 0.5, now = Date.now();
+  // alerte coupée : rien sur une trace GPX ; vers une destination, on garde le recalcul (sans alerte)
+  const thr = threshold || (track && track.route ? 50 : 0);
+  if (!thr) return;
+  const acc = me.acc || 0, tol = thr + Math.min(acc, 60) * 0.5, now = Date.now();
   if (progress.dist > tol && acc < 100) offCount++; else if (progress.dist <= tol) offCount = 0;
   if (!isOff && offCount >= 2) {
-    isOff = true; alertOff();
-    say('Vous avez quitté la trace. Calcul d\'un itinéraire de retour.');
+    isOff = true;
+    if (threshold) { alertOff(); say('Vous avez quitté la trace. Calcul d\'un itinéraire de retour.'); }
     requestRejoin(false);
-  } else if (isOff && progress.dist < threshold * 0.7) {
+  } else if (isOff && progress.dist < thr * 0.7) {
     isOff = false; offCount = 0; clearRejoin();
     vibrate(150); say('Vous avez rejoint la trace'); toast('De retour sur la trace');
   } else if (isOff) {
@@ -768,7 +778,7 @@ function offTrackLogic() {
     } else rejoinOff = 0;
     if (rejoin && rejoin.straight && now - lastRoute > 60000) requestRejoin(false); // le réseau est peut-être revenu
     if (!rejoin && !routing && now - lastRoute > 30000) requestRejoin(false);
-    if (!rejoin && now - lastAlert > 60000) alertOff();
+    if (!rejoin && threshold && now - lastAlert > 60000) alertOff();
   }
 }
 
@@ -1058,7 +1068,7 @@ function updateStats() {
   $('sUp').textContent = info && track.hasEle ? fmtM(info.up) : '–';
   const off = $('sOff');
   off.textContent = progress ? fmtDist(progress.dist) : '–';
-  off.classList.toggle('bad', !!progress && progress.dist > threshold);
+  off.classList.toggle('bad', !!threshold && !!progress && progress.dist > threshold);
   $('sEle').textContent = me && me.ele != null ? fmtM(me.ele) : (progress && track.ele[progress.idx] != null ? '≈' + fmtM(track.ele[progress.idx]) : '–');
   if (nav && !track) {
     $('nbEta').textContent = me && me.ele != null ? fmtM(me.ele) : '–'; $('nbDur').textContent = 'altitude';
