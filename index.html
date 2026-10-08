@@ -12,7 +12,7 @@
 <link rel="icon" href="icon.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="icon-192.png">
 <link rel="stylesheet" href="vendor/maplibre-gl.css">
-<link rel="stylesheet" href="app.css?v=9">
+<link rel="stylesheet" href="app.css?v=10">
 </head>
 <body>
 <div id="map" aria-label="Carte"></div>
@@ -58,6 +58,7 @@
 <!-- Navigation : barre du bas -->
 <div id="navBottom" class="navbottom nav-only">
   <div class="nb-bar"><div id="nbBar"></div></div>
+  <div class="nb-grip" id="nbGrip" role="button" aria-label="Afficher ou masquer la progression"></div>
   <div class="nb-row">
     <button id="btnExit" class="nb-btn" aria-label="Quitter la navigation">
       <svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></svg>
@@ -70,6 +71,20 @@
     <button id="btnOverview" class="nb-btn" aria-label="Vue d'ensemble de la trace">
       <svg viewBox="0 0 24 24"><circle cx="6" cy="18" r="2"/><circle cx="18" cy="6" r="2"/><path d="M8 18h7.5a3.5 3.5 0 0 0 0-7h-7a3.5 3.5 0 0 1 0-7H16"/></svg>
     </button>
+  </div>
+  <div id="navMore" class="nav-more" hidden>
+    <canvas id="navProfile" aria-label="Profil altimétrique et position"></canvas>
+    <div class="np-grid">
+      <div><span>Parcouru</span><b id="npDone">–</b></div>
+      <div><span>Restant</span><b id="npLeft">–</b></div>
+      <div><span>Progression</span><b id="npPct">–</b></div>
+      <div><span>D+ fait</span><b id="npUpDone">–</b></div>
+      <div><span>D+ restant</span><b id="npUpLeft">–</b></div>
+      <div><span>D− restant</span><b id="npDownLeft">–</b></div>
+      <div><span>Temps écoulé</span><b id="npTime">–</b></div>
+      <div><span>Vitesse moy.</span><b id="npAvg">–</b></div>
+      <div><span>Altitude</span><b id="npEle">–</b></div>
+    </div>
   </div>
 </div>
 
@@ -168,6 +183,6 @@
 <div id="toast" class="toast" hidden></div>
 
 <script src="vendor/maplibre-gl.js"></script>
-<script src="app.js?v=9"></script>
+<script src="app.js?v=10"></script>
 </body>
 </html>

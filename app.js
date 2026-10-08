@@ -66,13 +66,14 @@ function makePath(pts, name) {
     for (let k = Math.max(0, i - 2); k <= Math.min(n - 1, i + 2); k++) if (pts[k].ele != null) { s += pts[k].ele; c++; }
     return c ? s / c : null;
   });
-  const cum = [0], up = [0];
+  const cum = [0], up = [0], down = [0];
   for (let i = 1; i < n; i++) {
     cum[i] = cum[i - 1] + hav(pts[i - 1], pts[i]);
     const d = ele[i] != null && ele[i - 1] != null ? ele[i] - ele[i - 1] : 0;
     up[i] = up[i - 1] + (d > 0 ? d : 0);
+    down[i] = down[i - 1] + (d < 0 ? -d : 0);
   }
-  const p = { id: ++pathSeq, name, pts, ele, cum, up, hasEle, total: cum[n - 1] || 0, totalUp: up[n - 1] || 0, lastIdx: 0 };
+  const p = { id: ++pathSeq, name, pts, ele, cum, up, down, hasEle, total: cum[n - 1] || 0, totalUp: up[n - 1] || 0, totalDown: down[n - 1] || 0, lastIdx: 0 };
   p.turns = computeTurns(p);
   return p;
 }
@@ -455,13 +456,17 @@ function updateHeading() {
 // =====================================================================
 // Réception d'une position
 // =====================================================================
-let pendingRejoin = false, arrived = false;
+let pendingRejoin = false, arrived = false, navStart = 0, movT = 0, movD = 0;
 function onPos(pos) {
   if (sim && !pos.sim) return; // pendant la simulation on ignore le vrai GPS
   // vitesse et direction de déplacement
   if (prevFix && (pos.speed == null || isNaN(pos.speed))) {
     const dt = (pos.t - prevFix.t) / 1000;
     if (dt > 0.5) pos.speed = hav(prevFix, pos) / dt;
+  }
+  if (prevFix && nav) {
+    const dt = (pos.t - prevFix.t) / 1000, d = hav(prevFix, pos);
+    if (dt > 0 && dt < 30 && d / dt > 0.5 && d / dt < 40) { movT += dt; movD += d; }
   }
   prevFix = pos;
   if (pos.speed > 0.4 && pos.speed < 45 && (pos.acc || 0) < 40) { speedEma = speedEma == null ? pos.speed : speedEma * 0.92 + pos.speed * 0.08; speedSamples++; }
@@ -494,20 +499,20 @@ function onPos(pos) {
     if (followOv) map.easeTo({ center: [pos.lon, pos.lat], duration: 800 });
   }
   if (progress) setDone(progress.along / track.total);
-  updateStats(); drawProfileSoon();
+  updateStats(); drawProfileSoon(); updateNavMore();
 }
 
 // =====================================================================
 // Mode navigation
 // =====================================================================
-let nav = false, follow = true, followOv = false;
+let nav = false, follow = true, followOv = false, navTrackId = null;
 function navZoom() { const s = speedEma || 1.2; return s > 7 ? 15.4 : s > 3.5 ? 16.2 : 17; }
 function navCamera(dur) {
   if (!me) return;
   const h = map.getContainer().clientHeight;
   map.easeTo({
     center: [me.lon, me.lat], bearing: heading != null ? heading : map.getBearing(), pitch: 52, zoom: navZoom(),
-    padding: { top: Math.round(h * 0.45), bottom: 100, left: 0, right: 0 }, duration: dur, easing: t => t, essential: true
+    padding: { top: Math.round(h * 0.45), bottom: Math.min($('navBottom').offsetHeight || 100, h * 0.45), left: 0, right: 0 }, duration: dur, easing: t => t, essential: true
   });
 }
 function setFollow(v) { follow = v; $('btnCenter').classList.toggle('on', nav ? v : followOv); }
@@ -520,6 +525,7 @@ async function startNav() {
   if (!track) { toast('Ouvre d\'abord un fichier GPX.'); return; }
   if (!startGPS()) return;
   nav = true; arrived = false; isOff = false; offCount = 0;
+  if (!navStart || !track || navTrackId !== track.id) { navStart = Date.now(); movT = 0; movD = 0; navTrackId = track.id; }
   document.body.classList.add('nav'); toggleMore(false);
   setFollow(true);
   unlockAudio(); enableCompass(); keepAwake();
@@ -529,7 +535,7 @@ async function startNav() {
   updateStats();
 }
 function stopNav() {
-  nav = false; document.body.classList.remove('nav');
+  nav = false; document.body.classList.remove('nav'); toggleNavMore(false);
   stopSim(); clearRejoin(); isOff = false;
   try { speechSynthesis.cancel(); } catch {}
   setSrc('turn', EMPTY);
@@ -798,7 +804,8 @@ function updateStats() {
 const cv = $('profile');
 let profT = 0;
 function drawProfileSoon() { if (Date.now() - profT > 2000 && !nav) { profT = Date.now(); drawProfile(); } }
-function drawProfile() {
+function drawProfile() { drawProfileOn(cv); }
+function drawProfileOn(cv) {
   const dpr = window.devicePixelRatio || 1, W = cv.clientWidth, H = cv.clientHeight;
   if (!W) return;
   cv.width = W * dpr; cv.height = H * dpr;
@@ -825,6 +832,12 @@ function drawProfile() {
   const area = new Path2D(path); area.lineTo(X(track.total), 4 + h); area.lineTo(L0, 4 + h); area.closePath();
   ctx.fillStyle = COL.track; ctx.globalAlpha = .14; ctx.fill(area); ctx.globalAlpha = 1;
   ctx.strokeStyle = COL.track; ctx.lineWidth = 2; ctx.stroke(path);
+  if (progress) { // partie déjà parcourue
+    ctx.save(); ctx.beginPath(); ctx.rect(0, 0, X(progress.along), H); ctx.clip();
+    ctx.fillStyle = cssVar('--panel') || '#fff'; ctx.fill(area);
+    ctx.fillStyle = COL.done; ctx.globalAlpha = .25; ctx.fill(area); ctx.globalAlpha = 1;
+    ctx.strokeStyle = COL.done; ctx.lineWidth = 2; ctx.stroke(path); ctx.restore();
+  }
   if (progress && E[progress.idx] != null) {
     const x = X(progress.along), y = Y(E[progress.idx]);
     ctx.strokeStyle = COL.me; ctx.lineWidth = 1; ctx.setLineDash([3, 3]);
@@ -834,6 +847,57 @@ function drawProfile() {
   }
 }
 window.addEventListener('resize', drawProfile);
+
+// ---------- progression détaillée en navigation (glisser la barre du bas vers le haut) ----------
+let navMoreT = 0;
+function toggleNavMore(open) {
+  const m = $('navMore'), was = !m.hidden;
+  m.hidden = open === undefined ? was : !open;
+  if (!m.hidden && !was) { navMoreT = 0; updateNavMore(); }
+  if (nav && follow && was !== !m.hidden) setTimeout(() => navCamera(400), 50);
+}
+function updateNavMore() {
+  if ($('navMore').hidden || !track) return;
+  const pr = progress, done = pr ? pr.along : 0;
+  const upLeft = pr ? pr.upLeft : track.totalUp;
+  const downLeft = pr ? track.totalDown - (track.down[pr.idx] || 0) : track.totalDown;
+  $('npDone').textContent = fmtDist(done);
+  $('npLeft').textContent = fmtDist(track.total - done);
+  $('npPct').textContent = Math.round(done / track.total * 100) + ' %';
+  $('npUpDone').textContent = track.hasEle ? fmtM(track.totalUp - upLeft) : '–';
+  $('npUpLeft').textContent = track.hasEle ? fmtM(upLeft) : '–';
+  $('npDownLeft').textContent = track.hasEle ? fmtM(downLeft) : '–';
+  $('npTime').textContent = navStart ? fmtDur((Date.now() - navStart) / 1000) : '–';
+  $('npAvg').textContent = movT > 60 ? (movD / movT * 3.6).toFixed(1).replace('.', ',') + ' km/h' : '–';
+  $('npEle').textContent = me && me.ele != null ? fmtM(me.ele) : (pr && track.ele[pr.idx] != null ? '≈ ' + fmtM(track.ele[pr.idx]) : '–');
+  if (Date.now() - navMoreT > 2000) { navMoreT = Date.now(); drawProfileOn($('navProfile')); }
+}
+$('nbGrip').onclick = () => toggleNavMore();
+(() => {
+  const bar = $('navBottom'); let y0 = null, dy = 0;
+  bar.addEventListener('touchstart', e => {
+    if (e.target.closest('button') || e.touches.length > 1) { y0 = null; return; }
+    y0 = e.touches[0].clientY; dy = 0;
+  }, { passive: true });
+  bar.addEventListener('touchmove', e => {
+    if (y0 == null) return;
+    dy = e.touches[0].clientY - y0;
+    if (e.cancelable) e.preventDefault();
+    bar.style.transition = 'none';
+    bar.style.transform = `translateY(${dy > 0 ? dy * 0.6 : dy * 0.25}px)`;
+  }, { passive: false });
+  const end = () => {
+    if (y0 == null) return;
+    bar.style.transition = 'transform .2s ease-out'; bar.style.transform = '';
+    if (dy < -35) toggleNavMore(true); else if (dy > 35) toggleNavMore(false);
+    y0 = null; dy = 0;
+  };
+  bar.addEventListener('touchend', end); bar.addEventListener('touchcancel', end);
+  try {
+    new ResizeObserver(() => { if (bar.offsetHeight) document.documentElement.style.setProperty('--nav-h', bar.offsetHeight + 'px'); }).observe(bar);
+  } catch {}
+})();
+setInterval(() => { if (nav) updateNavMore(); }, 15000); // le temps écoulé avance même à l'arrêt
 
 // =====================================================================
 // Enregistrement de ma trace
@@ -1254,7 +1318,7 @@ try {
 const saved = store.get('gpx');
 if (saved) { try { showTrack(parseGPX(saved)); } catch { drawProfile(); } } else drawProfile();
 checkShared();
-const VERSION = '9 · 8 oct. 2026';
+const VERSION = '10 · 8 oct. 2026';
 $('note').textContent = (window.isSecureContext ? '' : 'Attention : le GPS ne fonctionne qu\'en HTTPS. ') + 'Version ' + VERSION;
 // Mises à jour : on vérifie à chaque ouverture et on recharge dès qu'une nouvelle version est prête
 // (jamais pendant une navigation ou un enregistrement : on attend la fin)
