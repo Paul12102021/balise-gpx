@@ -4,7 +4,7 @@
 
 // La page et le code doivent être de la même version. Sinon (page gardée en cache
 // par le téléphone ou par GitHub), on recharge une page fraîche, au plus 3 fois.
-const APP_VERSION = 37;
+const APP_VERSION = 38;
 try {
   const meta = document.querySelector('meta[name="balise-version"]');
   const pageV = meta ? +meta.content : 0;
@@ -157,6 +157,52 @@ function project(p, pos, global = false) {
   const along = p.cum[b.idx] + b.frac * (p.cum[b.idx + 1] - p.cum[b.idx]);
   const upDone = p.up[b.idx] + b.frac * (p.up[b.idx + 1] - p.up[b.idx]);
   return { dist: Math.sqrt(b.d2), along, idx: b.idx, upLeft: p.totalUp - upDone, remain: p.total - along };
+}
+
+// ---------- Progression sur la trace ----------
+// Elle n'avance que lorsqu'on est vraiment sur la trace : loin d'elle, le point le plus proche
+// ne dit rien de ce qui a été parcouru. Elle est gardée en mémoire pour la trace ouverte.
+let done = null; // { along, pos, miss }
+const doneKey = () => track ? track.name + '|' + Math.round(track.total) : '';
+function loadDone() {
+  done = null;
+  try { const s = JSON.parse(store.get('done') || 'null'); if (s && s.k === doneKey()) done = { along: s.a, pos: null, miss: 0 }; } catch {}
+}
+function saveDone() { store.set('done', done ? JSON.stringify({ k: doneKey(), a: Math.round(done.along) }) : ''); }
+function resetDone() { done = null; saveDone(); }
+function onTrackTol(pos) { return clamp(threshold || 50, 40, 100) + Math.min(pos && pos.acc || 0, 40); }
+function updateDone(pos) {
+  if (!track || !progress) return;
+  const tol = onTrackTol(pos);
+  if (progress.dist > tol) return;
+  if (!done) {
+    // premier passage sur la trace : sur une boucle (départ = arrivée), on part du début
+    const P = track.pts;
+    for (let i = 0; i < P.length; i++) if (hav(P[i], pos) <= tol) {
+      if (track.cum[i] < progress.along - 300) {
+        track.lastIdx = i + 50;
+        const q = project(track, pos);
+        if (q && q.dist <= tol) progress = q;
+      }
+      break;
+    }
+    done = { along: progress.along, pos, miss: 0 }; saveDone(); return;
+  }
+  // un saut le long de la trace sans rapport avec le chemin réellement fait (trace qui repasse
+  // au même endroit…) n'est accepté que s'il se confirme sur plusieurs positions
+  const jump = Math.abs(progress.along - done.along), allowed = (done.pos ? hav(done.pos, pos) * 3 : 0) + 300;
+  if (jump > allowed && ++done.miss < 5) return;
+  const save = Math.abs(progress.along - done.along) >= 25;
+  done.miss = 0; done.along = progress.along; done.pos = pos;
+  if (save) saveDone();
+}
+function doneInfo() {
+  if (!track) return null;
+  const a = clamp(done ? done.along : 0, 0, track.total), n = track.cum.length;
+  const i = Math.min(pointAt(track, a).i, n - 2), C = track.cum, U = track.up;
+  const seg = C[i + 1] - C[i], f = seg > 0 ? clamp((a - C[i]) / seg, 0, 1) : 0;
+  const upDone = U[i] + f * (U[i + 1] - U[i]), downDone = track.down[i] + f * (track.down[i + 1] - track.down[i]);
+  return { started: !!done, along: a, idx: f > 0.5 ? i + 1 : i, remain: track.total - a, upLeft: track.totalUp - upDone, downLeft: track.totalDown - downDone };
 }
 
 // =====================================================================
@@ -331,7 +377,7 @@ function fitTo(ptsList) {
 }
 
 async function showTrack(t, fit = true) {
-  track = makePath(t.pts, t.name); progress = null; clearRejoin();
+  track = makePath(t.pts, t.name); progress = null; clearRejoin(); loadDone();
   // le texte et le profil s'affichent tout de suite, la carte suit dès qu'elle est prête
   $('trackName').textContent = `${t.name} · ${fmtDist(track.total)}${track.hasEle ? ' · D+ ' + fmtM(track.totalUp) : ''}`;
   $('btnClose').hidden = false;
@@ -340,7 +386,7 @@ async function showTrack(t, fit = true) {
   const mine = track;
   await ready;
   if (track !== mine) return; // une autre trace a été ouverte entre-temps
-  setSrc('track', lineFeature(track.pts)); setDone(0, true);
+  setSrc('track', lineFeature(track.pts)); setDone(doneInfo().along / (track.total || 1), true);
   startMk.setLngLat([t.pts[0].lon, t.pts[0].lat]).addTo(map);
   const last = t.pts[t.pts.length - 1];
   endMk.setLngLat([last.lon, last.lat]).addTo(map);
@@ -356,7 +402,7 @@ function closeTrack() {
   if (!track) return;
   const savedText = store.get('gpx');
   if (nav) stopNav();
-  track = null; progress = null; clearRejoin();
+  track = null; progress = null; done = null; clearRejoin();
   setSrc('track', EMPTY); setSrc('turn', EMPTY);
   startMk.remove(); endMk.remove();
   store.set('gpx', '');
@@ -571,7 +617,7 @@ function onPos(pos) {
   if (!meShown) { meMk.addTo(map); meShown = true; if (!nav) map.easeTo({ center: [pos.lon, pos.lat], zoom: Math.max(map.getZoom(), 15), duration: 800 }); }
 
   onActFix(pos);
-  if (track) progress = project(track, pos);
+  if (track) { progress = project(track, pos); updateDone(pos); }
   if (rejoin) {
     if (rejoin.straight) { const why = rejoin.why; setRejoinPath([{ lat: pos.lat, lon: pos.lon }, rejoin.target], rejoin.target, true); rejoin.why = why; }
     rejoinProg = project(rejoin, pos);
@@ -587,7 +633,7 @@ function onPos(pos) {
   if (nav) {
     offTrackLogic();
     if (rejoin && progress && progress.dist < Math.min(thrRef() * 0.7, 30) && !isOff) clearRejoin();
-    if (!rejoin && progress && progress.remain < 25 && !arrived) {
+    if (!rejoin && progress && done && progress.remain < 25 && track.total - done.along < 25 && !arrived) {
       arrived = true; say('Vous êtes arrivé'); vibrate([200, 100, 200]);
     }
     guidance();
@@ -596,7 +642,7 @@ function onPos(pos) {
     if (rejoin && progress && progress.dist < Math.min(thrRef() * 0.7, 30)) { clearRejoin(); toast('Tu es sur la trace'); }
     if (followOv) map.easeTo({ center: [pos.lon, pos.lat], duration: 800 });
   }
-  if (progress) setDone(progress.along / track.total);
+  if (track) setDone(doneInfo().along / track.total);
   updateStats(); drawProfileSoon(); updateNavMore();
 }
 
@@ -626,6 +672,7 @@ async function startNav(free = false) {
   nav = true; arrived = false; isOff = false; offCount = 0;
   navTrackId = track ? track.id : null;
   navStartT = Date.now(); freeD = 0; freeRef = null;
+  if (track && done && track.total - done.along < 25) { resetDone(); setDone(0, true); } // trace déjà finie : on repart de zéro
   document.body.classList.add('nav'); document.body.classList.toggle('free', !track); toggleMore(false);
   setFollow(true);
   unlockAudio(); enableCompass(); keepAwake();
@@ -634,7 +681,7 @@ async function startNav(free = false) {
     if (store.get('autoRec') === '1') startActivity();
     else { const n = +(store.get('recHint') || 0); if (n < 3) { store.set('recHint', n + 1); setTimeout(() => toast('Touche ● pour enregistrer ta sortie', 4000), 1500); } }
   }
-  if (me) { if (track) progress = project(track, me, true); guidance(); navCamera(800); }
+  if (me) { if (track) { progress = project(track, me, true); updateDone(me); } guidance(); navCamera(800); }
   else setBanner('gps', '', 'Recherche du signal GPS…', 'gps');
   updateStats();
 }
@@ -1132,12 +1179,11 @@ async function reroute() {
 // =====================================================================
 function remainingInfo() {
   if (!track) return null;
-  let rem = track.total, up = track.totalUp;
-  if (progress) {
-    if (rejoin && rejoinProg) {
-      const pt = project(track, rejoin.target, true);
-      rem = rejoinProg.remain + (pt ? pt.remain : 0); up = pt ? pt.upLeft : up;
-    } else { rem = progress.remain; up = progress.upLeft; }
+  const di = doneInfo();
+  let rem = di.remain, up = di.upLeft;
+  if (progress && rejoin && rejoinProg) {
+    const pt = project(track, rejoin.target, true);
+    rem = rejoinProg.remain + (pt ? pt.remain : 0); up = pt ? pt.upLeft : up;
   }
   // temps : allure de base selon le mode (à pied 4,5 km/h + 1 h par 600 m de D+,
   // à vélo 16 km/h + 1 h par 800 m de D+), puis de plus en plus ta vitesse réelle
@@ -1171,7 +1217,7 @@ function updateStats() {
     $('nbDur').textContent = 'arrivée · ' + fmtDur(info.secs);
     $('nbRem').textContent = fmtDist(info.rem);
     $('nbUp').textContent = track.hasEle ? fmtM(info.up) : '–';
-    $('nbBar').style.width = (progress ? clamp(progress.along / track.total, 0, 1) * 100 : 0) + '%';
+    $('nbBar').style.width = clamp(doneInfo().along / track.total, 0, 1) * 100 + '%';
     const sp = me && me.speed != null && !isNaN(me.speed) ? me.speed * 3.6 : null;
     $('spVal').textContent = sp == null ? '–' : (sp < 10 ? sp.toFixed(1).replace('.', ',') : Math.round(sp));
   }
@@ -1211,14 +1257,15 @@ function drawProfileOn(cv) {
   const area = new Path2D(path); area.lineTo(X(track.total), 4 + h); area.lineTo(L0, 4 + h); area.closePath();
   ctx.fillStyle = COL.track; ctx.globalAlpha = .14; ctx.fill(area); ctx.globalAlpha = 1;
   ctx.strokeStyle = COL.track; ctx.lineWidth = 2; ctx.stroke(path);
-  if (progress) { // partie déjà parcourue
-    ctx.save(); ctx.beginPath(); ctx.rect(0, 0, X(progress.along), H); ctx.clip();
+  const di = doneInfo();
+  if (di.started && di.along > 0) { // partie déjà parcourue
+    ctx.save(); ctx.beginPath(); ctx.rect(0, 0, X(di.along), H); ctx.clip();
     ctx.fillStyle = cssVar('--panel') || '#fff'; ctx.fill(area);
     ctx.fillStyle = COL.done; ctx.globalAlpha = .25; ctx.fill(area); ctx.globalAlpha = 1;
     ctx.strokeStyle = COL.done; ctx.lineWidth = 2; ctx.stroke(path); ctx.restore();
   }
-  if (progress && E[progress.idx] != null) {
-    const x = X(progress.along), y = Y(E[progress.idx]);
+  if (di.started && E[di.idx] != null) {
+    const x = X(di.along), y = Y(E[di.idx]);
     ctx.strokeStyle = COL.me; ctx.lineWidth = 1; ctx.setLineDash([3, 3]);
     ctx.beginPath(); ctx.moveTo(x, 4); ctx.lineTo(x, 4 + h); ctx.stroke(); ctx.setLineDash([]);
     ctx.fillStyle = COL.me; ctx.beginPath(); ctx.arc(x, y, 5, 0, 7); ctx.fill();
@@ -1237,12 +1284,18 @@ function toggleNavMore(open) {
 }
 function updateNavMore() {
   if ($('navMore').hidden || !track) return;
-  const pr = progress, done = pr ? pr.along : 0;
-  const upLeft = pr ? pr.upLeft : track.totalUp;
-  const downLeft = pr ? track.totalDown - (track.down[pr.idx] || 0) : track.totalDown;
-  $('npDone').textContent = fmtDist(done);
-  $('npLeft').textContent = fmtDist(track.total - done);
-  $('npPct').textContent = Math.round(done / track.total * 100) + ' %';
+  const pr = progress, di = doneInfo(), upLeft = di.upLeft, downLeft = di.downLeft;
+  $('npDone').textContent = fmtDist(di.along);
+  $('npLeft').textContent = fmtDist(di.remain);
+  $('npPct').textContent = Math.floor(di.along / track.total * 100) + ' %';
+  // retour à la trace : par le chemin si un itinéraire est calculé, sinon l'écart à vol d'oiseau
+  const off = pr && (rejoin || pr.dist > onTrackTol(me));
+  $('npBack').hidden = !off;
+  if (off) {
+    const road = rejoin && rejoinProg && !rejoin.straight;
+    $('npBackVal').textContent = fmtDist(rejoin && rejoinProg ? rejoinProg.remain : pr.dist);
+    $('npBackSub').textContent = road ? 'par le chemin' : rejoin ? 'en ligne droite' : routing ? 'calcul du chemin…' : 'à vol d\'oiseau';
+  }
   $('npUpDone').textContent = track.hasEle ? fmtM(track.totalUp - upLeft) : '–';
   $('npUpLeft').textContent = track.hasEle ? fmtM(upLeft) : '–';
   $('npDownLeft').textContent = track.hasEle ? fmtM(downLeft) : '–';

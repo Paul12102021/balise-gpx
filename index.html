@@ -8,13 +8,13 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<meta name="balise-version" content="37">
+<meta name="balise-version" content="38">
 <title>Pisteo</title>
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" href="icon.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
 <link rel="stylesheet" href="vendor/maplibre-gl.css">
-<link rel="stylesheet" href="app.css?v=37">
+<link rel="stylesheet" href="app.css?v=38">
 </head>
 <body>
 <div id="map" aria-label="Carte"></div>
@@ -92,6 +92,11 @@
       <button id="npVoice" class="chip"></button>
       <button id="npVib" class="chip"></button>
       <button id="npMode" class="chip"></button>
+    </div>
+    <div id="npBack" class="np-back" hidden>
+      <svg viewBox="0 0 24 24"><path d="M9 14 4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11"/></svg>
+      <div><span>Retour à la trace</span><b id="npBackVal">–</b></div>
+      <small id="npBackSub"></small>
     </div>
     <div class="np-grid">
       <div><span>Parcouru</span><b id="npDone">–</b></div>
@@ -281,6 +286,6 @@
 <div id="toast" class="toast" hidden></div>
 
 <script src="vendor/maplibre-gl.js"></script>
-<script src="app.js?v=37"></script>
+<script src="app.js?v=38"></script>
 </body>
 </html>
