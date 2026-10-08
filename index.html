@@ -7,13 +7,13 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<meta name="balise-version" content="17">
+<meta name="balise-version" content="18">
 <title>Balise GPX</title>
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" href="icon.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="icon-192.png">
 <link rel="stylesheet" href="vendor/maplibre-gl.css">
-<link rel="stylesheet" href="app.css?v=17">
+<link rel="stylesheet" href="app.css?v=18">
 </head>
 <body>
 <div id="map" aria-label="Carte"></div>
@@ -84,6 +84,10 @@
       <button id="npRec" class="btn"></button>
       <button id="npEnd" class="btn ghost" hidden>Terminer</button>
     </div>
+    <div class="np-toggles">
+      <button id="npVoice" class="chip"></button>
+      <button id="npVib" class="chip"></button>
+    </div>
     <div class="np-grid">
       <div><span>Parcouru</span><b id="npDone">–</b></div>
       <div><span>Restant</span><b id="npLeft">–</b></div>
@@ -129,6 +133,14 @@
         <option value="25">25 m</option><option value="50">50 m</option>
         <option value="100">100 m</option><option value="200">200 m</option>
       </select>
+    </div>
+    <div class="row">
+      <label for="optVoice">Guidage vocal et bips</label>
+      <input type="checkbox" id="optVoice" class="check">
+    </div>
+    <div class="row">
+      <label for="optVib">Vibrations (virages, sortie de trace)</label>
+      <input type="checkbox" id="optVib" class="check">
     </div>
     <div class="row">
       <label for="autoRec">Enregistrer la sortie dès que la navigation démarre</label>
@@ -244,6 +256,6 @@
 <div id="toast" class="toast" hidden></div>
 
 <script src="vendor/maplibre-gl.js"></script>
-<script src="app.js?v=17"></script>
+<script src="app.js?v=18"></script>
 </body>
 </html>

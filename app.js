@@ -4,7 +4,7 @@
 
 // La page et le code doivent être de la même version. Sinon (page gardée en cache
 // par le téléphone ou par GitHub), on recharge une page fraîche, au plus 3 fois.
-const APP_VERSION = 17;
+const APP_VERSION = 18;
 try {
   const meta = document.querySelector('meta[name="balise-version"]');
   const pageV = meta ? +meta.content : 0;
@@ -670,13 +670,28 @@ function guidance() {
 }
 
 // ---------- voix, son, vibration ----------
-let voiceOn = store.get('voice') !== '0';
-$('btnVoice').classList.toggle('muted', !voiceOn);
-$('btnVoice').onclick = () => {
-  voiceOn = !voiceOn; store.set('voice', voiceOn ? '1' : '0');
+// Son (voix + bips) et vibrations : réglables séparément, dans les réglages et en navigation
+let voiceOn = store.get('voice') !== '0', vibOn = store.get('vib') !== '0';
+function syncAlertUI() {
   $('btnVoice').classList.toggle('muted', !voiceOn);
-  if (voiceOn) say('Guidage vocal activé'); else { try { speechSynthesis.cancel(); } catch {} toast('Guidage vocal coupé'); }
-};
+  $('optVoice').checked = voiceOn; $('optVib').checked = vibOn;
+  $('npVoice').classList.toggle('off', !voiceOn); $('npVoice').textContent = voiceOn ? 'Son activé' : 'Son coupé';
+  $('npVib').classList.toggle('off', !vibOn); $('npVib').textContent = vibOn ? 'Vibrations activées' : 'Vibrations coupées';
+}
+function setVoice(on) {
+  voiceOn = on; store.set('voice', on ? '1' : '0'); syncAlertUI();
+  if (on) say('Guidage vocal activé'); else { try { speechSynthesis.cancel(); } catch {} toast('Son coupé'); }
+}
+function setVib(on) {
+  vibOn = on; store.set('vib', on ? '1' : '0'); syncAlertUI();
+  if (on) vibrate(120); toast(on ? 'Vibrations activées' : 'Vibrations coupées');
+}
+$('btnVoice').onclick = () => setVoice(!voiceOn);
+$('optVoice').onchange = e => setVoice(e.target.checked);
+$('optVib').onchange = e => setVib(e.target.checked);
+$('npVoice').onclick = () => setVoice(!voiceOn);
+$('npVib').onclick = () => setVib(!vibOn);
+setTimeout(syncAlertUI, 0);
 function say(text) {
   if (!voiceOn || !('speechSynthesis' in window)) return;
   try {
@@ -702,7 +717,7 @@ function beep() {
     });
   } catch {}
 }
-const vibrate = p => { try { navigator.vibrate && navigator.vibrate(p); } catch {} };
+const vibrate = p => { if (!vibOn) return; try { navigator.vibrate && navigator.vibrate(p); } catch {} };
 
 // =====================================================================
 // Hors trace et itinéraire de retour
