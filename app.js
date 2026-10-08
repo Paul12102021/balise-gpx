@@ -4,7 +4,7 @@
 
 // La page et le code doivent être de la même version. Sinon (page gardée en cache
 // par le téléphone ou par GitHub), on recharge une page fraîche, au plus 3 fois.
-const APP_VERSION = 38;
+const APP_VERSION = 39;
 try {
   const meta = document.querySelector('meta[name="balise-version"]');
   const pageV = meta ? +meta.content : 0;
@@ -883,6 +883,8 @@ function setProfile(p, quiet) {
   $('prof').value = p; $('destProf').value = p;
   $('npMode').textContent = p === 'trekking' ? 'À vélo' : 'À pied';
   if (!quiet) toast(p === 'trekking' ? 'Mode vélo : itinéraires et temps estimés pour le vélo' : 'Mode à pied : itinéraires et temps estimés pour la marche', 3500);
+  // un retour à la trace (ou un trajet vers un lieu) déjà calculé est refait pour le nouveau mode
+  if (!quiet && nav && track && me && (rejoin || track.route)) requestRejoin(true);
   updateStats();
 }
 $('prof').onchange = e => setProfile(e.target.value);
