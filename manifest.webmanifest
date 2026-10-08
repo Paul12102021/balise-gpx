@@ -1,7 +1,7 @@
 {
-  "name": "Balise GPX",
-  "short_name": "Balise",
-  "description": "Suivre une trace GPX sur le terrain",
+  "name": "Pisteo",
+  "short_name": "Pisteo",
+  "description": "Suivre une trace GPX, naviguer à pied ou à vélo, même sans réseau",
   "lang": "fr",
   "start_url": "./",
   "scope": "./",

@@ -1,10 +1,10 @@
-/* Balise GPX — navigation guidée sur une trace GPX */
+/* Pisteo — navigation guidée sur une trace GPX */
 (() => {
 'use strict';
 
 // La page et le code doivent être de la même version. Sinon (page gardée en cache
 // par le téléphone ou par GitHub), on recharge une page fraîche, au plus 3 fois.
-const APP_VERSION = 28;
+const APP_VERSION = 29;
 try {
   const meta = document.querySelector('meta[name="balise-version"]');
   const pageV = meta ? +meta.content : 0;
@@ -1350,7 +1350,7 @@ function toGPX(name) {
   const segs = [];
   rec.forEach((p, i) => { if (!i || (p.s || 0) !== (rec[i - 1].s || 0)) segs.push([]); segs[segs.length - 1].push(p); });
   const body = segs.map(g => '    <trkseg>\n' + g.map(p => `      <trkpt lat="${p.lat}" lon="${p.lon}">${p.ele != null ? `<ele>${p.ele}</ele>` : ''}<time>${new Date(p.t).toISOString()}</time></trkpt>`).join('\n') + '\n    </trkseg>').join('\n');
-  return `<?xml version="1.0" encoding="UTF-8"?>\n<gpx version="1.1" creator="Balise GPX" xmlns="http://www.topografix.com/GPX/1/1">\n  <trk><name>${esc(name)}</name>\n${body}\n  </trk>\n</gpx>\n`;
+  return `<?xml version="1.0" encoding="UTF-8"?>\n<gpx version="1.1" creator="Pisteo" xmlns="http://www.topografix.com/GPX/1/1">\n  <trk><name>${esc(name)}</name>\n${body}\n  </trk>\n</gpx>\n`;
 }
 async function shareGPX(text, name) {
   const fname = name.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') + '.gpx';
@@ -1387,7 +1387,7 @@ async function endActivity(keep) {
       // on ne perd rien : la sortie reste en cours (en pause) et peut être exportée
       if (actState === 'on') { act.since = Date.now(); }
       btn.disabled = false; btn.textContent = 'Terminer et garder dans Mes traces';
-      $('finMsg').textContent = 'Impossible de ranger la sortie : un autre onglet de Balise GPX est ouvert. Ferme les autres onglets puis réessaie, ou touche « Exporter le GPX ».';
+      $('finMsg').textContent = 'Impossible de ranger la sortie : un autre onglet de Pisteo est ouvert. Ferme les autres onglets puis réessaie, ou touche « Exporter le GPX ».';
       $('finMsg').hidden = false;
       return;
     }

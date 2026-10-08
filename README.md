@@ -1,4 +1,4 @@
-# Balise GPX
+# Pisteo
 
 Appli web (PWA) pour suivre une trace GPX sur smartphone : alerte hors trace, distance et D+ restants, cartes hors ligne, enregistrement de sa sortie.
 
