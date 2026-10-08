@@ -4,7 +4,7 @@
 
 // La page et le code doivent être de la même version. Sinon (page gardée en cache
 // par le téléphone ou par GitHub), on recharge une page fraîche, au plus 3 fois.
-const APP_VERSION = 21;
+const APP_VERSION = 22;
 try {
   const meta = document.querySelector('meta[name="balise-version"]');
   const pageV = meta ? +meta.content : 0;
@@ -1383,8 +1383,9 @@ function updateOfflineInfo() {
     $('dlTrace').disabled = false;
   } else { $('dlTraceInfo').textContent = 'Ouvre d\'abord une trace GPX.'; $('dlTrace').disabled = true; }
   if (deps) {
-    const { tiles } = currentDepTiles();
-    $('dlDepInfo').textContent = `≈ ${tiles.length.toLocaleString('fr-FR')} tuiles · ~${fmtMo(tiles.length * tileKB)}`;
+    const { d, tiles } = currentDepTiles(), gMo = depGraphMo(d.polys);
+    $('dlDepInfo').textContent = `Carte ≈ ${tiles.length.toLocaleString('fr-FR')} tuiles · ~${fmtMo(tiles.length * tileKB)}` + ($('depGraph').checked ? ` · chemins ~${gMo} Mo` : '');
+    $('depGraphMo').textContent = `~${gMo} Mo`;
   }
 }
 async function updateStorageInfo() {
@@ -1523,8 +1524,12 @@ $('dlDep').onclick = async () => {
     const e = navigator.storage && navigator.storage.estimate ? await navigator.storage.estimate() : null;
     if (e && e.quota && tiles.length * tileKB * 1024 > (e.quota - e.usage) * 0.9) { toast('Pas assez de place sur le téléphone pour cette carte.', 5000); return; }
   } catch {}
-  downloadPack({ id: `dep:${d.code}:${z}`, kind: 'dep', code: d.code, name: `${d.code} · ${d.nom}`, detail: z >= 15 ? 'détaillé' : 'standard', bbox: polysBBox(d.polys) }, tiles);
+  const pack = { id: `dep:${d.code}:${z}`, kind: 'dep', code: d.code, name: `${d.code} · ${d.nom}`, detail: z >= 15 ? 'détaillé' : 'standard', bbox: polysBBox(d.polys) };
+  await downloadPack(pack, tiles);
+  if ($('depGraph').checked && navigator.onLine !== false) await downloadDepGraph(pack, d.polys);
 };
+$('depGraph').checked = store.get('depGraph') !== '0';
+$('depGraph').onchange = e => { store.set('depGraph', e.target.checked ? '1' : '0'); updateOfflineInfo(); };
 
 // ---------- liste des cartes téléchargées ----------
 async function listPacks() { try { return ((await idb('readonly', st => st.getAll(), 'packs')) || []).sort((a, b) => b.date - a.date); } catch { return []; } }
@@ -1536,13 +1541,23 @@ async function renderPacks() {
     const info = document.createElement('div'); info.className = 'lib-item';
     info.innerHTML = '<b></b><span></span>';
     info.querySelector('b').textContent = p.name;
-    info.querySelector('span').textContent = `${p.kind === 'trace' ? 'Le long de la trace' : 'Département, ' + p.detail} · ${fmtMo(p.bytes / 1024)} · ${fmtDate(p.date)}` + (p.complete ? '' : ` · incomplet`) + (p.graph ? ` · itinéraires hors connexion ✓ (${p.graph.km} km de chemins)` : '');
+    info.querySelector('span').textContent = `${p.kind === 'trace' ? 'Le long de la trace' : 'Département, ' + p.detail} · ${fmtMo(p.bytes / 1024)} · ${fmtDate(p.date)}` + (p.complete ? '' : ` · incomplet`) + (p.graph ? (p.graph.partial ? ` · chemins incomplets (${p.graph.km} km)` : ` · itinéraires hors connexion ✓ (${p.graph.km} km de chemins)`) : '');
     if (dl && dl.packId === p.id) { const live = document.createElement('span'); live.className = 'dl-live'; live.dataset.pack = p.id; live.textContent = 'En cours…'; info.appendChild(live); }
     const acts = document.createElement('div'); acts.className = 'pack-acts';
     if (!p.complete) {
       const re = document.createElement('button'); re.className = 'btn small'; re.textContent = 'Reprendre';
       if (dl && dl.packId === p.id) re.hidden = true;
       re.onclick = () => downloadPack(p, p.tiles); acts.appendChild(re);
+    }
+    if (p.kind === 'dep' && (!p.graph || p.graph.partial) && !dl) {
+      const gb = document.createElement('button'); gb.className = 'btn small'; gb.textContent = '+ Chemins';
+      gb.title = 'Télécharger les chemins du département pour les itinéraires hors connexion';
+      gb.onclick = async () => {
+        gb.disabled = true;
+        await loadDeps(); const d = deps.find(x => x.code === p.code);
+        if (d) await downloadDepGraph(p, d.polys);
+      };
+      acts.appendChild(gb);
     }
     if (p.kind === 'trace' && !p.graph && p.line && !dl) {
       const gb = document.createElement('button'); gb.className = 'btn small'; gb.textContent = '+ Chemins';
@@ -1634,20 +1649,24 @@ function wayFlags(t) {
   return f;
 }
 
-function buildGraph(json) {
-  const idx = new Map(), lat = [], lon = [];
-  for (const e of json.elements) if (e.type === 'node') { idx.set(e.id, lat.length); lat.push(e.lat); lon.push(e.lon); }
-  const ea = [], eb = [], ec = [], ef = [];
+// le réseau peut arriver en plusieurs morceaux (département) : on accumule, puis on assemble
+function newGraphAcc() { return { idx: new Map(), lat: [], lon: [], ways: new Set(), ea: [], eb: [], ec: [], ef: [] }; }
+function addToGraph(acc, json) {
+  for (const e of json.elements) if (e.type === 'node' && !acc.idx.has(e.id)) { acc.idx.set(e.id, acc.lat.length); acc.lat.push(e.lat); acc.lon.push(e.lon); }
   for (const e of json.elements) {
-    if (e.type !== 'way' || !e.tags) continue;
+    if (e.type !== 'way' || !e.tags || acc.ways.has(e.id)) continue;
     const c = HW.indexOf(e.tags.highway); if (c < 0) continue;
+    acc.ways.add(e.id);
     const f = wayFlags(e.tags);
     for (let i = 1; i < e.nodes.length; i++) {
-      const a = idx.get(e.nodes[i - 1]), b = idx.get(e.nodes[i]);
+      const a = acc.idx.get(e.nodes[i - 1]), b = acc.idx.get(e.nodes[i]);
       if (a == null || b == null || a === b) continue;
-      ea.push(a); eb.push(b); ec.push(c); ef.push(f);
+      acc.ea.push(a); acc.eb.push(b); acc.ec.push(c); acc.ef.push(f);
     }
   }
+}
+function finishGraph(acc) {
+  const { lat, lon, ea, eb, ec, ef } = acc;
   const n = lat.length, m = ea.length, start = new Uint32Array(n + 1);
   for (let k = 0; k < m; k++) { start[ea[k] + 1]++; start[eb[k] + 1]++; }
   for (let i = 0; i < n; i++) start[i + 1] += start[i];
@@ -1660,8 +1679,10 @@ function buildGraph(json) {
   }
   let w = 180, s = 90, e = -180, nn = -90;
   for (let i = 0; i < n; i++) { w = Math.min(w, lon[i]); e = Math.max(e, lon[i]); s = Math.min(s, lat[i]); nn = Math.max(nn, lat[i]); }
-  return { n, lat: Float64Array.from(lat), lon: Float64Array.from(lon), start, to, len, hw, fl, fwd, bbox: [w, s, e, nn] };
+  // coordonnées en simple précision (≈ 0,5 m) : deux fois moins de place
+  return { n, lat: Float32Array.from(lat), lon: Float32Array.from(lon), start, to, len, hw, fl, fwd, bbox: [w, s, e, nn] };
 }
+function buildGraph(json) { const acc = newGraphAcc(); addToGraph(acc, json); return finishGraph(acc); }
 
 // coût d'un tronçon selon le mode (Infinity = interdit)
 function edgeCost(g, p, bike) {
@@ -1789,31 +1810,107 @@ function corridorBoxes(p) {
   flush();
   return boxes; // [sud, ouest, nord, est]
 }
+const OVERPASS = 'https://overpass-api.de/api/interpreter';
+const HW_RE = '^(' + HW.join('|') + ')$';
+// département : sans les trottoirs, allées privées et parkings, inutiles pour un itinéraire
+const HW_DEP_RE = '^(' + HW.filter(h => h !== 'service' && h !== 'footway').join('|') + ')$';
+function overpassQuery(box, light) {
+  const b = box.map(v => v.toFixed(5)).join(',');
+  const parts = light
+    ? `way["highway"~"${HW_DEP_RE}"](${b});way["highway"="service"]["service"!~"driveway|parking_aisle|drive-through|emergency_access"](${b});way["highway"="footway"]["footway"!~"sidewalk|crossing"](${b});`
+    : `way["highway"~"${HW_RE}"](${b});`;
+  return `[out:json][timeout:180];(${parts});out body qt;>;out skel qt;`;
+}
+async function overpass(q, tries = 2) {
+  let last;
+  for (let t = 0; t < tries; t++) {
+    const ctrl = new AbortController(), timer = setTimeout(() => ctrl.abort(), 190000);
+    try {
+      const r = await fetch(OVERPASS, { method: 'POST', body: 'data=' + encodeURIComponent(q), headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, signal: ctrl.signal });
+      if (r.ok) return await r.json();
+      last = new Error(r.status === 429 || r.status === 504 ? 'serveur OpenStreetMap saturé, réessaie dans quelques minutes' : 'erreur ' + r.status);
+    } catch (e) { last = e.name === 'AbortError' ? new Error('délai dépassé') : new Error('pas de connexion'); }
+    finally { clearTimeout(timer); }
+    await new Promise(r => setTimeout(r, 8000)); // on laisse respirer le serveur avant de réessayer
+  }
+  throw last;
+}
+async function saveGraph(pack, g, partial) {
+  g.id = pack.id;
+  await idb('readwrite', st => st.put(g), 'graphs');
+  graphs = null;
+  let total = 0; for (let i = 0; i < g.len.length; i++) total += g.len[i];
+  pack.graph = { nodes: g.n, km: Math.round(total / 2000), partial: !!partial };
+  await idb('readwrite', st => st.put(pack), 'packs');
+}
+// le long d'une trace : une seule demande
 async function downloadGraph(pack, boxes) {
-  const re = '^(' + HW.join('|') + ')$';
-  const q = `[out:json][timeout:120];(${boxes.map(b => `way["highway"~"${re}"](${b.map(v => v.toFixed(5)).join(',')});`).join('')});out body qt;>;out skel qt;`;
   $('offTxt').textContent = 'Réseau de chemins : téléchargement…'; $('offProg').hidden = false;
-  const ctrl = new AbortController(), timer = setTimeout(() => ctrl.abort(), 150000);
   try {
-    const r = await fetch('https://overpass-api.de/api/interpreter', { method: 'POST', body: 'data=' + encodeURIComponent(q), headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, signal: ctrl.signal });
-    if (!r.ok) throw new Error(r.status === 429 ? 'serveur OpenStreetMap saturé, réessaie dans quelques minutes' : 'erreur ' + r.status);
+    const acc = newGraphAcc();
+    // les grandes traces sont découpées en lots de 8 cadres
+    for (let i = 0; i < boxes.length; i += 8) {
+      const q = `[out:json][timeout:180];(${boxes.slice(i, i + 8).map(b => `way["highway"~"${HW_RE}"](${b.map(v => v.toFixed(5)).join(',')});`).join('')});out body qt;>;out skel qt;`;
+      addToGraph(acc, await overpass(q));
+    }
+    if (!acc.lat.length) throw new Error('aucun chemin trouvé');
     $('offTxt').textContent = 'Réseau de chemins : préparation…';
-    const g = buildGraph(await r.json());
-    if (!g.n) throw new Error('aucun chemin trouvé');
-    g.id = pack.id;
-    await idb('readwrite', st => st.put(g), 'graphs');
-    graphs = null; await loadGraphs();
-    pack.graph = { nodes: g.n, km: Math.round(g.len.reduce((a, b) => a + b, 0) / 2000) };
-    await idb('readwrite', st => st.put(pack), 'packs');
+    await saveGraph(pack, finishGraph(acc));
     $('offTxt').textContent = `Réseau de chemins : ${pack.graph.km} km de chemins enregistrés ✓`;
     return true;
   } catch (e) {
-    $('offTxt').textContent = 'Réseau de chemins non téléchargé : ' + (e.name === 'AbortError' ? 'délai dépassé' : e.message);
+    $('offTxt').textContent = 'Réseau de chemins non téléchargé : ' + e.message;
     return false;
-  } finally { clearTimeout(timer); }
+  }
+}
+// département : découpé en carrés d'environ 15 km, téléchargés un par un
+function depChunks(polys, step = 0.15) {
+  const [w, s, e, n] = polysBBox(polys), out = [];
+  for (let la = s; la < n; la += step) for (let lo = w; lo < e; lo += step * 1.4) {
+    const box = [la, lo, Math.min(la + step, n), Math.min(lo + step * 1.4, e)];
+    const pts = [];
+    for (let i = 0; i <= 4; i++) for (let j = 0; j <= 4; j++) pts.push([box[1] + (box[3] - box[1]) * j / 4, box[0] + (box[2] - box[0]) * i / 4]);
+    const vertexInside = polys.some(p => p[0].some(([x, y]) => x >= box[1] && x <= box[3] && y >= box[0] && y <= box[2]));
+    if (vertexInside || pts.some(([x, y]) => inPolys(x, y, polys))) out.push(box);
+  }
+  return out;
+}
+function polysAreaKm2(polys) {
+  let a = 0;
+  for (const p of polys) {
+    const r = p[0], k = Math.cos(rad(r[0][1])) * 111.32;
+    for (let i = 0, j = r.length - 1; i < r.length; j = i++) a += (r[j][0] * k) * (r[i][1] * 110.54) - (r[i][0] * k) * (r[j][1] * 110.54);
+  }
+  return Math.abs(a / 2);
+}
+const depGraphMo = polys => Math.round(polysAreaKm2(polys) * 8 / 1024); // ≈ 8 Ko par km²
+async function downloadDepGraph(pack, polys) {
+  if (dl) { toast('Un téléchargement est déjà en cours.'); return false; }
+  const chunks = depChunks(polys), acc = newGraphAcc();
+  dl = { stop: false, packId: pack.id }; keepAwake();
+  $('offProg').hidden = false; $('dlStop').hidden = false; $('dlTrace').disabled = $('dlDep').disabled = true;
+  let fail = 0, lastErr = '';
+  for (let k = 0; k < chunks.length && !dl.stop; k++) {
+    const txt = `Chemins : morceau ${k + 1} / ${chunks.length}` + (fail ? ` · ${fail} en échec` : '');
+    $('offTxt').textContent = txt; $('offBar').style.width = (k / chunks.length * 100) + '%';
+    $('mapsStatus').textContent = `${pack.name} · ${txt}`; $('mapsStatus').hidden = false;
+    try { addToGraph(acc, await overpass(overpassQuery(chunks[k], true))); }
+    catch (e) { fail++; lastErr = e.message; if (fail >= 3 && fail > k / 2) { lastErr += ' (arrêt)'; break; } }
+  }
+  const stopped = dl.stop; dl = null;
+  $('dlStop').hidden = true; $('dlTrace').disabled = !track; $('dlDep').disabled = false; $('mapsStatus').hidden = true;
+  if (!acc.lat.length) { $('offTxt').textContent = 'Chemins non téléchargés : ' + (lastErr || 'arrêté'); renderPacks(); return false; }
+  $('offTxt').textContent = 'Chemins : assemblage sur le téléphone…'; $('offBar').style.width = '100%';
+  await new Promise(r => setTimeout(r, 50));
+  await saveGraph(pack, finishGraph(acc), stopped || fail > 0);
+  $('offTxt').textContent = pack.graph.partial
+    ? `Chemins : ${pack.graph.km} km enregistrés, mais incomplets (${lastErr || 'arrêté'}). Touche « + Chemins » pour réessayer.`
+    : `Chemins : ${pack.graph.km} km enregistrés ✓ · itinéraires hors connexion dans tout le département`;
+  renderPacks(); updateStorageInfo();
+  return true;
 }
 
-loadGraphs();
+
 
 // =====================================================================
 // Simulation : parcourt la trace avec un écart volontaire, pour tester à la maison

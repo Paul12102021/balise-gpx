@@ -7,13 +7,13 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<meta name="balise-version" content="21">
+<meta name="balise-version" content="22">
 <title>Balise GPX</title>
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" href="icon.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="icon-192.png">
 <link rel="stylesheet" href="vendor/maplibre-gl.css">
-<link rel="stylesheet" href="app.css?v=21">
+<link rel="stylesheet" href="app.css?v=22">
 </head>
 <body>
 <div id="map" aria-label="Carte"></div>
@@ -198,6 +198,7 @@
         <option value="14">Standard (routes, chemins, relief)</option>
         <option value="15">Détaillé (≈ 4× plus lourd)</option>
       </select>
+      <label class="dl-check" for="depGraph"><input type="checkbox" id="depGraph" class="check"><span>Inclure les chemins pour les itinéraires hors connexion <small id="depGraphMo"></small></span></label>
       <div class="dl-row"><small id="dlDepInfo"></small><button id="dlDep" class="btn">Télécharger</button></div>
     </div>
     <div class="progress" id="offProg" hidden><div id="offBar"></div><span id="offTxt"></span></div>
@@ -258,6 +259,6 @@
 <div id="toast" class="toast" hidden></div>
 
 <script src="vendor/maplibre-gl.js"></script>
-<script src="app.js?v=21"></script>
+<script src="app.js?v=22"></script>
 </body>
 </html>
