@@ -227,7 +227,14 @@ function fitTo(ptsList) {
 
 async function showTrack(t, fit = true) {
   track = makePath(t.pts, t.name); progress = null; clearRejoin();
+  // le texte et le profil s'affichent tout de suite, la carte suit dès qu'elle est prête
+  $('trackName').textContent = `${t.name} · ${fmtDist(track.total)}${track.hasEle ? ' · D+ ' + fmtM(track.totalUp) : ''}`;
+  $('btnClose').hidden = false;
+  if (me) progress = project(track, me, true);
+  drawProfile(); updateStats();
+  const mine = track;
   await ready;
+  if (track !== mine) return; // une autre trace a été ouverte entre-temps
   setSrc('track', lineFeature(track.pts)); setDone(0, true);
   startMk.setLngLat([t.pts[0].lon, t.pts[0].lat]).addTo(map);
   const last = t.pts[t.pts.length - 1];
@@ -258,9 +265,75 @@ function loadText(text, save = true) {
     const t = parseGPX(text);
     showTrack(t);
     $('offProg').hidden = true;
-    if (save) store.set('gpx', text.length < 4.5e6 ? text : '');
-    toast(`Trace chargée : ${t.pts.length} points`);
+    if (save) { store.set('gpx', text.length < 4.5e6 ? text : ''); saveRecent(track, text); }
+    toast(`Trace chargée : ${t.name}`);
   } catch (e) { toast(e.message, 4000); }
+}
+
+// ---------- Mes traces : les GPX déjà ouverts, gardés sur le téléphone ----------
+let dbP = null;
+function openDB() {
+  return dbP || (dbP = new Promise((res, rej) => {
+    const r = indexedDB.open('balise', 1);
+    r.onupgradeneeded = () => r.result.createObjectStore('tracks', { keyPath: 'id' });
+    r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error);
+  }));
+}
+async function idb(mode, fn) {
+  const d = await openDB();
+  return new Promise((res, rej) => {
+    const tx = d.transaction('tracks', mode), req = fn(tx.objectStore('tracks'));
+    tx.oncomplete = () => res(req && req.result); tx.onerror = () => rej(tx.error);
+  });
+}
+async function listRecent() {
+  try { return ((await idb('readonly', st => st.getAll())) || []).sort((a, b) => b.date - a.date); } catch { return []; }
+}
+async function saveRecent(p, text) {
+  try {
+    const id = p.name + '|' + Math.round(p.total);
+    await idb('readwrite', st => st.put({ id, name: p.name, dist: p.total, up: p.hasEle ? p.totalUp : null, date: Date.now(), text }));
+    const all = await listRecent();
+    for (const old of all.slice(30)) await idb('readwrite', st => st.delete(old.id)); // on garde les 30 dernières
+  } catch { /* stockage indisponible */ }
+}
+const fmtDate = t => new Date(t).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' });
+async function renderLib() {
+  const list = $('libList'), items = await listRecent();
+  list.innerHTML = '';
+  $('libEmpty').hidden = items.length > 0;
+  for (const it of items) {
+    const li = document.createElement('li');
+    const open = document.createElement('button'); open.className = 'lib-item';
+    open.innerHTML = `<b></b><span>${fmtDist(it.dist)}${it.up != null ? ' · D+ ' + fmtM(it.up) : ''} · ouverte le ${fmtDate(it.date)}</span>`;
+    open.querySelector('b').textContent = it.name;
+    open.onclick = () => { closeLib(); loadText(it.text); };
+    const del = document.createElement('button'); del.className = 'lib-del'; del.setAttribute('aria-label', 'Retirer ' + it.name);
+    del.innerHTML = '<svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></svg>';
+    del.onclick = async () => { await idb('readwrite', st => st.delete(it.id)).catch(() => {}); renderLib(); };
+    li.append(open, del); list.appendChild(li);
+  }
+}
+async function openLib() {
+  const items = await listRecent();
+  if (!items.length) { $('fileIn').click(); return; } // rien en mémoire : on va directement aux fichiers
+  await renderLib(); $('lib').hidden = false;
+}
+function closeLib() { $('lib').hidden = true; }
+$('btnOpen').onclick = openLib;
+$('libClose').onclick = closeLib;
+$('lib').onclick = e => { if (e.target === $('lib')) closeLib(); };
+$('libBrowse').onclick = () => { closeLib(); $('fileIn').click(); };
+
+// ---------- GPX partagé depuis une autre appli (gestionnaire de fichiers, mail…) ----------
+async function checkShared() {
+  if (!/[?&]shared=1/.test(location.search)) return;
+  history.replaceState(null, '', location.pathname);
+  try {
+    const c = await caches.open('shared'), r = await c.match('shared.gpx');
+    if (r) { loadText(await r.text()); await c.delete('shared.gpx'); }
+    else toast('Le fichier partagé n\'a pas été reçu. Réessaie.', 4000);
+  } catch { toast('Impossible de lire le fichier partagé.', 4000); }
 }
 $('fileIn').onchange = e => {
   const f = e.target.files[0]; if (!f) return;
@@ -933,7 +1006,8 @@ try {
 
 const saved = store.get('gpx');
 if (saved) { try { showTrack(parseGPX(saved)); } catch { drawProfile(); } } else drawProfile();
-const VERSION = '4 · 8 oct. 2026';
+checkShared();
+const VERSION = '5 · 8 oct. 2026';
 $('note').textContent = (window.isSecureContext ? '' : 'Attention : le GPS ne fonctionne qu\'en HTTPS. ') + 'Version ' + VERSION;
 // Mises à jour : on vérifie à chaque ouverture et on recharge dès qu'une nouvelle version est prête
 // (jamais pendant une navigation ou un enregistrement : on attend la fin)

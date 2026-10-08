@@ -84,7 +84,7 @@
   </div>
   <canvas id="profile" aria-label="Profil altimétrique"></canvas>
   <div class="actions">
-    <label class="btn" for="fileIn">Ouvrir un GPX</label>
+    <button id="btnOpen" class="btn">Ouvrir un GPX</button>
     <input type="file" id="fileIn" accept=".gpx,application/gpx+xml,application/xml,text/xml" hidden>
     <button id="btnNav" class="btn go">
       <svg viewBox="0 0 24 24"><path d="M12 2 19 21 12 17 5 21Z"/></svg>Naviguer
@@ -132,6 +132,19 @@
     <p class="note" id="note"></p>
   </div>
 </section>
+
+<div id="lib" class="lib" hidden>
+  <div class="lib-panel" role="dialog" aria-label="Mes traces">
+    <div class="lib-head">
+      <b>Mes traces</b>
+      <button id="libClose" class="closebtn" aria-label="Fermer"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></svg>Fermer</button>
+    </div>
+    <button id="libBrowse" class="btn go">Chercher un fichier GPX…</button>
+    <ul id="libList" class="lib-list"></ul>
+    <p id="libEmpty" class="note" hidden>Les traces que tu ouvres apparaîtront ici.</p>
+    <p class="note">Astuce : dans ton gestionnaire de fichiers ou un mail, fais « Partager » sur un GPX puis choisis Balise GPX.</p>
+  </div>
+</div>
 
 <div id="toast" class="toast" hidden></div>
 

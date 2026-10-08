@@ -187,3 +187,19 @@ body.nav .fab-col { bottom: calc(env(safe-area-inset-bottom, 0px) + 104px); top:
 .toast-btn { background: none; border: 0; color: #8fd0ff; font: 700 14px var(--font); padding: 4px 2px; cursor: pointer; }
 body.nav .toast { top: auto; bottom: calc(env(safe-area-inset-bottom, 0px) + 180px); }
 @media (prefers-reduced-motion: reduce) { .recording .dot, #btnRejoin.busy svg { animation: none; } }
+
+/* ---------- Mes traces ---------- */
+.lib { position: fixed; inset: 0; z-index: 30; background: rgba(10,16,13,.45); display: flex; align-items: flex-end; }
+.lib-panel {
+  width: 100%; max-height: 82vh; overflow-y: auto; background: var(--panel); color: var(--ink);
+  border-radius: 16px 16px 0 0; padding: 14px 16px calc(env(safe-area-inset-bottom, 0px) + 16px);
+  display: flex; flex-direction: column; gap: 12px;
+}
+.lib-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; font-size: 18px; }
+.lib-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
+.lib-list li { display: flex; align-items: center; gap: 4px; border-bottom: 1px solid var(--line); }
+.lib-item { flex: 1; min-width: 0; text-align: left; background: none; border: 0; color: var(--ink); padding: 12px 2px; cursor: pointer; display: flex; flex-direction: column; gap: 2px; font: inherit; }
+.lib-item b { font-size: 15px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.lib-item span { font-size: 13px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.lib-del { flex: none; width: 40px; height: 40px; border: 0; background: none; color: var(--muted); display: grid; place-items: center; cursor: pointer; }
+.lib-del svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 2.4; stroke-linecap: round; }
