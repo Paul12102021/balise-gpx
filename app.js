@@ -896,6 +896,36 @@ function toggleMore(open) {
 }
 $('btnMore').onclick = () => toggleMore(); $('grip').onclick = () => toggleMore();
 
+// Glisser le panneau du bas : vers le haut ouvre les réglages, vers le bas les ferme
+(() => {
+  const sheet = $('sheet');
+  let y0 = null, dy = 0, startScroll = 0;
+  const interactive = t => t.closest('button, select, input, label, a');
+  sheet.addEventListener('touchstart', e => {
+    if (interactive(e.target) || e.touches.length > 1) { y0 = null; return; }
+    y0 = e.touches[0].clientY; dy = 0; startScroll = sheet.scrollTop;
+  }, { passive: true });
+  sheet.addEventListener('touchmove', e => {
+    if (y0 == null) return;
+    dy = e.touches[0].clientY - y0;
+    const open = !$('more').hidden;
+    // on laisse défiler le contenu des réglages, sauf si on tire vers le bas depuis le haut
+    if (open && (dy < 0 || startScroll > 0)) return;
+    if (e.cancelable) e.preventDefault();
+    sheet.style.transition = 'none';
+    sheet.style.transform = `translateY(${dy > 0 ? dy * 0.6 : dy * 0.25}px)`;
+  }, { passive: false });
+  const end = () => {
+    if (y0 == null) return;
+    sheet.style.transition = 'transform .2s ease-out'; sheet.style.transform = '';
+    const open = !$('more').hidden;
+    if (!open && dy < -35) toggleMore(true);
+    else if (open && dy > 50 && startScroll <= 0) toggleMore(false);
+    y0 = null; dy = 0;
+  };
+  sheet.addEventListener('touchend', end); sheet.addEventListener('touchcancel', end);
+})();
+
 // les boutons ronds se placent juste au-dessus du panneau du bas, quelle que soit sa hauteur
 try {
   new ResizeObserver(() => document.documentElement.style.setProperty('--sheet-h', $('sheet').offsetHeight + 'px')).observe($('sheet'));
@@ -903,7 +933,22 @@ try {
 
 const saved = store.get('gpx');
 if (saved) { try { showTrack(parseGPX(saved)); } catch { drawProfile(); } } else drawProfile();
-if (!window.isSecureContext) $('note').textContent = 'Attention : le GPS ne fonctionne qu\'en HTTPS.';
-if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});
+const VERSION = '4 · 8 oct. 2026';
+$('note').textContent = (window.isSecureContext ? '' : 'Attention : le GPS ne fonctionne qu\'en HTTPS. ') + 'Version ' + VERSION;
+// Mises à jour : on vérifie à chaque ouverture et on recharge dès qu'une nouvelle version est prête
+// (jamais pendant une navigation ou un enregistrement : on attend la fin)
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.register('sw.js', { updateViaCache: 'none' }).then(reg => {
+    reg.update().catch(() => {});
+    document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') reg.update().catch(() => {}); });
+  }).catch(() => {});
+  let reloading = false, hadController = !!navigator.serviceWorker.controller;
+  const tryReload = () => {
+    if (reloading) return;
+    if (nav || recording) { setTimeout(tryReload, 30000); return; }
+    reloading = true; location.reload();
+  };
+  navigator.serviceWorker.addEventListener('controllerchange', () => { if (hadController) tryReload(); hadController = true; });
+}
 window.__balise = { onPos, get state() { return { nav, isOff, rejoin: !!rejoin, straight: rejoin && rejoin.straight, progress }; } };
 })();

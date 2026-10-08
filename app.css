@@ -59,7 +59,8 @@ body { font: 15px/1.35 var(--font); color: var(--ink); background: var(--paper);
   padding: 4px 16px calc(env(safe-area-inset-bottom, 0px) + 12px);
   max-height: 78vh; overflow-y: auto;
 }
-.grip { width: 44px; height: 5px; border-radius: 3px; background: var(--line); margin: 6px auto 8px; cursor: pointer; }
+.grip { position: relative; height: 22px; margin: 0 -16px; cursor: pointer; touch-action: none; }
+.grip::before { content: ""; position: absolute; left: 50%; top: 8px; width: 44px; height: 5px; margin-left: -22px; border-radius: 3px; background: var(--muted); opacity: .5; }
 .trackrow { display: flex; align-items: center; gap: 8px; margin-bottom: 4px; min-height: 34px; }
 .trackname { flex: 1; min-width: 0; font-weight: 600; font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .closebtn { flex: none; display: inline-flex; align-items: center; gap: 4px; min-height: 34px; padding: 0 10px; border-radius: 17px;

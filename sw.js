@@ -1,5 +1,5 @@
 /* Service worker : appli disponible hors ligne + tuiles de carte en cache */
-const APP = 'app-v2', TILES = 'tiles-v1';
+const APP = 'app-v4', TILES = 'tiles-v1';
 const SHELL = ['./', 'index.html', 'app.css', 'app.js', 'vendor/maplibre-gl.js', 'vendor/maplibre-gl.css',
   'manifest.webmanifest', 'icon.svg', 'icon-192.png', 'icon-512.png'];
 const TILE_HOSTS = /(^|\.)(tile\.opentopomap\.org|tile\.openstreetmap\.org)$/;
@@ -7,7 +7,7 @@ const TILE_HOSTS = /(^|\.)(tile\.opentopomap\.org|tile\.openstreetmap\.org)$/;
 const tileKey = u => u.replace(/^https:\/\/[abc]\.tile\.opentopomap\.org/, 'https://tile.opentopomap.org');
 
 self.addEventListener('install', e => {
-  e.waitUntil(caches.open(APP).then(c => c.addAll(SHELL)).then(() => self.skipWaiting()));
+  e.waitUntil(caches.open(APP).then(c => c.addAll(SHELL.map(u => new Request(u, { cache: 'reload' })))).then(() => self.skipWaiting()));
 });
 self.addEventListener('activate', e => {
   e.waitUntil(caches.keys().then(ks => Promise.all(ks.filter(k => k !== APP && k !== TILES).map(k => caches.delete(k))))
@@ -35,7 +35,7 @@ self.addEventListener('fetch', e => {
 
   // Fichiers de l'appli : réseau d'abord (pour recevoir les mises à jour), cache si hors ligne
   if (url.origin === location.origin) {
-    e.respondWith(fetch(req).then(r => {
+    e.respondWith(fetch(req, { cache: 'no-cache' }).then(r => {
       if (r.ok) { const copy = r.clone(); caches.open(APP).then(c => c.put(req, copy)); }
       return r;
     }).catch(() => caches.match(req, { ignoreSearch: true }).then(r => r || caches.match('index.html'))));
