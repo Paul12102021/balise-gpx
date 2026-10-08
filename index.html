@@ -5,56 +5,102 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
 <meta name="theme-color" content="#1d2a24">
 <meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <title>Balise GPX</title>
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" href="icon.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="icon-192.png">
-<link rel="stylesheet" href="vendor/leaflet.css">
+<link rel="stylesheet" href="vendor/maplibre-gl.css">
 <link rel="stylesheet" href="app.css">
 </head>
 <body>
 <div id="map" aria-label="Carte"></div>
 
-<header class="hud">
+<!-- Aperçu -->
+<header class="hud ov-only">
   <div class="stat"><span class="lbl">Reste</span><span class="val" id="sDist">–</span></div>
   <div class="stat"><span class="lbl">D+ restant</span><span class="val" id="sUp">–</span></div>
   <div class="stat"><span class="lbl">Écart</span><span class="val" id="sOff">–</span></div>
   <div class="stat"><span class="lbl">Altitude</span><span class="val" id="sEle">–</span></div>
 </header>
 
-<div id="alert" class="alert" hidden role="alert">
-  <strong>Hors trace</strong> <span id="alertTxt"></span>
-  <button id="btnMute" class="ghost">Couper le son</button>
+<!-- Navigation : bandeau de direction -->
+<div id="navTop" class="navtop nav-only" data-tone="gps">
+  <div class="nt-icon" id="ntIcon"></div>
+  <div class="nt-main">
+    <div class="nt-dist" id="ntDist"></div>
+    <div class="nt-txt" id="ntTxt">Recherche du signal GPS…</div>
+    <div class="nt-sub" id="ntSub"></div>
+  </div>
 </div>
 
 <div class="fab-col">
-  <button id="btnCenter" class="fab" title="Centrer sur ma position" aria-label="Centrer sur ma position">
-    <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/></svg>
-  </button>
-  <button id="btnLayer" class="fab" title="Changer de fond de carte" aria-label="Changer de fond de carte">
+  <button id="btnLayer" class="fab" title="Fond de carte" aria-label="Changer de fond de carte">
     <svg viewBox="0 0 24 24"><path d="M12 3 2 8l10 5 10-5-10-5Z"/><path d="m2 13 10 5 10-5"/></svg>
+  </button>
+  <button id="btnVoice" class="fab nav-only" title="Guidage vocal" aria-label="Activer ou couper le guidage vocal">
+    <svg viewBox="0 0 24 24"><path d="M4 9v6h4l5 4V5L8 9H4Z"/><path class="wave" d="M16.5 8.5a5 5 0 0 1 0 7M19 6a8.5 8.5 0 0 1 0 12"/><path class="cross" d="m16 9 6 6m0-6-6 6"/></svg>
+  </button>
+  <button id="btnRecFab" class="fab nav-only" title="Enregistrer ma trace" aria-label="Enregistrer ma trace">
+    <span class="dot"></span>
+  </button>
+  <button id="btnRejoin" class="fab" title="Itinéraire vers la trace" aria-label="Calculer l'itinéraire vers le point de la trace le plus proche">
+    <svg viewBox="0 0 24 24"><path d="M9 14 4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11"/></svg>
+  </button>
+  <button id="btnCenter" class="fab" title="Me suivre" aria-label="Centrer et suivre ma position">
+    <svg viewBox="0 0 24 24"><path d="M12 2 19 21 12 17 5 21Z"/></svg>
   </button>
 </div>
 
-<section class="sheet" id="sheet">
-  <div class="grip" id="grip" role="button" aria-label="Afficher ou masquer le panneau"></div>
+<div id="speed" class="speed nav-only"><b id="spVal">–</b><span>km/h</span></div>
+
+<!-- Navigation : barre du bas -->
+<div id="navBottom" class="navbottom nav-only">
+  <div class="nb-bar"><div id="nbBar"></div></div>
+  <div class="nb-row">
+    <button id="btnExit" class="nb-btn" aria-label="Quitter la navigation">
+      <svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></svg>
+    </button>
+    <div class="nb-stats">
+      <div class="nb-stat"><b id="nbEta">–</b><span id="nbDur">arrivée</span></div>
+      <div class="nb-stat"><b id="nbRem">–</b><span>restant</span></div>
+      <div class="nb-stat"><b id="nbUp">–</b><span>D+ restant</span></div>
+    </div>
+    <button id="btnOverview" class="nb-btn" aria-label="Vue d'ensemble de la trace">
+      <svg viewBox="0 0 24 24"><circle cx="6" cy="18" r="2"/><circle cx="18" cy="6" r="2"/><path d="M8 18h7.5a3.5 3.5 0 0 0 0-7h-7a3.5 3.5 0 0 1 0-7H16"/></svg>
+    </button>
+  </div>
+</div>
+
+<!-- Aperçu : panneau du bas -->
+<section class="sheet ov-only" id="sheet">
+  <div class="grip" id="grip" role="button" aria-label="Afficher ou masquer les réglages"></div>
   <div class="trackname" id="trackName">Aucune trace chargée</div>
-  <canvas id="profile" height="110" aria-label="Profil altimétrique"></canvas>
+  <canvas id="profile" aria-label="Profil altimétrique"></canvas>
   <div class="actions">
-    <label class="btn primary" for="fileIn">Ouvrir un GPX</label>
+    <label class="btn" for="fileIn">Ouvrir un GPX</label>
     <input type="file" id="fileIn" accept=".gpx,application/gpx+xml,application/xml,text/xml" hidden>
-    <button id="btnFollow" class="btn">Démarrer le suivi</button>
-    <button id="btnRec" class="btn"><span class="dot"></span>Enregistrer</button>
-    <button id="btnMore" class="btn ghost">Plus</button>
+    <button id="btnNav" class="btn go">
+      <svg viewBox="0 0 24 24"><path d="M12 2 19 21 12 17 5 21Z"/></svg>Naviguer
+    </button>
+    <button id="btnRec" class="btn"><span class="dot"></span><span class="t">Enregistrer</span></button>
+    <button id="btnMore" class="btn ghost">Réglages</button>
   </div>
 
   <div id="more" class="more" hidden>
     <div class="row">
       <label for="thr">Alerte hors trace au-delà de</label>
       <select id="thr">
-        <option value="25">25 m</option><option value="50" selected>50 m</option>
+        <option value="25">25 m</option><option value="50">50 m</option>
         <option value="100">100 m</option><option value="200">200 m</option>
+      </select>
+    </div>
+    <div class="row">
+      <label for="prof">Itinéraire de retour</label>
+      <select id="prof">
+        <option value="hiking-mountain">À pied</option>
+        <option value="trekking">À vélo</option>
       </select>
     </div>
     <div class="row">
@@ -67,6 +113,10 @@
       <button id="btnExport" class="btn">Exporter GPX</button>
     </div>
     <div class="row">
+      <span>Tester le guidage depuis chez soi</span>
+      <button id="btnSim" class="btn">Simuler</button>
+    </div>
+    <div class="row">
       <span>Pas de fichier sous la main ?</span>
       <button id="btnDemo" class="btn ghost">Charger un exemple</button>
     </div>
@@ -76,7 +126,7 @@
 
 <div id="toast" class="toast" hidden></div>
 
-<script src="vendor/leaflet.js"></script>
+<script src="vendor/maplibre-gl.js"></script>
 <script src="app.js"></script>
 </body>
 </html>

@@ -1,8 +1,10 @@
 /* Service worker : appli disponible hors ligne + tuiles de carte en cache */
-const APP = 'app-v1', TILES = 'tiles-v1';
-const SHELL = ['./', 'index.html', 'app.css', 'app.js', 'vendor/leaflet.js', 'vendor/leaflet.css',
+const APP = 'app-v2', TILES = 'tiles-v1';
+const SHELL = ['./', 'index.html', 'app.css', 'app.js', 'vendor/maplibre-gl.js', 'vendor/maplibre-gl.css',
   'manifest.webmanifest', 'icon.svg', 'icon-192.png', 'icon-512.png'];
 const TILE_HOSTS = /(^|\.)(tile\.opentopomap\.org|tile\.openstreetmap\.org)$/;
+// a/b/c.tile.opentopomap.org servent les mêmes tuiles : une seule clé de cache
+const tileKey = u => u.replace(/^https:\/\/[abc]\.tile\.opentopomap\.org/, 'https://tile.opentopomap.org');
 
 self.addEventListener('install', e => {
   e.waitUntil(caches.open(APP).then(c => c.addAll(SHELL)).then(() => self.skipWaiting()));
@@ -16,21 +18,22 @@ self.addEventListener('fetch', e => {
   const req = e.request; if (req.method !== 'GET') return;
   const url = new URL(req.url);
 
-  // Tuiles : cache d'abord, sinon réseau puis mise en cache (les zones vues restent dispo hors ligne)
+  // Tuiles : cache d'abord, sinon réseau puis mise en cache
   if (TILE_HOSTS.test(url.hostname)) {
+    const key = tileKey(req.url);
     e.respondWith(caches.open(TILES).then(async c => {
-      const hit = await c.match(req.url);
+      const hit = await c.match(key);
       if (hit) return hit;
       try {
         const r = await fetch(req);
-        if (r.ok) c.put(req.url, r.clone());
+        if (r.ok) c.put(key, r.clone());
         return r;
       } catch { return new Response('', { status: 504 }); }
     }));
     return;
   }
 
-  // Fichiers de l'appli : réseau d'abord (mises à jour), cache si hors ligne
+  // Fichiers de l'appli : réseau d'abord (pour recevoir les mises à jour), cache si hors ligne
   if (url.origin === location.origin) {
     e.respondWith(fetch(req).then(r => {
       if (r.ok) { const copy = r.clone(); caches.open(APP).then(c => c.put(req, copy)); }
