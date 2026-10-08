@@ -4,7 +4,7 @@
 
 // La page et le code doivent être de la même version. Sinon (page gardée en cache
 // par le téléphone ou par GitHub), on recharge une page fraîche, au plus 3 fois.
-const APP_VERSION = 31;
+const APP_VERSION = 32;
 try {
   const meta = document.querySelector('meta[name="balise-version"]');
   const pageV = meta ? +meta.content : 0;
@@ -1232,25 +1232,8 @@ function updateNavMore() {
 }
 $('nbGrip').onclick = () => toggleNavMore();
 (() => {
-  const bar = $('navBottom'); let y0 = null, dy = 0;
-  bar.addEventListener('touchstart', e => {
-    if (e.target.closest('button') || e.touches.length > 1) { y0 = null; return; }
-    y0 = e.touches[0].clientY; dy = 0;
-  }, { passive: true });
-  bar.addEventListener('touchmove', e => {
-    if (y0 == null) return;
-    dy = e.touches[0].clientY - y0;
-    if (e.cancelable) e.preventDefault();
-    bar.style.transition = 'none';
-    bar.style.transform = `translateY(${dy > 0 ? dy * 0.6 : dy * 0.25}px)`;
-  }, { passive: false });
-  const end = () => {
-    if (y0 == null) return;
-    bar.style.transition = 'transform .2s ease-out'; bar.style.transform = '';
-    if (dy < -35) toggleNavMore(true); else if (dy > 35) toggleNavMore(false);
-    y0 = null; dy = 0;
-  };
-  bar.addEventListener('touchend', end); bar.addEventListener('touchcancel', end);
+  const bar = $('navBottom');
+  attachSwipe(bar, () => !$('navMore').hidden, open => toggleNavMore(open));
   try {
     new ResizeObserver(() => { if (bar.offsetHeight) document.documentElement.style.setProperty('--nav-h', bar.offsetHeight + 'px'); }).observe(bar);
   } catch {}
@@ -2290,35 +2273,47 @@ function toggleMore(open) {
 }
 $('btnMore').onclick = () => toggleMore(); $('grip').onclick = () => toggleMore();
 
-// Glisser le panneau du bas : vers le haut ouvre les réglages, vers le bas les ferme
-(() => {
-  const sheet = $('sheet');
-  let y0 = null, dy = 0, startScroll = 0;
-  const interactive = t => t.closest('button, select, input, label, a');
-  sheet.addEventListener('touchstart', e => {
-    if (interactive(e.target) || e.touches.length > 1) { y0 = null; return; }
-    y0 = e.touches[0].clientY; dy = 0; startScroll = sheet.scrollTop;
+// Glisser un panneau du bas : vers le haut il s'ouvre, vers le bas il se réduit.
+// Le geste part de n'importe où, boutons compris : un toucher reste un clic,
+// un mouvement vertical devient un glissement (et le clic est alors annulé).
+function attachSwipe(panel, isOpen, setOpen) {
+  let x0 = null, y0 = 0, dx = 0, dy = 0, startScroll = 0, decided = false, swiping = false;
+  const scrollable = () => panel.scrollHeight > panel.clientHeight + 2;
+  panel.addEventListener('touchstart', e => {
+    if (e.touches.length > 1 || e.target.closest('select, textarea, input[type=search], input[type=text]')) { x0 = null; return; }
+    x0 = e.touches[0].clientX; y0 = e.touches[0].clientY; dx = dy = 0;
+    startScroll = panel.scrollTop; decided = swiping = false;
   }, { passive: true });
-  sheet.addEventListener('touchmove', e => {
-    if (y0 == null) return;
-    dy = e.touches[0].clientY - y0;
-    const open = !$('more').hidden;
-    // on laisse défiler le contenu des réglages, sauf si on tire vers le bas depuis le haut
-    if (open && (dy < 0 || startScroll > 0)) return;
+  panel.addEventListener('touchmove', e => {
+    if (x0 == null) return;
+    dx = e.touches[0].clientX - x0; dy = e.touches[0].clientY - y0;
+    if (!decided && (Math.abs(dx) > 8 || Math.abs(dy) > 8)) {
+      decided = true;
+      swiping = Math.abs(dy) > Math.abs(dx) * 1.2;
+      // contenu qui défile : on le laisse défiler, sauf tirer vers le bas depuis tout en haut
+      if (swiping && isOpen() && scrollable() && (dy < 0 || startScroll > 0)) swiping = false;
+    }
+    if (!swiping) return;
     if (e.cancelable) e.preventDefault();
-    sheet.style.transition = 'none';
-    sheet.style.transform = `translateY(${dy > 0 ? dy * 0.6 : dy * 0.25}px)`;
+    panel.style.transition = 'none';
+    panel.style.transform = `translateY(${dy > 0 ? dy * 0.6 : dy * 0.25}px)`;
   }, { passive: false });
   const end = () => {
-    if (y0 == null) return;
-    sheet.style.transition = 'transform .2s ease-out'; sheet.style.transform = '';
-    const open = !$('more').hidden;
-    if (!open && dy < -35) toggleMore(true);
-    else if (open && dy > 50 && startScroll <= 0) toggleMore(false);
-    y0 = null; dy = 0;
+    if (x0 == null) return;
+    x0 = null;
+    if (!swiping) return;
+    panel.style.transition = 'transform .2s ease-out'; panel.style.transform = '';
+    if (!isOpen() && dy < -30) setOpen(true);
+    else if (isOpen() && dy > 40) setOpen(false);
+    // le doigt s'est levé sur un bouton : ce n'était pas un clic
+    const block = ev => { ev.stopPropagation(); ev.preventDefault(); };
+    panel.addEventListener('click', block, true);
+    setTimeout(() => panel.removeEventListener('click', block, true), 400);
+    swiping = false;
   };
-  sheet.addEventListener('touchend', end); sheet.addEventListener('touchcancel', end);
-})();
+  panel.addEventListener('touchend', end); panel.addEventListener('touchcancel', end);
+}
+attachSwipe($('sheet'), () => !$('more').hidden, open => toggleMore(open));
 
 // les boutons ronds se placent juste au-dessus du panneau du bas, quelle que soit sa hauteur
 try {
