@@ -4,7 +4,7 @@
 
 // La page et le code doivent être de la même version. Sinon (page gardée en cache
 // par le téléphone ou par GitHub), on recharge une page fraîche, au plus 3 fois.
-const APP_VERSION = 14;
+const APP_VERSION = 15;
 try {
   const meta = document.querySelector('meta[name="balise-version"]');
   const pageV = meta ? +meta.content : 0;
@@ -1254,7 +1254,7 @@ async function downloadPack(pack, tiles) {
   if (dl) { toast('Un téléchargement est déjà en cours.'); return; }
   if (!('caches' in window)) { toast('Ce navigateur ne permet pas le stockage hors ligne.', 4000); return; }
   if (navigator.onLine === false) { toast('Pas de réseau : connecte-toi pour télécharger.', 4000); return; }
-  dl = { stop: false, reason: '' };
+  dl = { stop: false, reason: '', packId: pack.id };
   keepAwake();
   if (navigator.storage && navigator.storage.persist) navigator.storage.persist().catch(() => {});
   $('offProg').hidden = false; $('dlStop').hidden = false; $('dlTrace').disabled = $('dlDep').disabled = true;
@@ -1269,9 +1269,13 @@ async function downloadPack(pack, tiles) {
   await save(false); renderPacks();
   const show = () => {
     const secs = (Date.now() - t0) / 1000, rate = done / Math.max(secs, 1), left = (total - done) / Math.max(rate, 0.1);
+    const pct = Math.floor(done / total * 100), rest = done > 20 && done < total ? ` · reste ${left < 60 ? 'moins d’1 min' : '~' + fmtDur(left)}` : '';
     $('offBar').style.width = (done / total * 100) + '%';
-    $('offTxt').textContent = `${done.toLocaleString('fr-FR')} / ${total.toLocaleString('fr-FR')}` +
-      (done > 20 && done < total ? ` · reste ${left < 60 ? "moins d’1 min" : "~" + fmtDur(left)}` : '') + (fail ? ` · ${fail} erreurs` : '');
+    $('offTxt').textContent = `${pct} % · ${done.toLocaleString('fr-FR')} / ${total.toLocaleString('fr-FR')}` + rest + (fail ? ` · ${fail} erreurs` : '');
+    // aussi visible hors de la fenêtre des cartes : dans les réglages et sur la ligne de la carte
+    $('mapsStatus').textContent = `${pack.name} : ${pct} %${rest}`; $('mapsStatus').hidden = false;
+    const row = document.querySelector(`[data-pack="${CSS.escape(pack.id)}"]`);
+    if (row) row.textContent = `En cours : ${pct} %${rest}`;
   };
   // une tuile : délai maximal de 20 s, un second essai, sans passer par les secours du service worker
   const getTile = async (z, x, y) => {
@@ -1315,7 +1319,7 @@ async function downloadPack(pack, tiles) {
   const stopped = dl.stop, reason = dl.reason; dl = null;
   if (fetched > 50) { tileKB = clamp(Math.round(fetchedBytes / fetched / 1024 * 10) / 10 || tileKB, 8, 60); store.set('tileKB', tileKB); }
   await save(!stopped && fail === 0);
-  $('dlStop').hidden = true; $('dlTrace').disabled = !track; $('dlDep').disabled = false;
+  $('dlStop').hidden = true; $('dlTrace').disabled = !track; $('dlDep').disabled = false; $('mapsStatus').hidden = true;
   if (reason) $('offTxt').textContent = `Téléchargement impossible : ${reason}.`;
   else $('offTxt').textContent = pack.complete ? `${pack.name} : disponible hors ligne ✓` : `${pack.name} : ${pack.missing.toLocaleString('fr-FR')} tuiles manquantes · touche « Reprendre »`;
   toast(reason ? 'Téléchargement impossible : ' + reason : pack.complete ? 'Carte téléchargée ✓' : 'Téléchargement incomplet, tu peux le reprendre.', 5000);
@@ -1361,9 +1365,11 @@ async function renderPacks() {
     info.innerHTML = '<b></b><span></span>';
     info.querySelector('b').textContent = p.name;
     info.querySelector('span').textContent = `${p.kind === 'trace' ? 'Le long de la trace' : 'Département, ' + p.detail} · ${fmtMo(p.bytes / 1024)} · ${fmtDate(p.date)}` + (p.complete ? '' : ` · incomplet`);
+    if (dl && dl.packId === p.id) { const live = document.createElement('span'); live.className = 'dl-live'; live.dataset.pack = p.id; live.textContent = 'En cours…'; info.appendChild(live); }
     const acts = document.createElement('div'); acts.className = 'pack-acts';
     if (!p.complete) {
       const re = document.createElement('button'); re.className = 'btn small'; re.textContent = 'Reprendre';
+      if (dl && dl.packId === p.id) re.hidden = true;
       re.onclick = () => downloadPack(p, p.tiles); acts.appendChild(re);
     }
     const see = document.createElement('button'); see.className = 'btn small'; see.textContent = 'Voir';
