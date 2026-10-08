@@ -148,6 +148,8 @@ const IGN_URL = 'https://data.geopf.fr/wmts?SERVICE=WMTS&REQUEST=GetTile&VERSION
 const LAYERS = [
   { id: 'topo', name: 'Topo', tiles: ['a', 'b', 'c'].map(s => `https://${s}.tile.opentopomap.org/{z}/{x}/{y}.png`), max: 17,
     attr: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>, SRTM · © <a href="https://opentopomap.org">OpenTopoMap</a>' },
+  { id: 'cyclosm', name: 'CyclOSM (vélo)', tiles: ['a', 'b', 'c'].map(sd => `https://${sd}.tile-cyclosm.openstreetmap.fr/cyclosm/{z}/{x}/{y}.png`), max: 20,
+    attr: '<a href="https://www.cyclosm.org">CyclOSM</a> · © <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>' },
   { id: 'ign', name: 'IGN', tiles: [IGN_URL], max: 19, attr: '© <a href="https://www.ign.fr">IGN</a> · Plan IGN' },
   { id: 'osm', name: 'Plan OSM', tiles: ['https://tile.openstreetmap.org/{z}/{x}/{y}.png'], max: 19,
     attr: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>' }
@@ -1005,15 +1007,39 @@ async function downloadPack(pack, tiles) {
   if (dl) { toast('Un téléchargement est déjà en cours.'); return; }
   if (!('caches' in window)) { toast('Ce navigateur ne permet pas le stockage hors ligne.', 4000); return; }
   if (navigator.onLine === false) { toast('Pas de réseau : connecte-toi pour télécharger.', 4000); return; }
-  dl = { stop: false };
+  dl = { stop: false, reason: '' };
   keepAwake();
   if (navigator.storage && navigator.storage.persist) navigator.storage.persist().catch(() => {});
   $('offProg').hidden = false; $('dlStop').hidden = false; $('dlTrace').disabled = $('dlDep').disabled = true;
   const cache = await caches.open(TILE_CACHE), queue = tiles.slice(), total = tiles.length;
-  let done = 0, fail = 0, bytes = 0, fetched = 0, fetchedBytes = 0;
+  let done = 0, fail = 0, bytes = 0, fetched = 0, fetchedBytes = 0, lastErr = '';
+  const t0 = Date.now();
+  // la carte apparaît tout de suite dans la liste : si l'appli est fermée en route, on pourra reprendre
+  const save = async complete => {
+    Object.assign(pack, { tiles, count: total, bytes, date: Date.now(), complete, missing: total - done + fail });
+    try { await idb('readwrite', st => st.put(pack), 'packs'); } catch {}
+  };
+  await save(false); renderPacks();
   const show = () => {
+    const secs = (Date.now() - t0) / 1000, rate = done / Math.max(secs, 1), left = (total - done) / Math.max(rate, 0.1);
     $('offBar').style.width = (done / total * 100) + '%';
-    $('offTxt').textContent = `${pack.name} · ${done.toLocaleString('fr-FR')} / ${total.toLocaleString('fr-FR')}`;
+    $('offTxt').textContent = `${done.toLocaleString('fr-FR')} / ${total.toLocaleString('fr-FR')}` +
+      (done > 20 && done < total ? ` · reste ${left < 60 ? "moins d’1 min" : "~" + fmtDur(left)}` : '') + (fail ? ` · ${fail} erreurs` : '');
+  };
+  // une tuile : délai maximal de 20 s, un second essai, sans passer par les secours du service worker
+  const getTile = async (z, x, y) => {
+    for (let attempt = 0; attempt < 2; attempt++) {
+      const ctrl = new AbortController(), timer = setTimeout(() => ctrl.abort(), 20000);
+      try {
+        const r = await fetch(ignTileUrl(z, x, y), { mode: 'cors', cache: 'no-store', signal: ctrl.signal });
+        if (r.ok) return await r.blob();
+        lastErr = 'le serveur IGN répond ' + r.status;
+        if (r.status >= 400 && r.status < 500 && r.status !== 429) return null; // demande refusée : inutile d'insister
+      } catch (e) { lastErr = e.name === 'AbortError' ? 'le serveur IGN ne répond pas' : 'pas de connexion'; }
+      finally { clearTimeout(timer); }
+      await new Promise(r => setTimeout(r, 1500));
+    }
+    return null;
   };
   const worker = async () => {
     while (queue.length && !dl.stop) {
@@ -1022,29 +1048,34 @@ async function downloadPack(pack, tiles) {
         const hit = await cache.match(key);
         if (hit) bytes += +(hit.headers.get('x-size') || tileKB * 1024);
         else {
-          const r = await fetch(ignTileUrl(z, x, y), { mode: 'cors' });
-          if (!r.ok) throw new Error(r.status);
-          const b = await r.blob();
-          await cache.put(key, new Response(b, { headers: { 'content-type': b.type || 'image/png', 'x-size': String(b.size) } }));
-          bytes += b.size; fetched++; fetchedBytes += b.size;
+          const b = await getTile(z, x, y);
+          if (!b) fail++;
+          else {
+            await cache.put(key, new Response(b, { headers: { 'content-type': b.type || 'image/png', 'x-size': String(b.size) } }));
+            bytes += b.size; fetched++; fetchedBytes += b.size;
+          }
         }
       } catch { fail++; }
       done++;
+      // tout échoue dès le début : on arrête et on dit pourquoi
+      if (done >= 30 && fetched === 0 && fail >= 25 && !dl.stop) { dl.stop = true; dl.reason = lastErr; }
       if (done % 10 === 0 || !queue.length) show();
+      if (done % 300 === 0) save(false);
     }
   };
   show();
-  await Promise.all(Array.from({ length: 6 }, worker));
-  const stopped = dl.stop; dl = null;
+  await Promise.all(Array.from({ length: 8 }, worker));
+  const stopped = dl.stop, reason = dl.reason; dl = null;
   if (fetched > 50) { tileKB = clamp(Math.round(fetchedBytes / fetched / 1024 * 10) / 10 || tileKB, 8, 60); store.set('tileKB', tileKB); }
-  pack.tiles = tiles; pack.count = total; pack.bytes = bytes; pack.date = Date.now();
-  pack.complete = !stopped && fail === 0; pack.missing = stopped ? total - done + fail : fail;
-  try { await idb('readwrite', st => st.put(pack), 'packs'); } catch {}
+  await save(!stopped && fail === 0);
   $('dlStop').hidden = true; $('dlTrace').disabled = !track; $('dlDep').disabled = false;
-  $('offTxt').textContent = pack.complete ? `${pack.name} : disponible hors ligne ✓` : `${pack.name} : ${pack.missing.toLocaleString('fr-FR')} tuiles manquantes · touche « Reprendre »`;
-  toast(pack.complete ? 'Carte téléchargée ✓' : 'Téléchargement incomplet, tu peux le reprendre.', 4000);
+  if (reason) $('offTxt').textContent = `Téléchargement impossible : ${reason}.`;
+  else $('offTxt').textContent = pack.complete ? `${pack.name} : disponible hors ligne ✓` : `${pack.name} : ${pack.missing.toLocaleString('fr-FR')} tuiles manquantes · touche « Reprendre »`;
+  toast(reason ? 'Téléchargement impossible : ' + reason : pack.complete ? 'Carte téléchargée ✓' : 'Téléchargement incomplet, tu peux le reprendre.', 5000);
   renderPacks(); updateStorageInfo(); updateOfflineInfo(); drawPacks();
 }
+// téléchargement en cours et appli remise au premier plan : on rallume la protection d'écran
+document.addEventListener('visibilitychange', () => { if (dl && document.visibilityState === 'visible') keepAwake(); });
 $('dlStop').onclick = () => { if (dl) { dl.stop = true; toast('Arrêt du téléchargement…'); } };
 
 function simplifyLine(pts, step = 50) {
@@ -1223,7 +1254,7 @@ try {
 const saved = store.get('gpx');
 if (saved) { try { showTrack(parseGPX(saved)); } catch { drawProfile(); } } else drawProfile();
 checkShared();
-const VERSION = '7 · 8 oct. 2026';
+const VERSION = '8 · 8 oct. 2026';
 $('note').textContent = (window.isSecureContext ? '' : 'Attention : le GPS ne fonctionne qu\'en HTTPS. ') + 'Version ' + VERSION;
 // Mises à jour : on vérifie à chaque ouverture et on recharge dès qu'une nouvelle version est prête
 // (jamais pendant une navigation ou un enregistrement : on attend la fin)

@@ -1,6 +1,6 @@
 /* Service worker : appli disponible hors ligne + tuiles de carte en cache */
-const APP = 'app-v7', TILES = 'tiles-v2';
-const SHELL = ['./', 'index.html', 'app.css?v=7', 'app.js?v=7', 'vendor/maplibre-gl.js', 'vendor/maplibre-gl.css',
+const APP = 'app-v8', TILES = 'tiles-v2';
+const SHELL = ['./', 'index.html', 'app.css?v=8', 'app.js?v=8', 'vendor/maplibre-gl.js', 'vendor/maplibre-gl.css',
   'departements.json', 'manifest.webmanifest', 'icon.svg', 'icon-192.png', 'icon-512.png'];
 
 // Clé de cache commune avec la page : https://tiles.balise/<fond>/<z>/<x>/<y>
@@ -9,6 +9,8 @@ function parseTile(url) {
   let m;
   if (/(^|\.)tile\.opentopomap\.org$/.test(url.hostname) && (m = url.pathname.match(/^\/(\d+)\/(\d+)\/(\d+)\.png$/)))
     return { prov: 'topo', z: +m[1], x: +m[2], y: +m[3] };
+  if (/(^|\.)tile-cyclosm\.openstreetmap\.fr$/.test(url.hostname) && (m = url.pathname.match(/^\/cyclosm\/(\d+)\/(\d+)\/(\d+)\.png$/)))
+    return { prov: 'cyclosm', z: +m[1], x: +m[2], y: +m[3] };
   if (url.hostname === 'tile.openstreetmap.org' && (m = url.pathname.match(/^\/(\d+)\/(\d+)\/(\d+)\.png$/)))
     return { prov: 'osm', z: +m[1], x: +m[2], y: +m[3] };
   if (url.hostname === 'data.geopf.fr' && /GetTile/i.test(url.searchParams.get('REQUEST') || ''))
@@ -81,6 +83,8 @@ self.addEventListener('fetch', e => {
   if (req.method !== 'GET') return;
 
   const t = parseTile(url);
+  // téléchargement de cartes par l'appli (cache: no-store) : on laisse passer tel quel, sans secours
+  if (t && req.cache === 'no-store') return;
   if (t) { e.respondWith(serveTile(req, t)); return; }
 
   // Fichiers de l'appli : réseau d'abord (pour recevoir les mises à jour), cache si hors ligne
