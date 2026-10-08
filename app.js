@@ -4,7 +4,7 @@
 
 // La page et le code doivent être de la même version. Sinon (page gardée en cache
 // par le téléphone ou par GitHub), on recharge une page fraîche, au plus 3 fois.
-const APP_VERSION = 18;
+const APP_VERSION = 19;
 try {
   const meta = document.querySelector('meta[name="balise-version"]');
   const pageV = meta ? +meta.content : 0;
@@ -315,7 +315,9 @@ function loadText(text, save = true) {
     showTrack(t);
     $('offProg').hidden = true;
     if (save) { store.set('gpx', text.length < 4.5e6 ? text : ''); saveRecent(track, text); }
-    toast(`Trace chargée : ${t.name}`);
+    if (/v[ée]lo|cyclo|bike|vtt|gravel|bici/i.test(t.name) && profile !== 'trekking')
+      toast(`Trace chargée : ${t.name}`, 6000, { label: 'Mode vélo', run: () => setProfile('trekking') });
+    else toast(`Trace chargée : ${t.name}`);
   } catch (e) { toast(e.message, 4000); }
 }
 
@@ -519,7 +521,7 @@ function onPos(pos) {
 
   if (pendingRejoin) { pendingRejoin = false; requestRejoin(true); }
   if (fixWaiters.length && (pos.acc || 99) <= 100) { fixWaiters.splice(0).forEach(f => f(pos)); }
-  if (nav && !track && !pos.sim && (pos.acc || 0) <= 40) {
+  if (nav && !pos.sim && (pos.acc || 0) <= 40) { // distance parcourue depuis le début de la navigation
     if (!freeRef) freeRef = pos;
     else { const d = hav(freeRef, pos); if (d >= 8) { if (d < 500) freeD += d; freeRef = pos; } }
   }
@@ -730,7 +732,16 @@ $('thr').onchange = e => { threshold = +e.target.value; store.set('thr', thresho
 $('prof').value = profile;
 $('autoRec').checked = store.get('autoRec') === '1';
 $('autoRec').onchange = e => store.set('autoRec', e.target.checked ? '1' : '0');
-$('prof').onchange = e => { profile = e.target.value; store.set('profile', profile); };
+function setProfile(p, quiet) {
+  profile = p; store.set('profile', p);
+  $('prof').value = p; $('destProf').value = p;
+  $('npMode').textContent = p === 'trekking' ? 'À vélo' : 'À pied';
+  if (!quiet) toast(p === 'trekking' ? 'Mode vélo : itinéraires et temps estimés pour le vélo' : 'Mode à pied : itinéraires et temps estimés pour la marche', 3500);
+  updateStats();
+}
+$('prof').onchange = e => setProfile(e.target.value);
+$('npMode').onclick = () => setProfile(profile === 'trekking' ? 'hiking-mountain' : 'trekking');
+setTimeout(() => setProfile(profile, true), 0);
 
 function alertOff() { vibrate([400, 150, 400, 150, 400]); beep(); lastAlert = Date.now(); }
 
@@ -844,7 +855,7 @@ function openDest() {
 function closeDest() { $('dest').hidden = true; $('destQ').blur(); }
 $('destClose').onclick = closeDest;
 $('dest').onclick = e => { if (e.target === $('dest')) closeDest(); };
-$('destProf').onchange = e => { profile = e.target.value; store.set('profile', profile); $('prof').value = profile; };
+$('destProf').onchange = e => setProfile(e.target.value);
 $('destFree').onclick = () => { closeDest(); startNav(true); };
 
 let searchT = 0, searchSeq = 0;
@@ -933,8 +944,14 @@ function remainingInfo() {
       rem = rejoinProg.remain + (pt ? pt.remain : 0); up = pt ? pt.upLeft : up;
     } else { rem = progress.remain; up = progress.upLeft; }
   }
-  // temps : vitesse moyenne mesurée, sinon 4,5 km/h + 1 h par 600 m de D+
-  const secs = speedEma && speedSamples > 15 ? rem / Math.max(speedEma, 0.5) : rem / 1.25 + (track.hasEle ? up / 600 * 3600 : 0);
+  // temps : allure de base selon le mode (à pied 4,5 km/h + 1 h par 600 m de D+,
+  // à vélo 16 km/h + 1 h par 800 m de D+), puis de plus en plus ta vitesse réelle
+  // à mesure que tu avances (pleinement après ~3 km)
+  const bike = profile === 'trekking';
+  const base = (bike ? 16 : 4.5) / 3.6, climb = bike ? 800 : 600;
+  const w = speedEma ? clamp(freeD / 3000, 0, 0.85) : 0;
+  const v = w * clamp(speedEma || base, 0.5, 15) + (1 - w) * base;
+  const secs = rem / v + (track.hasEle ? (1 - w) * up / climb * 3600 : 0);
   return { rem, up, secs };
 }
 function updateStats() {
