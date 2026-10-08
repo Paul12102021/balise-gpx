@@ -2,30 +2,43 @@
    Navigation = bandeau de direction en haut, barre d'arrivée en bas, carte inclinée orientée dans le sens de marche. */
 :root {
   --ink: #17201c;
-  --paper: #f3f5f1;
-  --panel: #ffffff;
-  --muted: #5d6b64;
-  --line: #d6ddd8;
-  --hud: #1d2a24;
-  --hud-ink: #eef4ef;
-  --track: #c2187a;      /* magenta : la trace à suivre */
-  --done: #8f9c96;       /* partie déjà parcourue */
-  --me: #1e6fd9;         /* bleu : ma position, itinéraire de retour */
-  --go: #17613d;         /* bandeau de guidage */
-  --rec: #e0571b;        /* orange : enregistrement */
-  --ok: #2f8a4c;
-  --warn: #c62828;
+  --paper: #EEF1E8;      /* sauge très clair, comme le fond du logo */
+  --panel: #F8F9F4;
+  --muted: #5E6B60;
+  --line: #D5DCCD;
+  --hud: #1F2B25;
+  --hud-ink: #EEF4EF;
+  --track: #E85A0C;      /* orange du logo : la trace à suivre */
+  --done: #A9B3A5;       /* partie déjà parcourue */
+  --me: #1E6FD9;         /* bleu : ma position, itinéraire de retour */
+  --go: #2F5E45;         /* vert sapin du logo : guidage, bouton Naviguer */
+  --go-ink: #2F5E45;     /* texte vert sur fond clair */
+  --rec: #C2410C;        /* enregistrement */
+  --ok: #2F5E45;
+  --warn: #C62828;
+  --warn-bg: #FDECEA; --warn-ink: #8A1C1C;
+  --mapbg: #E4E9DC;
   --font: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
   --num: ui-rounded, "SF Pro Rounded", system-ui, sans-serif;
   --ctrl-bottom: calc(var(--sheet-h, 260px) + 4px);
   color-scheme: light;
 }
+/* Thème : automatique (réglage du téléphone), ou forcé clair / sombre dans les Réglages */
 @media (prefers-color-scheme: dark) {
-  :root {
-    --ink: #e7ece9; --paper: #101513; --panel: #18201c; --muted: #94a39b;
-    --line: #2b3631; --hud: #0b100e; --track: #ff4fae; --me: #5aa2ff;
-    color-scheme: dark;
+  :root:not([data-theme="light"]) {
+  --ink: #E8ECE5; --paper: #121814; --panel: #1A221D; --muted: #97A398; --line: #2C3730;
+  --hud: #0D1210; --hud-ink: #EEF4EF; --track: #FF7A2E; --done: #6E7A72; --me: #5AA2FF;
+  --go: #3A7556; --go-ink: #7CCB9C; --rec: #F97316; --ok: #4C9A6C; --warn: #E04848;
+  --warn-bg: #3A1716; --warn-ink: #FFB4AB; --mapbg: #2A322D;
+  color-scheme: dark;
   }
+}
+:root[data-theme="dark"] {
+  --ink: #E8ECE5; --paper: #121814; --panel: #1A221D; --muted: #97A398; --line: #2C3730;
+  --hud: #0D1210; --hud-ink: #EEF4EF; --track: #FF7A2E; --done: #6E7A72; --me: #5AA2FF;
+  --go: #3A7556; --go-ink: #7CCB9C; --rec: #F97316; --ok: #4C9A6C; --warn: #E04848;
+  --warn-bg: #3A1716; --warn-ink: #FFB4AB; --mapbg: #2A322D;
+  color-scheme: dark;
 }
 [hidden] { display: none !important; }
 body:not(.nav) .nav-only { display: none !important; }
@@ -36,7 +49,7 @@ body.nav .maplibregl-ctrl-bottom-left { left: 84px; }
 * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
 html, body { height: 100%; margin: 0; }
 body { font: 15px/1.35 var(--font); color: var(--ink); background: var(--paper); overflow: hidden; overscroll-behavior: none; }
-#map { position: fixed; inset: 0; background: #e9ede7; }
+#map { position: fixed; inset: 0; background: var(--mapbg); }
 .maplibregl-ctrl-bottom-left { bottom: var(--ctrl-bottom); }
 .maplibregl-ctrl-attrib { font-size: 10px; }
 
@@ -156,8 +169,7 @@ body.nav .fab-col { bottom: calc(var(--nav-h, 92px) + 12px); top: auto; }
 .nb-stats { flex: 1; display: grid; grid-template-columns: repeat(3, 1fr); text-align: center; min-width: 0; }
 .nb-stat { display: flex; flex-direction: column; min-width: 0; }
 .nb-stat b { font: 700 21px/1.15 var(--num); font-variant-numeric: tabular-nums; white-space: nowrap; }
-.nb-stat:first-child b { color: var(--go); }
-@media (prefers-color-scheme: dark) { .nb-stat:first-child b { color: #6fd39b; } }
+.nb-stat:first-child b { color: var(--go-ink); }
 .nb-stat span { font-size: 12px; color: var(--muted); white-space: nowrap; }
 .nb-btn {
   width: 46px; height: 46px; border-radius: 50%; border: 1px solid var(--line); flex: none;
@@ -259,14 +271,13 @@ body.nav .pausepill { top: calc(env(safe-area-inset-top, 0px) + 108px); }
 .fin-grid { grid-template-columns: repeat(2, 1fr); }
 .btn.danger { color: var(--warn); }
 
-.fin-msg { margin: 0; padding: 10px 12px; border-radius: 10px; background: #fdecea; color: #8a1c1c; font-size: 14px; }
-@media (prefers-color-scheme: dark) { .fin-msg { background: #3a1716; color: #ffb4ab; } }
+.fin-msg { margin: 0; padding: 10px 12px; border-radius: 10px; background: var(--warn-bg); color: var(--warn-ink); font-size: 14px; }
+
 
 /* les fenêtres défilent au lieu d'écraser leur contenu (barre de progression) */
 .lib-panel > * { flex-shrink: 0; }
 .progress { min-height: 24px; }
-.dl-live { font-size: 12px; color: var(--go); font-weight: 600; font-variant-numeric: tabular-nums; }
-@media (prefers-color-scheme: dark) { .dl-live { color: #6fd39b; } }
+.dl-live { font-size: 12px; color: var(--go-ink); font-weight: 600; font-variant-numeric: tabular-nums; }
 
 /* ---------- où aller ---------- */
 .search { width: 100%; min-height: 48px; padding: 0 14px; border-radius: 12px; border: 1px solid var(--line); background: var(--paper); color: var(--ink); font: 16px var(--font); }

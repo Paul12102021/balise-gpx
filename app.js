@@ -4,7 +4,7 @@
 
 // La page et le code doivent être de la même version. Sinon (page gardée en cache
 // par le téléphone ou par GitHub), on recharge une page fraîche, au plus 3 fois.
-const APP_VERSION = 36;
+const APP_VERSION = 37;
 try {
   const meta = document.querySelector('meta[name="balise-version"]');
   const pageV = meta ? +meta.content : 0;
@@ -198,14 +198,14 @@ const pointFeature = p => ({ type: 'Feature', properties: {}, geometry: { type: 
 const map = new maplibregl.Map({
   container: 'map',
   style: { version: 8, sources: { base: baseSource(LAYERS[layerIdx].vector ? LAYERS[0] : LAYERS[layerIdx]) },
-    layers: [{ id: 'bg', type: 'background', paint: { 'background-color': '#e9ede7' } }, { id: 'base', type: 'raster', source: 'base' }] },
+    layers: [{ id: 'bg', type: 'background', paint: { 'background-color': cssVar('--mapbg') || '#E4E9DC' } }, { id: 'base', type: 'raster', source: 'base' }] },
   center: [6.6, 45.9], zoom: 9, maxPitch: 70, attributionControl: false, fadeDuration: 0
 });
 map.addControl(new maplibregl.AttributionControl({ compact: true }), 'bottom-left');
 map.touchZoomRotate.enableRotation();
 
 const ready = new Promise(res => map.on('load', res));
-const COL = { track: cssVar('--track') || '#c2187a', done: cssVar('--done') || '#8f9c96', me: cssVar('--me') || '#1e6fd9', rec: cssVar('--rec') || '#e0571b' };
+const COL = { track: cssVar('--track') || '#E85A0C', done: cssVar('--done') || '#A9B3A5', me: cssVar('--me') || '#1E6FD9', rec: cssVar('--rec') || '#C2410C' };
 function gradient(f) {
   return f <= 0.0005 ? ['step', ['line-progress'], COL.track, 1, COL.track] : ['step', ['line-progress'], COL.done, Math.min(f, 0.9999), COL.track];
 }
@@ -808,6 +808,27 @@ $('thr').onchange = e => {
 };
 const thrRef = () => threshold || 50; // distance « sur la trace » quand l'alerte est coupée
 $('prof').value = profile;
+
+// ---------- thème clair / sombre / automatique ----------
+function refreshColors() {
+  Object.assign(COL, { track: cssVar('--track'), done: cssVar('--done'), me: cssVar('--me'), rec: cssVar('--rec') });
+  const meta = document.querySelector('meta[name="theme-color"]'); if (meta) meta.content = cssVar('--hud');
+  ready.then(() => {
+    if (map.getLayer('bg')) map.setPaintProperty('bg', 'background-color', cssVar('--mapbg'));
+    if (map.getLayer('rec')) map.setPaintProperty('rec', 'line-color', COL.rec);
+    if (map.getLayer('rejoin')) map.setPaintProperty('rejoin', 'line-color', COL.me);
+    setDone(lastFrac < 0 ? 0 : lastFrac, true);
+  });
+  drawProfile(); navMoreT = 0; updateNavMore();
+}
+function applyTheme(t) {
+  if (t === 'light' || t === 'dark') document.documentElement.dataset.theme = t;
+  else delete document.documentElement.dataset.theme;
+  refreshColors();
+}
+$('optTheme').value = store.get('theme') || 'auto';
+$('optTheme').onchange = e => { store.set('theme', e.target.value); applyTheme(e.target.value); };
+try { matchMedia('(prefers-color-scheme: dark)').addEventListener('change', refreshColors); } catch {}
 $('autoRec').checked = store.get('autoRec') === '1';
 $('autoRec').onchange = e => store.set('autoRec', e.target.checked ? '1' : '0');
 function setProfile(p, quiet) {
