@@ -7,13 +7,13 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<meta name="balise-version" content="16">
+<meta name="balise-version" content="17">
 <title>Balise GPX</title>
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" href="icon.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="icon-192.png">
 <link rel="stylesheet" href="vendor/maplibre-gl.css">
-<link rel="stylesheet" href="app.css?v=16">
+<link rel="stylesheet" href="app.css?v=17">
 </head>
 <body>
 <div id="map" aria-label="Carte"></div>
@@ -111,14 +111,14 @@
   <div id="actBar" class="actbar" hidden>
     <div class="ab-text"><b id="actLabel">Enregistrement</b><span id="actStats"></span></div>
     <button id="actPause" class="btn small"></button>
+    <button id="actEnd" class="btn small danger">Terminer</button>
   </div>
   <div class="actions">
-    <button id="btnOpen" class="btn">Ouvrir un GPX</button>
-    <input type="file" id="fileIn" accept=".gpx,application/gpx+xml,application/xml,text/xml" hidden>
-    <button id="btnNav" class="btn go">
+    <button id="btnNav" class="btn go wide">
       <svg viewBox="0 0 24 24"><path d="M12 2 19 21 12 17 5 21Z"/></svg>Naviguer
     </button>
-    <button id="btnRec" class="btn"><span class="dot"></span><span class="t">Enregistrer</span></button>
+    <button id="btnOpen" class="btn">Ouvrir un GPX</button>
+    <input type="file" id="fileIn" accept=".gpx,application/gpx+xml,application/xml,text/xml" hidden>
     <button id="btnMore" class="btn ghost">Réglages</button>
   </div>
 
@@ -129,6 +129,10 @@
         <option value="25">25 m</option><option value="50">50 m</option>
         <option value="100">100 m</option><option value="200">200 m</option>
       </select>
+    </div>
+    <div class="row">
+      <label for="autoRec">Enregistrer la sortie dès que la navigation démarre</label>
+      <input type="checkbox" id="autoRec" class="check">
     </div>
     <div class="row">
       <label for="prof">Itinéraire de retour</label>
@@ -240,6 +244,6 @@
 <div id="toast" class="toast" hidden></div>
 
 <script src="vendor/maplibre-gl.js"></script>
-<script src="app.js?v=16"></script>
+<script src="app.js?v=17"></script>
 </body>
 </html>

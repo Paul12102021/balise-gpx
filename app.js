@@ -4,7 +4,7 @@
 
 // La page et le code doivent être de la même version. Sinon (page gardée en cache
 // par le téléphone ou par GitHub), on recharge une page fraîche, au plus 3 fois.
-const APP_VERSION = 16;
+const APP_VERSION = 17;
 try {
   const meta = document.querySelector('meta[name="balise-version"]');
   const pageV = meta ? +meta.content : 0;
@@ -568,6 +568,10 @@ async function startNav(free = false) {
   setFollow(true);
   unlockAudio(); enableCompass(); keepAwake();
   say(me ? 'C\'est parti' : 'Navigation démarrée. Recherche du signal GPS.');
+  if (actState === 'idle') {
+    if (store.get('autoRec') === '1') startActivity();
+    else { const n = +(store.get('recHint') || 0); if (n < 3) { store.set('recHint', n + 1); setTimeout(() => toast('Touche ● pour enregistrer ta sortie', 4000), 1500); } }
+  }
   if (me) { if (track) progress = project(track, me, true); guidance(); navCamera(800); }
   else setBanner('gps', '', 'Recherche du signal GPS…', 'gps');
   updateStats();
@@ -582,7 +586,11 @@ function stopNav() {
   setFollow(false);
 }
 $('btnNav').onclick = () => track ? startNav() : openDest();
-$('btnExit').onclick = stopNav;
+$('btnExit').onclick = () => {
+  if (actState === 'waiting') { cancelWaiting(); stopNav(); return; }
+  if (actState === 'on' || actState === 'paused') { finishThenExit = true; openFinish(); return; }
+  stopNav();
+};
 $('btnOverview').onclick = () => {
   if (!track) { openDest(); return; } // balade libre : choisir une destination
   setFollow(false); map.setPadding({ top: 0, bottom: 0, left: 0, right: 0 });
@@ -705,6 +713,8 @@ let profile = store.get('profile') || 'hiking-mountain';
 $('thr').value = String(threshold);
 $('thr').onchange = e => { threshold = +e.target.value; store.set('thr', threshold); };
 $('prof').value = profile;
+$('autoRec').checked = store.get('autoRec') === '1';
+$('autoRec').onchange = e => store.set('autoRec', e.target.checked ? '1' : '0');
 $('prof').onchange = e => { profile = e.target.value; store.set('profile', profile); };
 
 function alertOff() { vibrate([400, 150, 400, 150, 400]); beep(); lastAlert = Date.now(); }
@@ -1161,6 +1171,7 @@ function openFinish() {
   $('finMsg').hidden = true;
   $('finish').hidden = false;
 }
+let finishThenExit = false;
 async function endActivity(keep) {
   if (actState === 'on') { act.ms += Date.now() - act.since; act.since = null; }
   const name = actName();
@@ -1184,20 +1195,21 @@ async function endActivity(keep) {
   if (!nav) stopGPS();
   $('finish').hidden = true;
   toast(keep ? 'Sortie terminée · gardée dans Mes traces' : 'Sortie supprimée', 4000);
+  if (finishThenExit) { finishThenExit = false; if (nav) stopNav(); }
 }
 $('finSave').onclick = () => endActivity(true);
 $('finExport').onclick = () => { if (rec.length > 1) shareGPX(toGPX(actName()), actName()); else toast('Pas encore assez de points à exporter.'); };
-$('finContinue').onclick = () => { $('finish').hidden = true; };
+$('finContinue').onclick = () => { $('finish').hidden = true; finishThenExit = false; };
 $('finDelete').onclick = () => {
   const b = $('finDelete');
   if (!b.dataset.armed) { b.dataset.armed = '1'; b.textContent = 'Toucher encore pour supprimer définitivement'; return; }
   endActivity(false);
 };
-$('finish').onclick = e => { if (e.target === $('finish')) $('finish').hidden = true; };
+$('finish').onclick = e => { if (e.target === $('finish')) { $('finish').hidden = true; finishThenExit = false; } };
 
 // ---------- boutons ----------
 // écran principal : Enregistrer / Terminer ; bandeau d'activité avec Pause / Reprendre
-$('btnRec').onclick = () => actState === 'idle' ? startActivity() : openFinish();
+$('actEnd').onclick = openFinish;
 $('actPause').onclick = () => actState === 'waiting' ? cancelWaiting() : togglePause();
 // navigation : bouton rond ● → ⏸ → ▶, et Pause / Terminer dans le panneau de progression
 $('btnRecFab').onclick = () => actState === 'idle' ? startActivity() : actState === 'waiting' ? cancelWaiting() : togglePause();
@@ -1210,9 +1222,7 @@ const ICON_PLAY = '<svg viewBox="0 0 24 24"><path d="M7 4.5v15L19.5 12Z"/></svg>
 function updateActUI() {
   const st = actState;
   // écran principal
-  const b = $('btnRec');
-  b.classList.toggle('ending', st !== 'idle');
-  b.querySelector('.t').textContent = st === 'idle' ? 'Enregistrer' : st === 'waiting' ? 'Annuler' : 'Terminer';
+  $('actEnd').hidden = st === 'waiting';
   $('actBar').hidden = st === 'idle';
   $('actBar').dataset.state = st;
   $('actLabel').textContent = st === 'waiting' ? 'Recherche du signal GPS…' : st === 'paused' ? 'En pause' : 'Enregistrement';

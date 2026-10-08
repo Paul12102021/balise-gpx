@@ -274,3 +274,5 @@ body.nav .pausepill { top: calc(env(safe-area-inset-top, 0px) + 108px); }
 .dest-btns { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
 .pausepill.pick { background: var(--me); }
 body.free #btnRejoin { display: none; }
+
+.actions .wide { grid-column: 1 / -1; }
