@@ -4,7 +4,7 @@
 
 // La page et le code doivent être de la même version. Sinon (page gardée en cache
 // par le téléphone ou par GitHub), on recharge une page fraîche, au plus 3 fois.
-const APP_VERSION = 42;
+const APP_VERSION = 43;
 try {
   const meta = document.querySelector('meta[name="balise-version"]');
   const pageV = meta ? +meta.content : 0;
@@ -398,7 +398,7 @@ async function showTrack(t, fit = true) {
 }
 
 // Fermer la trace ouverte (avec possibilité d'annuler quelques secondes)
-function closeTrack() {
+function closeTrack(quiet) {
   if (!track) return;
   const savedText = store.get('gpx');
   if (nav) stopNav();
@@ -408,9 +408,9 @@ function closeTrack() {
   store.set('gpx', '');
   $('trackName').textContent = 'Aucune trace chargée'; $('btnClose').hidden = true;
   drawProfile(); updateStats(); updateOfflineInfo();
-  toast('Trace fermée', 5000, savedText ? { label: 'Annuler', run: () => loadText(savedText) } : null);
+  if (!quiet) toast('Trace fermée', 5000, savedText ? { label: 'Annuler', run: () => loadText(savedText) } : null);
 }
-$('btnClose').onclick = closeTrack;
+$('btnClose').onclick = () => closeTrack();
 function loadText(text, save = true) {
   try {
     const t = parseGPX(text);
@@ -1038,7 +1038,8 @@ function closeDest() { $('dest').hidden = true; $('destQ').blur(); }
 $('destClose').onclick = closeDest;
 $('dest').onclick = e => { if (e.target === $('dest')) closeDest(); };
 $('destProf').onchange = e => setProfile(e.target.value);
-$('destFree').onclick = () => { closeDest(); startNav(true); };
+// balade libre : l'ancienne trace (ou l'ancien trajet) est fermée, elle reste dans Mes traces
+$('destFree').onclick = () => { closeDest(); if (track) { closeTrack(true); toast('Trace fermée · elle reste dans Mes traces', 3500); } startNav(true); };
 
 let searchT = 0, searchSeq = 0;
 $('destQ').oninput = () => {
