@@ -4,7 +4,7 @@
 
 // La page et le code doivent être de la même version. Sinon (page gardée en cache
 // par le téléphone ou par GitHub), on recharge une page fraîche, au plus 3 fois.
-const APP_VERSION = 46;
+const APP_VERSION = 47;
 try {
   const meta = document.querySelector('meta[name="balise-version"]');
   const pageV = meta ? +meta.content : 0;
@@ -782,7 +782,38 @@ function pipTile(z, x, y) {
 }
 const wx = (lon, z) => (lon + 180) / 360 * 256 * 2 ** z;
 const wy = (lat, z) => { const r = rad(lat); return (1 - Math.log(Math.tan(r) + 1 / Math.cos(r)) / Math.PI) / 2 * 256 * 2 ** z; };
+// Fond épuré (style « Positron » d'OpenFreeMap, sans les noms de rues) rendu par une petite carte
+// cachée : on la redessine à la demande, ce qui marche aussi quand l'appli est en arrière-plan.
+// Sans elle (hors connexion jamais chargée), on retombe sur les tuiles du fond choisi.
+const PIP_STYLE = 'https://tiles.openfreemap.org/styles/positron';
+let pipMap = null, pipMapOk = false, pipMapH = 0;
+async function ensurePipMap(W, H) {
+  if (pipMap) return;
+  pipMapH = H;
+  const div = document.createElement('div');
+  div.style.cssText = `position:fixed;left:-10000px;top:0;width:${W}px;height:${H}px;pointer-events:none;`;
+  document.body.appendChild(div);
+  let style = null;
+  try { style = await (await fetch(PIP_STYLE)).json(); store.set('pipStyle', JSON.stringify(style)); }
+  catch { try { style = JSON.parse(store.get('pipStyle')); } catch {} }
+  if (!style) return;
+  delete style.sources.ne2_shaded;
+  style.layers = style.layers.filter(l => l.source !== 'ne2_shaded' && !/^boundary/.test(l.id) &&
+    (l.type !== 'symbol' || /^label_(village|town|city)/.test(l.id)));
+  // chemins et petites routes un peu plus visibles : c'est ce qu'on suit à pied ou à vélo
+  for (const l of style.layers) {
+    if (l.id === 'highway_path') l.paint = Object.assign({}, l.paint, { 'line-color': '#B9B2A6', 'line-width': 2.2, 'line-dasharray': [2, 1.2] });
+    if (l.id === 'highway_minor') l.paint = Object.assign({}, l.paint, { 'line-color': '#FFFFFF' });
+  }
+  try {
+    pipMap = new maplibregl.Map({ container: div, style, interactive: false, attributionControl: false, preserveDrawingBuffer: true, pixelRatio: 1, fadeDuration: 0, center: me ? [me.lon, me.lat] : map.getCenter(), zoom: 15 });
+    pipMap.on('load', () => { pipMapOk = true; pipSoon(); });
+    pipMap.on('data', () => pipSoon());
+    pipMap.on('error', () => {});
+  } catch { pipMap = null; }
+}
 function drawPipMap(ctx, W, top, H) {
+  if (pipMapOk && me) return drawPipVector(ctx, W, top, H);
   const L = LAYERS[layerIdx].vector ? LAYERS[0] : LAYERS[layerIdx];
   const sp = speedEma || 1.2, z = Math.min(L.max, sp > 7 ? 15 : 16);
   const cx = W / 2, cy = top + H * 0.68; // ta position, un peu en bas pour voir devant
@@ -799,6 +830,13 @@ function drawPipMap(ctx, W, top, H) {
     const im = pipTile(z, tx, ty);
     if (im) ctx.drawImage(im, tx * 256 - mx, ty * 256 - my, 256.5, 256.5);
   }
+  ctx.restore();
+  pipOverlay(ctx, W, top, H, z, cx, cy);
+}
+function pipOverlay(ctx, W, top, H, z, cx, cy) { // trace, retour et flèche par-dessus le fond
+  const mx = wx(me.lon, z), my = wy(me.lat, z), R = Math.hypot(W, H) * 0.8, h = heading != null ? heading : 0;
+  ctx.save(); ctx.beginPath(); ctx.rect(0, top, W, H); ctx.clip();
+  ctx.translate(cx, cy); ctx.rotate(-rad(h));
   const line = (pts, color, width, dash, from = 0, to = pts.length) => {
     ctx.beginPath(); let started = false;
     for (let k = from; k < to; k++) {
@@ -811,16 +849,26 @@ function drawPipMap(ctx, W, top, H) {
   if (track) {
     const cut = done ? Math.min(track.pts.length, pointAt(track, done.along).i + 2) : 0;
     if (cut > 1) line(track.pts, COL.done, 6, null, 0, cut);
-    line(track.pts, '#fff', 9, null, Math.max(0, cut - 1)); line(track.pts, COL.track, 6, null, Math.max(0, cut - 1));
+    line(track.pts, '#fff', 10, null, Math.max(0, cut - 1)); line(track.pts, COL.track, 6, null, Math.max(0, cut - 1));
   }
   if (rejoin) { line(rejoin.pts, '#fff', 8, null); line(rejoin.pts, COL.me, 5, [2, 10]); }
   ctx.restore();
-  // ta position : flèche bleue (toujours vers le haut, la carte tourne)
   ctx.save(); ctx.translate(cx, cy);
   ctx.fillStyle = 'rgba(30,111,217,.18)'; ctx.beginPath(); ctx.arc(0, 0, 26, 0, 7); ctx.fill();
   ctx.beginPath(); ctx.moveTo(0, -17); ctx.lineTo(12, 13); ctx.lineTo(0, 6); ctx.lineTo(-12, 13); ctx.closePath();
   ctx.fillStyle = COL.me; ctx.strokeStyle = '#fff'; ctx.lineWidth = 3; ctx.lineJoin = 'round'; ctx.fill(); ctx.stroke();
   ctx.restore();
+}
+function drawPipVector(ctx, W, top, H) {
+  const sp = speedEma || 1.2, z = sp > 7 ? 15 : 16; // même échelle que les tuiles de 256 px
+  const cy = top + H * 0.68, mh = pipMapH;
+  pipMap.jumpTo({ center: [me.lon, me.lat], zoom: z - 1, bearing: heading != null ? heading : 0 });
+  pipMap.redraw(); // dessin immédiat, sans attendre l'écran
+  ctx.save(); ctx.beginPath(); ctx.rect(0, top, W, H); ctx.clip();
+  ctx.fillStyle = '#F2F2EF'; ctx.fillRect(0, top, W, H);
+  try { ctx.drawImage(pipMap.getCanvas(), 0, cy - mh / 2, W, mh); } catch {}
+  ctx.restore();
+  pipOverlay(ctx, W, top, H, z, W / 2, cy);
 }
 function drawPip() {
   const c = pip.cv; if (!c) return;
@@ -868,6 +916,7 @@ async function startPip() {
       v.addEventListener('leavepictureinpicture', () => { pip.on = false; clearInterval(pip.tick); });
       document.body.appendChild(v);
     }
+    ensurePipMap(360, 460);
     pip.on = true; drawPip();
     await pip.video.play();
     await pip.video.requestPictureInPicture();
