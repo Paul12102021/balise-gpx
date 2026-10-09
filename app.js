@@ -4,7 +4,7 @@
 
 // La page et le code doivent être de la même version. Sinon (page gardée en cache
 // par le téléphone ou par GitHub), on recharge une page fraîche, au plus 3 fois.
-const APP_VERSION = 48;
+const APP_VERSION = 49;
 try {
   const meta = document.querySelector('meta[name="balise-version"]');
   const pageV = meta ? +meta.content : 0;
@@ -458,42 +458,87 @@ async function idb(mode, fn, storeName = 'tracks') {
 async function listRecent() {
   try { return ((await idb('readonly', st => st.getAll())) || []).sort((a, b) => b.date - a.date); } catch { return []; }
 }
-async function saveRecent(p, text, mustSucceed = false) {
+// une sortie enregistrée (kind 'rec') est gardée sans limite ; les traces ouvertes : les 30 dernières
+const isRec = it => it.kind === 'rec' || (!it.kind && /^Sortie du /.test(it.name));
+async function saveRecent(p, text, mustSucceed = false, extra = null) {
   try {
     const id = p.name + '|' + Math.round(p.total);
-    await idb('readwrite', st => st.put({ id, name: p.name, dist: p.total, up: p.hasEle ? p.totalUp : null, date: Date.now(), text }));
-    const all = await listRecent();
-    for (const old of all.slice(30)) await idb('readwrite', st => st.delete(old.id)); // on garde les 30 dernières
+    await idb('readwrite', st => st.put(Object.assign({ id, name: p.name, dist: p.total, up: p.hasEle ? p.totalUp : null, date: Date.now(), text }, extra || {})));
+    const all = (await listRecent()).filter(it => !isRec(it));
+    for (const old of all.slice(30)) await idb('readwrite', st => st.delete(old.id));
     return true;
   } catch (e) { if (mustSucceed) throw e; return false; }
 }
 const fmtDate = t => new Date(t).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' });
+// durée en mouvement d'une ancienne sortie (sans durée enregistrée) : d'après les heures du GPX, pauses exclues
+function recDuration(text) {
+  let ms = 0;
+  for (const seg of text.split(/<trkseg>/).slice(1)) {
+    const t = [...seg.matchAll(/<time>([^<]+)<\/time>/g)].map(m => Date.parse(m[1])).filter(x => !isNaN(x));
+    if (t.length > 1) ms += t[t.length - 1] - t[0];
+  }
+  return ms;
+}
+let libTab = 'tr';
+function setLibTab(t) {
+  libTab = t;
+  $('libTabTr').classList.toggle('on', t === 'tr'); $('libTabRec').classList.toggle('on', t === 'rec');
+  $('libBrowse').hidden = t === 'rec'; $('libTip').hidden = t === 'rec';
+  renderLib();
+}
+$('libTabTr').onclick = () => setLibTab('tr');
+$('libTabRec').onclick = () => setLibTab('rec');
+const ICON_SHARE = '<svg viewBox="0 0 24 24"><path d="M12 15V3M7 8l5-5 5 5"/><path d="M5 13v7h14v-7"/></svg>';
+const ICON_DEL = '<svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></svg>';
 async function renderLib() {
-  const list = $('libList'), items = await listRecent();
+  const list = $('libList'), all = await listRecent();
+  const recs = libTab === 'rec';
+  const items = all.filter(it => isRec(it) === recs);
   list.innerHTML = '';
   $('libEmpty').hidden = items.length > 0;
+  $('libEmpty').textContent = recs ? 'Tes sorties enregistrées apparaîtront ici. Lance une navigation puis touche ● pour enregistrer.' : 'Les traces que tu ouvres apparaîtront ici.';
+  // sorties : durée et vitesse, rangées par mois, avec un total
+  if (recs) {
+    for (const it of items) if (it.ms == null && it.text) { it.ms = recDuration(it.text); idb('readwrite', st => st.put(it)).catch(() => {}); }
+    const d = items.reduce((a, it) => a + (it.dist || 0), 0), ms = items.reduce((a, it) => a + (it.ms || 0), 0), up = items.reduce((a, it) => a + (it.up || 0), 0);
+    $('libSum').hidden = !items.length;
+    $('libSum').innerHTML = `<b>${items.length}</b> sortie${items.length > 1 ? 's' : ''} · <b>${fmtDist(d)}</b> · ${fmtDur(ms / 1000)}${up ? ' · D+ ' + fmtM(up) : ''}`;
+  } else $('libSum').hidden = true;
+  let month = '';
   for (const it of items) {
+    const when = it.start || it.date;
+    if (recs) {
+      const m = new Date(when).toLocaleDateString('fr-FR', { month: 'long', year: 'numeric' });
+      if (m !== month) { month = m; const h = document.createElement('li'); h.className = 'lib-month'; h.textContent = m; list.appendChild(h); }
+    }
     const li = document.createElement('li');
     const open = document.createElement('button'); open.className = 'lib-item';
-    open.innerHTML = `<b></b><span>${fmtDist(it.dist)}${it.up != null ? ' · D+ ' + fmtM(it.up) : ''} · ${/^Sortie du /.test(it.name) ? 'enregistrée' : 'ouverte'} le ${fmtDate(it.date)}</span>`;
-    open.querySelector('b').textContent = it.name;
-    open.onclick = () => { closeLib(); loadText(it.text); };
+    const sp = it.ms > 60000 ? ' · ' + (it.dist / (it.ms / 1000) * 3.6).toFixed(1).replace('.', ',') + ' km/h' : '';
+    open.innerHTML = '<b></b><span></span>';
+    open.querySelector('b').textContent = recs ? it.name.replace(/^Sortie du /, '') : it.name;
+    open.querySelector('span').textContent = recs
+      ? `${fmtDist(it.dist)}${it.ms ? ' · ' + fmtDur(it.ms / 1000) : ''}${it.up != null ? ' · D+ ' + fmtM(it.up) : ''}${sp}`
+      : `${fmtDist(it.dist)}${it.up != null ? ' · D+ ' + fmtM(it.up) : ''} · ouverte le ${fmtDate(it.date)}`;
+    open.onclick = () => { closeLib(); loadText(it.text, !recs); if (recs) store.set('gpx', it.text.length < 4.5e6 ? it.text : ''); };
     const share = document.createElement('button'); share.className = 'lib-del'; share.setAttribute('aria-label', 'Exporter ' + it.name);
-    share.innerHTML = '<svg viewBox="0 0 24 24"><path d="M12 15V3M7 8l5-5 5 5"/><path d="M5 13v7h14v-7"/></svg>';
-    share.onclick = () => shareGPX(it.text, it.name);
-    const del = document.createElement('button'); del.className = 'lib-del'; del.setAttribute('aria-label', 'Retirer ' + it.name);
-    del.innerHTML = '<svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></svg>';
-    del.onclick = async () => { await idb('readwrite', st => st.delete(it.id)).catch(() => {}); renderLib(); };
+    share.innerHTML = ICON_SHARE; share.onclick = () => shareGPX(it.text, it.name);
+    const del = document.createElement('button'); del.className = 'lib-del'; del.setAttribute('aria-label', 'Supprimer ' + it.name);
+    del.innerHTML = ICON_DEL;
+    del.onclick = async () => {
+      // une sortie enregistrée n'existe qu'ici : on demande confirmation
+      if (recs && !del.dataset.armed) { del.dataset.armed = '1'; del.style.color = 'var(--warn)'; toast('Touche encore la croix pour supprimer cette sortie', 3000); setTimeout(() => { delete del.dataset.armed; del.style.color = ''; }, 3000); return; }
+      await idb('readwrite', st => st.delete(it.id)).catch(() => {}); renderLib();
+    };
     li.append(open, share, del); list.appendChild(li);
   }
 }
-async function openLib() {
+async function openLib(tab) {
   const items = await listRecent();
-  if (!items.length) { $('fileIn').click(); return; } // rien en mémoire : on va directement aux fichiers
-  await renderLib(); $('lib').hidden = false;
+  if (!items.length && tab !== 'rec') { $('fileIn').click(); return; } // rien en mémoire : on va directement aux fichiers
+  setLibTab(tab || (items.some(it => !isRec(it)) ? libTab : 'rec')); $('lib').hidden = false;
 }
 function closeLib() { $('lib').hidden = true; }
-$('btnOpen').onclick = openLib;
+$('btnOpen').onclick = () => openLib();
 $('libClose').onclick = closeLib;
 $('lib').onclick = e => { if (e.target === $('lib')) closeLib(); };
 $('libBrowse').onclick = () => { closeLib(); $('fileIn').click(); };
@@ -1706,23 +1751,24 @@ async function endActivity(keep) {
   if (keep && rec.length > 1) {
     const btn = $('finSave'); btn.disabled = true; btn.textContent = 'Enregistrement…';
     try {
-      await saveRecent({ name, total: recDist(), hasEle: rec.some(p => p.ele != null), totalUp: recUp() }, toGPX(name), true);
+      await saveRecent({ name, total: recDist(), hasEle: rec.some(p => p.ele != null), totalUp: recUp() }, toGPX(name), true,
+        { kind: 'rec', ms: act.ms, start: act.start || (rec[0] && rec[0].t) || Date.now() });
     } catch {
       // on ne perd rien : la sortie reste en cours (en pause) et peut être exportée
       if (actState === 'on') { act.since = Date.now(); }
-      btn.disabled = false; btn.textContent = 'Terminer et garder dans Mes traces';
+      btn.disabled = false; btn.textContent = 'Terminer et garder dans Mes sorties';
       $('finMsg').textContent = 'Impossible de ranger la sortie : un autre onglet de Pisteo est ouvert. Ferme les autres onglets puis réessaie, ou touche « Exporter le GPX ».';
       $('finMsg').hidden = false;
       return;
     }
-    btn.disabled = false; btn.textContent = 'Terminer et garder dans Mes traces';
+    btn.disabled = false; btn.textContent = 'Terminer et garder dans Mes sorties';
   }
   rec = []; saveRec(); drawRec(); recSeg = 0;
   act = { ms: 0, since: null, d: 0, start: null }; saveAct();
   setActState('idle');
   if (!nav) stopGPS();
   $('finish').hidden = true;
-  toast(keep ? 'Sortie terminée · gardée dans Mes traces' : 'Sortie supprimée', 4000);
+  if (keep) toast('Sortie gardée dans Mes sorties', 5000, { label: 'Voir', run: () => openLib('rec') }); else toast('Sortie supprimée', 4000);
   if (finishThenExit) { finishThenExit = false; if (nav) stopNav(); }
 }
 $('finSave').onclick = () => endActivity(true);

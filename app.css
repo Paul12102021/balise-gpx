@@ -235,6 +235,12 @@ body.nav .toast { top: auto; bottom: calc(var(--nav-h, 92px) + 90px); }
   display: flex; flex-direction: column; gap: 12px;
 }
 .lib-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; font-size: 18px; }
+.lib-tabs { display: flex; gap: 4px; padding: 3px; border-radius: 12px; background: var(--line); }
+.lib-tab { flex: 1; min-height: 38px; border: 0; border-radius: 9px; background: none; color: var(--muted); font-family: inherit; font-weight: 600; font-size: 14px; cursor: pointer; }
+.lib-tab.on { background: var(--panel); color: var(--ink); box-shadow: 0 1px 3px rgba(0,0,0,.12); }
+.lib-sum { margin: 0; padding: 10px 12px; border-radius: 10px; background: var(--paper); font-size: 14px; font-variant-numeric: tabular-nums; }
+.lib-sum b { font-weight: 700; }
+.lib-month { font-size: 12px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); padding: 12px 2px 2px; border-bottom: 1px solid var(--line); }
 .lib-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
 .lib-list li { display: flex; align-items: center; gap: 4px; border-bottom: 1px solid var(--line); }
 .lib-item { flex: 1; min-width: 0; text-align: left; background: none; border: 0; color: var(--ink); padding: 12px 2px; cursor: pointer; display: flex; flex-direction: column; gap: 2px; font: inherit; }

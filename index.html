@@ -8,13 +8,13 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<meta name="balise-version" content="48">
+<meta name="balise-version" content="49">
 <title>Pisteo</title>
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" href="icon.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
 <link rel="stylesheet" href="vendor/maplibre-gl.css">
-<link rel="stylesheet" href="app.css?v=48">
+<link rel="stylesheet" href="app.css?v=49">
 </head>
 <body>
 <div id="map" aria-label="Carte"></div>
@@ -188,13 +188,18 @@
 <div id="lib" class="lib" hidden>
   <div class="lib-panel" role="dialog" aria-label="Mes traces">
     <div class="lib-head">
-      <b>Mes traces</b>
+      <b id="libTitle">Mes traces</b>
       <button id="libClose" class="closebtn" aria-label="Fermer"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></svg>Fermer</button>
     </div>
+    <div class="lib-tabs" role="tablist">
+      <button id="libTabTr" class="lib-tab on" role="tab">Traces ouvertes</button>
+      <button id="libTabRec" class="lib-tab" role="tab">Mes sorties</button>
+    </div>
     <button id="libBrowse" class="btn go">Chercher un fichier GPX…</button>
+    <p id="libSum" class="lib-sum" hidden></p>
     <ul id="libList" class="lib-list"></ul>
     <p id="libEmpty" class="note" hidden>Les traces que tu ouvres apparaîtront ici.</p>
-    <p class="note">Astuce : dans ton gestionnaire de fichiers ou un mail, fais « Partager » sur un GPX puis choisis Pisteo.</p>
+    <p id="libTip" class="note">Astuce : dans ton gestionnaire de fichiers ou un mail, fais « Partager » sur un GPX puis choisis Pisteo.</p>
   </div>
 </div>
 
@@ -253,7 +258,7 @@
       <div><span>D+</span><b id="finUp">–</b></div>
     </div>
     <p id="finMsg" class="fin-msg" hidden></p>
-    <button id="finSave" class="btn go">Terminer et garder dans Mes traces</button>
+    <button id="finSave" class="btn go">Terminer et garder dans Mes sorties</button>
     <button id="finExport" class="btn">Exporter le GPX</button>
     <button id="finContinue" class="btn ghost">Continuer la sortie</button>
     <button id="finDelete" class="btn ghost danger">Supprimer cette sortie</button>
@@ -294,6 +299,6 @@
 <div id="toast" class="toast" hidden></div>
 
 <script src="vendor/maplibre-gl.js"></script>
-<script src="app.js?v=48"></script>
+<script src="app.js?v=49"></script>
 </body>
 </html>
