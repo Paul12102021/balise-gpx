@@ -8,13 +8,13 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<meta name="balise-version" content="57">
+<meta name="balise-version" content="58">
 <title>Pisteo</title>
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" href="icon.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
 <link rel="stylesheet" href="vendor/maplibre-gl.css">
-<link rel="stylesheet" href="app.css?v=57">
+<link rel="stylesheet" href="app.css?v=58">
 </head>
 <body>
 <div id="map" aria-label="Carte"></div>
@@ -258,10 +258,12 @@
     <button id="stvConnect" class="btn strava">Se connecter avec Strava</button>
     <div id="stvOn" hidden>
       <p class="lib-sum">Connecté : <b id="stvWho"></b></p>
+      <p id="stvBlockedMsg" class="fin-msg" hidden>Strava refuse l'envoi direct depuis Pisteo sans abonnement Strava. Pour publier une sortie : <b>Mes sorties</b> → la sortie → <b>Mettre sur Strava</b> (import en 3 touchers).</p>
       <div class="row">
-        <label for="stvAuto">Envoyer automatiquement chaque sortie gardée<br><small>Sinon : bouton « Envoyer sur Strava » dans la fiche de la sortie</small></label>
+        <label for="stvAuto"><span id="stvAutoL">Envoyer automatiquement chaque sortie gardée</span><br><small id="stvAutoS">Sinon : bouton « Mettre sur Strava » dans la fiche de la sortie</small></label>
         <input type="checkbox" id="stvAuto" class="check">
       </div>
+      <button id="stvRetryBtn" class="btn ghost" hidden>J'ai pris un abonnement : réessayer l'envoi direct</button>
       <button id="stvOff" class="btn ghost danger">Se déconnecter de Strava</button>
     </div>
   </div>
@@ -383,6 +385,6 @@
 <div id="toast" class="toast" hidden></div>
 
 <script src="vendor/maplibre-gl.js"></script>
-<script src="app.js?v=57"></script>
+<script src="app.js?v=58"></script>
 </body>
 </html>

@@ -4,7 +4,7 @@
 
 // La page et le code doivent être de la même version. Sinon (page gardée en cache
 // par le téléphone ou par GitHub), on recharge une page fraîche, au plus 3 fois.
-const APP_VERSION = 57;
+const APP_VERSION = 58;
 try {
   const meta = document.querySelector('meta[name="balise-version"]');
   const pageV = meta ? +meta.content : 0;
@@ -654,13 +654,18 @@ function stvUI() {
   $('stvNotReady').hidden = !!STRAVA_RELAY;
   $('stvWho').textContent = t && t.who ? t.who : 'ton compte';
   $('stvAuto').checked = store.get('stvAuto') === '1';
-  $('stvStatus').textContent = on ? 'Connecté' + (store.get('stvAuto') === '1' ? ' · envoi automatique' : ' · envoi à la demande') : 'Non connecté';
+  const bl = on && stvBlocked();
+  $('stvBlockedMsg').hidden = !bl; $('stvRetryBtn').hidden = !bl;
+  $('stvAutoL').textContent = bl ? 'Proposer de mettre sur Strava chaque sortie gardée' : 'Envoyer automatiquement chaque sortie gardée';
+  $('stvAutoS').textContent = bl ? 'Un message « Strava » apparaît à la fin de la sortie' : 'Sinon : bouton « Mettre sur Strava » dans la fiche de la sortie';
+  $('stvStatus').textContent = !on ? 'Non connecté · import manuel possible' : bl ? 'Import manuel (envoi direct refusé sans abonnement)' : 'Connecté' + (store.get('stvAuto') === '1' ? ' · envoi automatique' : ' · envoi à la demande');
 }
 function openStrava() { stvUI(); $('strava').hidden = false; }
 $('btnStrava').onclick = openStrava;
 $('stvClose').onclick = () => { $('strava').hidden = true; };
 $('strava').onclick = e => { if (e.target === $('strava')) $('strava').hidden = true; };
 $('stvAuto').onchange = e => { store.set('stvAuto', e.target.checked ? '1' : '0'); stvUI(); };
+$('stvRetryBtn').onclick = () => { store.set('stvInactive', ''); stvUI(); toast('Envoi direct réactivé : essaie « Mettre sur Strava » sur une sortie', 4000); };
 $('stvOff').onclick = () => { store.set('stvTok', ''); stvUI(); toast('Strava déconnecté'); };
 $('stvConnect').onclick = () => {
   if (!STRAVA_RELAY) return;
