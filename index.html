@@ -8,13 +8,13 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<meta name="balise-version" content="51">
+<meta name="balise-version" content="52">
 <title>Pisteo</title>
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" href="icon.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
 <link rel="stylesheet" href="vendor/maplibre-gl.css">
-<link rel="stylesheet" href="app.css?v=51">
+<link rel="stylesheet" href="app.css?v=52">
 </head>
 <body>
 <div id="map" aria-label="Carte"></div>
@@ -182,6 +182,10 @@
       <span>Cartes hors ligne<br><small>Trace, département ou zone</small><br><small id="mapsStatus" class="dl-live" hidden></small></span>
       <button id="btnMaps" class="btn">Mes cartes</button>
     </div>
+    <div class="row">
+      <span>Strava<br><small id="stvStatus">Non connecté</small></span>
+      <button id="btnStrava" class="btn">Strava</button>
+    </div>
     <p class="note version-line"><span id="note"></span> · <button id="btnRepair" class="linkbtn" title="Recharge l'appli sans toucher à tes traces ni à tes cartes">Réparer l'appli</button></p>
   </div>
 </section>
@@ -231,10 +235,41 @@
       <canvas id="sdProfile" class="so-prof" aria-label="Profil altimétrique"></canvas>
       <div class="so-acts">
         <button id="sdFollow" class="btn go">Refaire ce parcours</button>
+        <button id="sdStrava" class="btn strava">Envoyer sur Strava</button>
         <button id="sdExport" class="btn">Exporter le GPX</button>
         <button id="sdRename" class="btn ghost">Renommer</button>
         <button id="sdDelete" class="btn ghost danger">Supprimer</button>
       </div>
+    </div>
+  </div>
+</div>
+
+<div id="strava" class="lib" hidden>
+  <div class="lib-panel" role="dialog" aria-label="Strava">
+    <div class="lib-head">
+      <b>Envoyer mes sorties sur Strava</b>
+      <button id="stvClose" class="closebtn" aria-label="Fermer"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></svg>Fermer</button>
+    </div>
+    <div id="stvSetup">
+      <p class="note">Une seule fois : Strava demande que chaque appli ait sa « clé ». Tu crées la tienne en 2 minutes :</p>
+      <ol class="stv-steps">
+        <li>Ouvre <a href="https://www.strava.com/settings/api" target="_blank" rel="noopener">strava.com/settings/api</a> (connecté à ton compte).</li>
+        <li>Nom : <b>Pisteo</b> · Catégorie : <b>Visualizer</b> · Site web : <b id="stvSite"></b></li>
+        <li>« Authorization Callback Domain » : <b id="stvDomain"></b></li>
+        <li>Valide, puis recopie ici le <b>Client ID</b> et le <b>Client Secret</b>.</li>
+      </ol>
+      <input id="stvId" class="search" inputmode="numeric" placeholder="Client ID (ex. 123456)" autocomplete="off">
+      <input id="stvSecret" class="search" type="password" placeholder="Client Secret" autocomplete="off">
+      <p class="note">Ces codes restent sur ce téléphone, ils ne sont envoyés qu'à Strava.</p>
+    </div>
+    <button id="stvConnect" class="btn go">Se connecter à Strava</button>
+    <div id="stvOn" hidden>
+      <p class="lib-sum">Connecté : <b id="stvWho"></b></p>
+      <div class="row">
+        <label for="stvAuto">Envoyer automatiquement chaque sortie gardée<br><small>Sinon : bouton « Envoyer sur Strava » dans la fiche de la sortie</small></label>
+        <input type="checkbox" id="stvAuto" class="check">
+      </div>
+      <button id="stvOff" class="btn ghost danger">Se déconnecter de Strava</button>
     </div>
   </div>
 </div>
@@ -335,6 +370,6 @@
 <div id="toast" class="toast" hidden></div>
 
 <script src="vendor/maplibre-gl.js"></script>
-<script src="app.js?v=51"></script>
+<script src="app.js?v=52"></script>
 </body>
 </html>

@@ -4,7 +4,7 @@
 
 // La page et le code doivent être de la même version. Sinon (page gardée en cache
 // par le téléphone ou par GitHub), on recharge une page fraîche, au plus 3 fois.
-const APP_VERSION = 51;
+const APP_VERSION = 52;
 try {
   const meta = document.querySelector('meta[name="balise-version"]');
   const pageV = meta ? +meta.content : 0;
@@ -602,7 +602,7 @@ function showSoDetail(it) {
   $('soList').hidden = true; $('soDetail').hidden = false;
   $('sorties').querySelector('.lib-panel').scrollTop = 0;
   const pts = parseRec(it.text), st = recStats(pts), when = st.start || it.start || it.date;
-  $('sdName').textContent = it.title || 'Sortie';
+  $('sdName').textContent = recTitle(it);
   const setMode = m => { $('sdMode').innerHTML = modeIcon(m) + modeLabel(m); $('sdMode').className = 'chip so-chip ' + m; };
   setMode(recMode(it));
   // si l'appli s'est trompée (ancienne sortie), on corrige d'un toucher
@@ -623,11 +623,12 @@ function showSoDetail(it) {
   requestAnimationFrame(() => { previewRedraw && previewRedraw(); if (hasE) drawRecProfile($('sdProfile'), pts); });
   $('sdFollow').onclick = () => { closeSorties(); loadText(it.text, false); store.set('gpx', it.text.length < 4.5e6 ? it.text : ''); setTimeout(() => startNav(), 300); };
   $('sdExport').onclick = () => shareGPX(it.text, it.title || it.name);
+  stvButton(it);
   $('sdRename').onclick = async () => {
     const t = prompt('Nom de la sortie', it.title || '');
     if (t == null) return;
     it.title = t.trim() || undefined; await idb('readwrite', s => s.put(it)).catch(() => {});
-    $('sdName').textContent = it.title || 'Sortie';
+    $('sdName').textContent = recTitle(it);
   };
   const del = $('sdDelete'); del.textContent = 'Supprimer'; delete del.dataset.armed;
   del.onclick = async () => {
@@ -636,6 +637,132 @@ function showSoDetail(it) {
     toast('Sortie supprimée'); showSoList();
   };
 }
+// =====================================================================
+// Strava : envoi des sorties (automatique ou à la demande)
+// Strava demande une « appli API » par utilisateur : Client ID et Secret restent sur le téléphone.
+// =====================================================================
+const STV_API = 'https://www.strava.com/api/v3';
+const stvTok = () => { try { return JSON.parse(store.get('stvTok') || 'null'); } catch { return null; } };
+const stvOn = () => !!(stvTok() && store.get('stvId') && store.get('stvSecret'));
+const stvBack = () => location.origin + location.pathname;
+function stvUI() {
+  const t = stvTok(), on = stvOn();
+  $('stvSetup').hidden = on; $('stvConnect').hidden = on; $('stvOn').hidden = !on;
+  $('stvWho').textContent = t && t.who ? t.who : 'ton compte';
+  $('stvAuto').checked = store.get('stvAuto') === '1';
+  $('stvStatus').textContent = on ? 'Connecté' + (store.get('stvAuto') === '1' ? ' · envoi automatique' : ' · envoi à la demande') : 'Non connecté';
+  $('stvSite').textContent = stvBack(); $('stvDomain').textContent = location.hostname;
+  $('stvId').value = store.get('stvId') || ''; $('stvSecret').value = store.get('stvSecret') || '';
+}
+function openStrava() { stvUI(); $('strava').hidden = false; }
+$('btnStrava').onclick = openStrava;
+$('stvClose').onclick = () => { $('strava').hidden = true; };
+$('strava').onclick = e => { if (e.target === $('strava')) $('strava').hidden = true; };
+$('stvAuto').onchange = e => { store.set('stvAuto', e.target.checked ? '1' : '0'); stvUI(); };
+$('stvOff').onclick = () => { store.set('stvTok', ''); stvUI(); toast('Strava déconnecté'); };
+$('stvConnect').onclick = () => {
+  const id = $('stvId').value.trim(), sec = $('stvSecret').value.trim();
+  if (!/^\d+$/.test(id) || sec.length < 20) { toast('Recopie le Client ID (des chiffres) et le Client Secret depuis strava.com/settings/api.', 5000); return; }
+  store.set('stvId', id); store.set('stvSecret', sec);
+  location.href = `https://www.strava.com/oauth/authorize?client_id=${id}&response_type=code&approval_prompt=auto&scope=read,activity:write&redirect_uri=${encodeURIComponent(stvBack() + '?strava=1')}`;
+};
+async function stvTokenReq(params) {
+  const r = await fetch('https://www.strava.com/oauth/token', { method: 'POST', body: new URLSearchParams(Object.assign({ client_id: store.get('stvId'), client_secret: store.get('stvSecret') }, params)) });
+  const j = await r.json().catch(() => ({}));
+  if (!r.ok || !j.access_token) throw new Error(j.message || 'HTTP ' + r.status);
+  return j;
+}
+// retour de la page d'autorisation Strava
+async function stvReturn() {
+  const q = new URLSearchParams(location.search);
+  if (!q.has('strava')) return;
+  history.replaceState(null, '', location.pathname);
+  if (q.get('error') || !q.get('code')) { toast('Connexion à Strava annulée.', 4000); return; }
+  if (!/activity:write/.test(q.get('scope') || '')) { toast('Il faut cocher l\'autorisation « Envoyer des activités » sur la page Strava. Réessaie.', 6000); openStrava(); return; }
+  try {
+    const j = await stvTokenReq({ code: q.get('code'), grant_type: 'authorization_code' });
+    store.set('stvTok', JSON.stringify({ a: j.access_token, r: j.refresh_token, exp: j.expires_at, who: j.athlete ? `${j.athlete.firstname || ''} ${j.athlete.lastname || ''}`.trim() : '' }));
+    toast('Connecté à Strava 🎉', 4000); openStrava(); stvRetry();
+  } catch (e) { toast('Connexion à Strava impossible : ' + e.message + '. Vérifie le Client Secret.', 6000); openStrava(); }
+}
+async function stvAccess() {
+  const t = stvTok(); if (!t) throw new Error('non connecté');
+  if (t.exp * 1000 - 120000 > Date.now()) return t.a;
+  const j = await stvTokenReq({ grant_type: 'refresh_token', refresh_token: t.r });
+  Object.assign(t, { a: j.access_token, r: j.refresh_token || t.r, exp: j.expires_at }); store.set('stvTok', JSON.stringify(t));
+  return t.a;
+}
+function recTitle(it) {
+  if (it.title) return it.title;
+  const d = new Date(it.start || it.date), h = d.getHours();
+  return (h < 11 ? 'Sortie matinale' : h < 14 ? 'Sortie du midi' : h < 18 ? 'Sortie de l\'après-midi' : 'Sortie du soir') + (recMode(it) === 'bike' ? ' à vélo' : ' à pied');
+}
+// envoi : dépôt du GPX, attente du traitement par Strava, puis type d'activité (vélo / marche)
+const stvBusy = new Set(); // une même sortie n'est jamais envoyée deux fois en parallèle
+async function stvUpload(it, onStep) {
+  if (stvBusy.has(it.id)) throw new Error('envoi déjà en cours');
+  stvBusy.add(it.id);
+  try { return await stvUploadNow(it, onStep); } finally { stvBusy.delete(it.id); }
+}
+async function stvUploadNow(it, onStep) {
+  const tok = await stvAccess(), H = { Authorization: 'Bearer ' + tok };
+  const f = new FormData();
+  f.append('file', new Blob([it.text], { type: 'application/gpx+xml' }), 'sortie.gpx');
+  f.append('data_type', 'gpx'); f.append('name', recTitle(it)); f.append('description', 'Enregistrée avec Pisteo');
+  f.append('external_id', 'pisteo-' + String(it.start || it.date));
+  onStep && onStep('Envoi…');
+  let r = await fetch(STV_API + '/uploads', { method: 'POST', headers: H, body: f });
+  let u = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(u.message || 'HTTP ' + r.status);
+  for (let k = 0; k < 30 && !u.activity_id && !u.error; k++) {
+    onStep && onStep('Traitement par Strava…');
+    await new Promise(z => setTimeout(z, 2000));
+    r = await fetch(STV_API + '/uploads/' + u.id, { headers: H }); u = await r.json().catch(() => u);
+  }
+  let aid = u.activity_id;
+  if (!aid && u.error) { const m = /activities\/(\d+)/.exec(u.error); if (m && /duplicate/i.test(u.error)) aid = +m[1]; else throw new Error(u.error.replace(/<[^>]+>/g, '')); }
+  if (!aid) throw new Error('Strava met du temps à traiter la sortie, elle apparaîtra bientôt');
+  await fetch(STV_API + '/activities/' + aid, { method: 'PUT', headers: Object.assign({ 'Content-Type': 'application/json' }, H),
+    body: JSON.stringify({ sport_type: recMode(it) === 'bike' ? 'Ride' : 'Walk' }) }).catch(() => {});
+  it.strava = aid; delete it.stvPending;
+  await idb('readwrite', st => st.put(it)).catch(() => {});
+  return aid;
+}
+function stvFail(it, e) {
+  const net = e instanceof TypeError; // pas de réseau, ou Strava refuse l'appel depuis le navigateur
+  toast('Envoi sur Strava impossible' + (net ? (navigator.onLine === false ? ' : pas de réseau, nouvel essai plus tard' : '') : ' : ' + e.message) + '.', 6000,
+    { label: 'Import manuel', run: () => { shareGPX(it.text, recTitle(it)); setTimeout(() => window.open('https://www.strava.com/upload/select', '_blank'), 800); } });
+}
+// sorties en attente (envoi automatique sans réseau) : nouvel essai au démarrage et au retour du réseau
+async function stvRetry() {
+  if (!stvOn() || navigator.onLine === false) return;
+  for (const it of (await listRecent()).filter(x => x.stvPending && !x.strava && !stvBusy.has(x.id))) {
+    try { await stvUpload(it); toast('Sortie envoyée sur Strava', 3000); } catch { break; }
+  }
+}
+window.addEventListener('online', () => setTimeout(stvRetry, 3000));
+async function stvAuto(id) {
+  if (!stvOn() || store.get('stvAuto') !== '1') return;
+  const it = (await listRecent()).find(x => x.id === id); if (!it) return;
+  it.stvPending = true; await idb('readwrite', st => st.put(it)).catch(() => {});
+  try { await stvUpload(it); toast('Sortie envoyée sur Strava', 4000, { label: 'Voir', run: () => window.open('https://www.strava.com/activities/' + it.strava, '_blank') }); }
+  catch (e) { if (!(e instanceof TypeError && navigator.onLine === false)) stvFail(it, e); }
+}
+function stvButton(it) {
+  const b = $('sdStrava');
+  b.disabled = false;
+  b.classList.toggle('sent', !!it.strava);
+  b.textContent = it.strava ? 'Voir sur Strava ✓' : 'Envoyer sur Strava';
+  b.onclick = async () => {
+    if (it.strava) { window.open('https://www.strava.com/activities/' + it.strava, '_blank'); return; }
+    if (!stvOn()) { openStrava(); return; }
+    b.disabled = true;
+    try { await stvUpload(it, t => { b.textContent = t; }); toast('Sortie envoyée sur Strava', 3000); }
+    catch (e) { stvFail(it, e); }
+    stvButton(it);
+  };
+}
+
 // aperçu de la sortie sur un fond de carte (tuiles du fond choisi)
 function drawRecMap(cv, pts) {
   const dpr = window.devicePixelRatio || 1, W = cv.clientWidth, H = cv.clientHeight;
@@ -1896,11 +2023,13 @@ let finishThenExit = false;
 async function endActivity(keep) {
   if (actState === 'on') { act.ms += Date.now() - act.since; act.since = null; }
   const name = actName();
+  let savedId = null;
   if (keep && rec.length > 1) {
     const btn = $('finSave'); btn.disabled = true; btn.textContent = 'Enregistrement…';
     try {
       await saveRecent({ name, total: recDist(), hasEle: rec.some(p => p.ele != null), totalUp: recUp() }, toGPX(name), true,
         { kind: 'rec', ms: act.ms, start: act.start || (rec[0] && rec[0].t) || Date.now(), mode: profile === 'trekking' ? 'bike' : 'foot' });
+      savedId = name + '|' + Math.round(recDist());
     } catch {
       // on ne perd rien : la sortie reste en cours (en pause) et peut être exportée
       if (actState === 'on') { act.since = Date.now(); }
@@ -1916,7 +2045,8 @@ async function endActivity(keep) {
   setActState('idle');
   if (!nav) stopGPS();
   $('finish').hidden = true;
-  if (keep) toast('Sortie gardée dans Mes sorties', 5000, { label: 'Voir', run: openSorties }); else toast('Sortie supprimée', 4000);
+  if (keep) { toast('Sortie gardée dans Mes sorties', 5000, { label: 'Voir', run: openSorties }); if (savedId) setTimeout(() => stvAuto(savedId), 1500); }
+  else toast('Sortie supprimée', 4000);
   if (finishThenExit) { finishThenExit = false; if (nav) stopNav(); }
 }
 $('finSave').onclick = () => endActivity(true);
@@ -2915,6 +3045,8 @@ try {
 const saved = store.get('gpx');
 if (saved) { try { showTrack(parseGPX(saved)); } catch { drawProfile(); } } else drawProfile();
 checkShared();
+stvReturn(); setTimeout(stvRetry, 8000);
+stvUI();
 const VERSION = APP_VERSION + ' · 8 oct. 2026';
 $('note').textContent = (window.isSecureContext ? '' : 'Attention : le GPS ne fonctionne qu\'en HTTPS. ') + 'Version ' + VERSION;
 // Mises à jour : on vérifie à chaque ouverture et on recharge dès qu'une nouvelle version est prête

@@ -366,3 +366,9 @@ body.sheet-open .sheet { max-height: calc(100% - env(safe-area-inset-top, 0px) -
 .so-mode { display: inline-flex; align-items: center; gap: 4px; margin-right: 14px; margin-top: 4px; }
 .so-mode svg { width: 17px; height: 17px; }
 .so-chip { align-self: flex-start; display: inline-flex; align-items: center; gap: 6px; margin-top: 6px; }
+.stv-steps { margin: 0; padding-left: 20px; display: flex; flex-direction: column; gap: 6px; font-size: 14px; line-height: 1.4; }
+.stv-steps a { color: var(--me); }
+#stvSetup, #stvOn { display: flex; flex-direction: column; gap: 10px; }
+#stvSetup[hidden], #stvOn[hidden] { display: none; }
+.btn.strava { background: #FC4C02; border-color: #FC4C02; color: #fff; grid-column: 1 / -1; }
+.btn.strava.sent { background: transparent; color: #FC4C02; }
