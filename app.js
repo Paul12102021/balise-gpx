@@ -4,7 +4,7 @@
 
 // La page et le code doivent être de la même version. Sinon (page gardée en cache
 // par le téléphone ou par GitHub), on recharge une page fraîche, au plus 3 fois.
-const APP_VERSION = 55;
+const APP_VERSION = 56;
 try {
   const meta = document.querySelector('meta[name="balise-version"]');
   const pageV = meta ? +meta.content : 0;
@@ -692,6 +692,15 @@ async function stvAccess() {
   Object.assign(t, { a: j.access_token, r: j.refresh_token || t.r, exp: j.expires_at }); store.set('stvTok', JSON.stringify(t));
   return t.a;
 }
+// message d'erreur Strava lisible (ex. abonnement requis, autorisation manquante)
+function stvErr(u, status) {
+  const det = (u.errors || []).map(e => [e.resource, e.field, e.code].filter(Boolean).join(' ')).join(', ');
+  const base = (u.message || 'erreur') + (det ? ' (' + det + ')' : '') + ' · code ' + status;
+  if (status === 401) return 'Strava refuse l\'accès : ' + base + '. Déconnecte puis reconnecte Strava dans les Réglages';
+  if (status === 403) return 'Strava refuse l\'accès : ' + base + '. L\'accès à l\'API Strava demande peut-être un abonnement';
+  if (status === 429) return 'Trop de demandes à Strava, réessaie dans 15 minutes';
+  return base;
+}
 function recTitle(it) {
   if (it.title) return it.title;
   const d = new Date(it.start || it.date), h = d.getHours();
@@ -713,7 +722,7 @@ async function stvUploadNow(it, onStep) {
   onStep && onStep('Envoi…');
   let r = await fetch(STRAVA_RELAY + '/upload', { method: 'POST', headers: H, body: f });
   let u = await r.json().catch(() => ({}));
-  if (!r.ok) throw new Error(u.message || 'HTTP ' + r.status);
+  if (!r.ok) throw new Error(stvErr(u, r.status));
   for (let k = 0; k < 30 && !u.activity_id && !u.error; k++) {
     onStep && onStep('Traitement par Strava…');
     await new Promise(z => setTimeout(z, 2000));
@@ -748,18 +757,23 @@ async function stvAuto(id) {
   try { await stvUpload(it); toast('Sortie envoyée sur Strava', 4000, { label: 'Voir', run: () => window.open('https://www.strava.com/activities/' + it.strava, '_blank') }); }
   catch (e) { if (!(e instanceof TypeError && navigator.onLine === false)) stvFail(it, e); }
 }
-function stvButton(it) {
-  const b = $('sdStrava');
+function stvButton(it, keepMsg) {
+  const b = $('sdStrava'), msg = $('sdStvMsg');
+  if (!keepMsg) msg.hidden = true;
   b.disabled = false;
   b.classList.toggle('sent', !!it.strava);
   b.textContent = it.strava ? 'Voir sur Strava ✓' : 'Envoyer sur Strava';
   b.onclick = async () => {
     if (it.strava) { window.open('https://www.strava.com/activities/' + it.strava, '_blank'); return; }
     if (!stvOn()) { openStrava(); return; }
-    b.disabled = true;
+    b.disabled = true; msg.hidden = true;
     try { await stvUpload(it, t => { b.textContent = t; }); toast('Sortie envoyée sur Strava', 3000); }
-    catch (e) { stvFail(it, e); }
-    stvButton(it);
+    catch (e) {
+      stvFail(it, e);
+      msg.hidden = false; msg.className = 'so-msg err';
+      msg.textContent = 'Envoi impossible : ' + (e instanceof TypeError ? 'le relais ou Strava ne répond pas (' + e.message + ')' : e.message);
+    }
+    stvButton(it, true);
   };
 }
 

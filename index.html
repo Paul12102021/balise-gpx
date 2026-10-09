@@ -8,13 +8,13 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<meta name="balise-version" content="55">
+<meta name="balise-version" content="56">
 <title>Pisteo</title>
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" href="icon.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
 <link rel="stylesheet" href="vendor/maplibre-gl.css">
-<link rel="stylesheet" href="app.css?v=55">
+<link rel="stylesheet" href="app.css?v=56">
 </head>
 <body>
 <div id="map" aria-label="Carte"></div>
@@ -236,6 +236,7 @@
       <div class="so-acts">
         <button id="sdFollow" class="btn go">Refaire ce parcours</button>
         <button id="sdStrava" class="btn strava">Envoyer sur Strava</button>
+        <p id="sdStvMsg" class="so-msg" hidden></p>
         <button id="sdExport" class="btn">Exporter le GPX</button>
         <button id="sdRename" class="btn ghost">Renommer</button>
         <button id="sdDelete" class="btn ghost danger">Supprimer</button>
@@ -362,6 +363,6 @@
 <div id="toast" class="toast" hidden></div>
 
 <script src="vendor/maplibre-gl.js"></script>
-<script src="app.js?v=55"></script>
+<script src="app.js?v=56"></script>
 </body>
 </html>

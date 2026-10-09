@@ -217,7 +217,7 @@ body.nav[data-banner="hidden"] .navtop:not([data-tone="off"]):not([data-tone="re
 .mk-end { background: #17201c; }
 
 .toast {
-  position: fixed; z-index: 20; left: 50%; transform: translateX(-50%);
+  position: fixed; z-index: 40; left: 50%; transform: translateX(-50%);
   top: calc(env(safe-area-inset-top, 0px) + 72px); max-width: calc(100% - 32px);
   background: var(--hud); color: var(--hud-ink); padding: 10px 14px; border-radius: 10px; font-size: 14px;
   box-shadow: 0 4px 14px rgba(0,0,0,.25);
@@ -377,3 +377,5 @@ body.sheet-open .sheet { max-height: calc(100% - env(safe-area-inset-top, 0px) -
 .stv-field code { flex: 1; min-width: 0; font: 600 14px/1.3 ui-monospace, monospace; word-break: break-all; }
 .stv-field.hl { outline: 2px solid #FC4C02; }
 .stv-copy { flex: none; min-height: 32px; padding: 0 12px; border-radius: 16px; border: 1px solid var(--line); background: var(--panel); color: var(--ink); font: 600 13px var(--font); cursor: pointer; }
+.so-msg { grid-column: 1 / -1; margin: 0; font-size: 13px; color: var(--muted); }
+.so-msg.err { padding: 8px 10px; border-radius: 10px; background: var(--warn-bg); color: var(--warn-ink); }
