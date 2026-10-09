@@ -8,13 +8,13 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<meta name="balise-version" content="58">
+<meta name="balise-version" content="59">
 <title>Pisteo</title>
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" href="icon.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
 <link rel="stylesheet" href="vendor/maplibre-gl.css">
-<link rel="stylesheet" href="app.css?v=58">
+<link rel="stylesheet" href="app.css?v=59">
 </head>
 <body>
 <div id="map" aria-label="Carte"></div>
@@ -96,6 +96,7 @@
       <button id="npVib" class="chip"></button>
       <button id="npMode" class="chip"></button>
       <button id="npBanner" class="chip"></button>
+      <button id="npEco" class="chip"></button>
     </div>
     <div id="npBack" class="np-back" hidden>
       <svg viewBox="0 0 24 24"><path d="M9 14 4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11"/></svg>
@@ -162,6 +163,10 @@
     <div class="row">
       <label for="autoRec">Enregistrer la sortie dès que la navigation démarre</label>
       <input type="checkbox" id="autoRec" class="check">
+    </div>
+    <div class="row">
+      <label for="optEco">Économie de batterie en navigation<br><small>Équilibrée : carte allégée · Maximum : écran noir entre les virages</small></label>
+      <select id="optEco"><option value="off">Non</option><option value="eco">Équilibrée</option><option value="max">Maximum</option></select>
     </div>
     <div class="row">
       <label for="optBanner">Indications en navigation<br><small>Toucher le bandeau le réduit ou l'agrandit</small></label>
@@ -382,9 +387,14 @@
   <div class="zone-btns"><button id="zoneCancel" class="btn small">Annuler</button><button id="zoneGo" class="btn small go">Télécharger</button></div>
 </div>
 
+<div id="ecoBlack" hidden>
+  <div class="eb-main"><div id="ebIcon" class="eb-icon"></div><div><div id="ebDist" class="eb-dist"></div><div id="ebTxt" class="eb-txt"></div></div></div>
+  <div id="ebRem" class="eb-rem"></div>
+  <div class="eb-hint">Écran noir pour économiser la batterie · touche pour voir la carte</div>
+</div>
 <div id="toast" class="toast" hidden></div>
 
 <script src="vendor/maplibre-gl.js"></script>
-<script src="app.js?v=58"></script>
+<script src="app.js?v=59"></script>
 </body>
 </html>

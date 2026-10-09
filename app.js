@@ -4,7 +4,7 @@
 
 // La page et le code doivent être de la même version. Sinon (page gardée en cache
 // par le téléphone ou par GitHub), on recharge une page fraîche, au plus 3 fois.
-const APP_VERSION = 58;
+const APP_VERSION = 59;
 try {
   const meta = document.querySelector('meta[name="balise-version"]');
   const pageV = meta ? +meta.content : 0;
@@ -982,8 +982,16 @@ function waitFix(ms) {
   if (me && Date.now() - me.t < 60000) return Promise.resolve(me);
   return new Promise(res => { fixWaiters.push(res); setTimeout(() => res(null), ms); });
 }
+let fullT = 0;
 function onPos(pos) {
   if (sim && !pos.sim) return; // pendant la simulation on ignore le vrai GPS
+  // économie : loin des virages, une position sur deux secondes est traitée en entier ;
+  // les autres servent seulement à l'enregistrement et au point bleu
+  if (nav && eco !== 'off' && !pos.sim && pos.t - fullT < 2000 && !ecoNear()) {
+    me = Object.assign(pos, { speed: pos.speed != null && !isNaN(pos.speed) ? pos.speed : (me && me.speed) });
+    meMk.setLngLat([pos.lon, pos.lat]); onActFix(pos); return;
+  }
+  fullT = pos.t;
   // vitesse et direction de déplacement
   if (prevFix && (pos.speed == null || isNaN(pos.speed))) {
     const dt = (pos.t - prevFix.t) / 1000;
@@ -1033,9 +1041,19 @@ function onPos(pos) {
 // =====================================================================
 let nav = false, follow = true, followOv = false, navTrackId = null, navStartT = 0, freeD = 0, freeRef = null;
 function navZoom() { const s = speedEma || 1.2; return s > 7 ? 15.4 : s > 3.5 ? 16.2 : 17; }
+let camT = 0;
 function navCamera(dur) {
   if (!me) return;
   const h = map.getContainer().clientHeight;
+  if (nav && eco !== 'off') {
+    // économie : carte à plat, sans animation, recentrée toutes les 3 s (à chaque position près d'un virage)
+    const now = Date.now();
+    if (dur > 0 && now - camT < 3000 && !ecoNear()) return;
+    camT = now;
+    map.jumpTo({ center: [me.lon, me.lat], bearing: heading != null ? heading : map.getBearing(), pitch: 0, zoom: navZoom(),
+      padding: { top: Math.round(h * 0.4), bottom: Math.min($('navBottom').offsetHeight || 100, h * 0.45), left: 0, right: 0 } });
+    return;
+  }
   map.easeTo({
     center: [me.lon, me.lat], bearing: heading != null ? heading : map.getBearing(), pitch: 52, zoom: navZoom(),
     padding: { top: Math.round(h * 0.45), bottom: Math.min($('navBottom').offsetHeight || 100, h * 0.45), left: 0, right: 0 }, duration: dur, easing: t => t, essential: true
@@ -1063,12 +1081,13 @@ async function startNav(free = false) {
     if (store.get('autoRec') === '1') startActivity();
     else { const n = +(store.get('recHint') || 0); if (n < 3) { store.set('recHint', n + 1); setTimeout(() => toast('Touche ● pour enregistrer ta sortie', 4000), 1500); } }
   }
+  applyEco(); ecoWake(10000);
   if (me) { if (track) { progress = project(track, me, true); updateDone(me); } guidance(); navCamera(800); }
   else setBanner('gps', '', 'Recherche du signal GPS…', 'gps');
   updateStats();
 }
 function stopNav() {
-  stopPip(); nav = false; document.body.classList.remove('nav', 'free'); toggleNavMore(false, true);
+  stopPip(); nav = false; document.body.classList.remove('nav', 'free'); applyEco(); toggleNavMore(false, true);
   stopSim(); clearRejoin(); isOff = false;
   try { speechSynthesis.cancel(); } catch {}
   setSrc('turn', EMPTY);
@@ -1116,6 +1135,7 @@ function setBanner(tone, dist, txt, icon, sub = '') {
   const key = JSON.stringify(icon);
   if (key !== lastBannerKey) { $('ntIcon').innerHTML = arrowSVG(icon); lastBannerKey = key; }
   bannerIcon = icon; pipSoon();
+  if (typeof ecoCheck === 'function' && eco === 'max') ecoCheck();
 }
 
 // =====================================================================
@@ -1317,8 +1337,10 @@ $('btnPip').onclick = () => document.pictureInPictureElement ? stopPip() : start
 
 let lastTurnKey = '';
 const spoken = new Map();
+var nextDist = Infinity; // distance jusqu'au prochain virage (pour l'économie de batterie)
 function guidance() {
   if (!nav) return;
+  nextDist = Infinity;
   if (!me) { setBanner('gps', '', 'Recherche du signal GPS…', 'gps'); return; }
   if (!track) {
     const h = heading, dir = h == null ? '' : ['N', 'NE', 'E', 'SE', 'S', 'SO', 'O', 'NO'][Math.round(h / 45) % 8];
@@ -1341,6 +1363,7 @@ function guidance() {
   if (!pr) return;
   const next = path.turns.find(t => t.along > pr.along + 3) || path.turns[path.turns.length - 1];
   const dTo = Math.max(0, next.along - pr.along);
+  nextDist = next.arrive ? Infinity : dTo;
   const info = next.arrive ? (rejoin ? { txt: 'Rejoignez la trace', icon: 'join' } : { txt: 'Arrivée', icon: 'flag' }) : turnInfo(next.ang);
   const tone = rejoin ? 'rejoin' : 'ok';
   const sub = rejoin ? `Retour à la trace · ${fmtDist(rejoinProg.remain)} par le chemin` : '';
@@ -1478,6 +1501,45 @@ function setBannerSize(v, quiet) {
   if (nav && follow) setTimeout(() => navCamera(400), 50);
 }
 $('optBanner').onchange = e => setBannerSize(e.target.value);
+
+// ---------- économie de batterie ----------
+var eco = store.get('eco') || 'off', ecoWakeUntil = 0, ecoThemeSet = false;
+const ECO_LBL = { off: 'Économie : non', eco: 'Économie : équilibrée', max: 'Économie : maximum' };
+function ecoNear() { return nextDist < 220 || isOff || arrived || routing; }
+function setEco(v, quiet) {
+  eco = ECO_LBL[v] ? v : 'off'; store.set('eco', eco);
+  $('optEco').value = eco; $('npEco').textContent = ECO_LBL[eco]; $('npEco').classList.toggle('off', eco === 'off');
+  if (!quiet) toast(eco === 'max' ? 'Économie maximum : écran noir entre les virages, la carte revient à l\'approche' : eco === 'eco' ? 'Économie équilibrée : carte allégée' : 'Économie de batterie désactivée', 3500);
+  applyEco();
+}
+function applyEco() {
+  const on = nav && eco !== 'off';
+  try { map.setPixelRatio(on ? Math.min(window.devicePixelRatio || 1, 1.5) : null); } catch {}
+  ready.then(() => { for (const id of ofmLayerIds) { const l = map.getLayer(id); if (l && l.type === 'fill-extrusion') map.setLayoutProperty(id, 'visibility', on ? 'none' : 'visible'); } });
+  // thème sombre pendant la navigation (moins gourmand sur écran OLED)
+  if (on && !ecoThemeSet && document.documentElement.dataset.theme !== 'dark') { ecoThemeSet = true; document.documentElement.dataset.theme = 'dark'; refreshColors(); }
+  else if (!on && ecoThemeSet) { ecoThemeSet = false; applyTheme(store.get('theme') || 'auto'); }
+  camT = 0; if (nav && follow) navCamera(0);
+  ecoCheck();
+}
+// écran noir : affiché en mode maximum, sauf à l'approche d'un virage, hors trace, ou juste après un toucher
+function ecoCheck() {
+  const show = nav && eco === 'max' && Date.now() > ecoWakeUntil && !ecoNear() && $('navMore').hidden && $('finish').hidden;
+  const el = $('ecoBlack'), was = !el.hidden;
+  el.hidden = !show;
+  if (show) {
+    const m = Math.floor(Date.now() / 60000); // léger décalage chaque minute, pour ne pas marquer l'écran
+    el.firstElementChild.style.transform = `translate(${(m % 5 - 2) * 6}px, ${(Math.floor(m / 5) % 5 - 2) * 10}px)`;
+    $('ebIcon').innerHTML = $('ntIcon').innerHTML; $('ebDist').textContent = $('ntDist').textContent; $('ebTxt').textContent = $('ntTxt').textContent;
+    $('ebRem').textContent = track ? `${$('nbRem').textContent} restant · arrivée ${$('nbEta').textContent}` : `${$('nbRem').textContent} ${$('nbL2').textContent} · ${$('nbUp').textContent}`;
+  } else if (was && nav && follow) { camT = 0; navCamera(0); }
+}
+function ecoWake(ms) { ecoWakeUntil = Date.now() + ms; ecoCheck(); setTimeout(ecoCheck, ms + 100); }
+$('ecoBlack').onclick = () => ecoWake(15000);
+$('optEco').onchange = e => setEco(e.target.value);
+$('npEco').onclick = () => setEco({ off: 'eco', eco: 'max', max: 'off' }[eco]);
+setEco(eco, true);
+setInterval(() => { if (nav && eco === 'max') ecoCheck(); }, 2000);
 $('npBanner').onclick = () => setBannerSize({ normal: 'compact', compact: 'hidden', hidden: 'normal' }[store.get('banner') || 'normal']);
 $('navTop').onclick = () => { if (nav) setBannerSize((store.get('banner') || 'normal') === 'normal' ? 'compact' : 'normal'); };
 setBannerSize(store.get('banner') || 'normal', true);
