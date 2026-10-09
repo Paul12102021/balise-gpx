@@ -8,13 +8,13 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<meta name="balise-version" content="56">
+<meta name="balise-version" content="57">
 <title>Pisteo</title>
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" href="icon.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
 <link rel="stylesheet" href="vendor/maplibre-gl.css">
-<link rel="stylesheet" href="app.css?v=56">
+<link rel="stylesheet" href="app.css?v=57">
 </head>
 <body>
 <div id="map" aria-label="Carte"></div>
@@ -235,7 +235,7 @@
       <canvas id="sdProfile" class="so-prof" aria-label="Profil altimétrique"></canvas>
       <div class="so-acts">
         <button id="sdFollow" class="btn go">Refaire ce parcours</button>
-        <button id="sdStrava" class="btn strava">Envoyer sur Strava</button>
+        <button id="sdStrava" class="btn strava">Mettre sur Strava</button>
         <p id="sdStvMsg" class="so-msg" hidden></p>
         <button id="sdExport" class="btn">Exporter le GPX</button>
         <button id="sdRename" class="btn ghost">Renommer</button>
@@ -264,6 +264,26 @@
       </div>
       <button id="stvOff" class="btn ghost danger">Se déconnecter de Strava</button>
     </div>
+  </div>
+</div>
+
+<div id="stvMan" class="lib" hidden>
+  <div class="lib-panel" role="dialog" aria-label="Mettre la sortie sur Strava">
+    <div class="lib-head">
+      <b>Mettre sur Strava</b>
+      <button id="smClose" class="closebtn" aria-label="Fermer"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></svg>Fermer</button>
+    </div>
+    <p class="note" id="smWhy">Strava ne permet plus l'envoi direct depuis Pisteo sans abonnement. On passe par son import, en 3 touchers :</p>
+    <ol class="sm-steps">
+      <li><span><b>Enregistre le fichier</b> sur ton téléphone.</span>
+        <button id="smSave" class="btn go">1 · Enregistrer le GPX</button>
+        <small id="smSaved" hidden>✓ Enregistré dans <b>Téléchargements</b> : <code id="smFile"></code></small></li>
+      <li><span><b>Ouvre l'import Strava</b>, touche « Choisir des fichiers », va dans Téléchargements et choisis le fichier.</span>
+        <button id="smOpen" class="btn strava">2 · Ouvrir l'import Strava</button>
+        <small>Si la page s'affiche mal ou renvoie vers l'appli Strava : menu ⋮ de Chrome → coche « Version pour ordinateur ».</small></li>
+      <li><span><b>Valide sur Strava</b> (« Enregistrer et afficher »), puis reviens ici.</span>
+        <button id="smDone" class="btn ghost">3 · C'est fait, elle est sur Strava</button></li>
+    </ol>
   </div>
 </div>
 
@@ -363,6 +383,6 @@
 <div id="toast" class="toast" hidden></div>
 
 <script src="vendor/maplibre-gl.js"></script>
-<script src="app.js?v=56"></script>
+<script src="app.js?v=57"></script>
 </body>
 </html>

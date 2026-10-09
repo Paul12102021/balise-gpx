@@ -4,7 +4,7 @@
 
 // La page et le code doivent être de la même version. Sinon (page gardée en cache
 // par le téléphone ou par GitHub), on recharge une page fraîche, au plus 3 fois.
-const APP_VERSION = 56;
+const APP_VERSION = 57;
 try {
   const meta = document.querySelector('meta[name="balise-version"]');
   const pageV = meta ? +meta.content : 0;
@@ -737,14 +737,47 @@ async function stvUploadNow(it, onStep) {
   await idb('readwrite', st => st.put(it)).catch(() => {});
   return aid;
 }
+// ---------- import manuel (Strava refuse l'envoi direct sans abonnement) ----------
+// le GPX porte le type d'activité, que Strava reconnaît à l'import (vélo / marche)
+function gpxForStrava(it) {
+  const type = recMode(it) === 'bike' ? 'cycling' : 'walking';
+  let t = it.text.replace(/<trk>\s*<name>([\s\S]*?)<\/name>/, (m, n) => `<trk><name>${recTitle(it).replace(/[<&>]/g, '')}</name><type>${type}</type>`);
+  if (!/<type>/.test(t)) t = t.replace('<trk>', `<trk><type>${type}</type>`);
+  return t;
+}
+function saveFile(text, fname) {
+  const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([text], { type: 'application/gpx+xml' })); a.download = fname;
+  document.body.appendChild(a); a.click(); setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 1500);
+}
+function openStvManual(it, why) {
+  const d = new Date(it.start || it.date), pad = n => String(n).padStart(2, '0');
+  const fname = `pisteo-${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}-${pad(d.getHours())}h${pad(d.getMinutes())}.gpx`;
+  $('smWhy').textContent = why || 'Strava ne permet plus l\'envoi direct depuis Pisteo sans abonnement. On passe par son import, en 3 touchers :';
+  $('smSaved').hidden = true; $('smFile').textContent = fname;
+  $('smSave').onclick = () => { saveFile(gpxForStrava(it), fname); $('smSaved').hidden = false; };
+  $('smOpen').onclick = () => window.open('https://www.strava.com/upload/select', '_blank');
+  $('smDone').onclick = async () => {
+    it.stravaManual = Date.now(); delete it.stvPending;
+    await idb('readwrite', st => st.put(it)).catch(() => {});
+    $('stvMan').hidden = true; toast('Sortie notée comme publiée sur Strava', 3000);
+    if (!$('soDetail').hidden) stvButton(it);
+  };
+  $('stvMan').hidden = false;
+}
+$('smClose').onclick = () => { $('stvMan').hidden = true; };
+$('stvMan').onclick = e => { if (e.target === $('stvMan')) $('stvMan').hidden = true; };
+// Strava a refusé l'appli (pas d'abonnement) : on retient pour une semaine et on passe à l'import manuel
+const stvBlocked = () => Date.now() - +(store.get('stvInactive') || 0) < 7 * 864e5;
+const isInactive = e => e && /inactive|subscription|abonnement/i.test(e.message || '');
 function stvFail(it, e) {
+  if (isInactive(e)) { store.set('stvInactive', String(Date.now())); openStvManual(it); return; }
   const net = e instanceof TypeError; // pas de réseau, ou Strava refuse l'appel depuis le navigateur
   toast('Envoi sur Strava impossible' + (net ? (navigator.onLine === false ? ' : pas de réseau, nouvel essai plus tard' : '') : ' : ' + e.message) + '.', 6000,
-    { label: 'Import manuel', run: () => { shareGPX(it.text, recTitle(it)); setTimeout(() => window.open('https://www.strava.com/upload/select', '_blank'), 800); } });
+    { label: 'Import manuel', run: () => openStvManual(it) });
 }
 // sorties en attente (envoi automatique sans réseau) : nouvel essai au démarrage et au retour du réseau
 async function stvRetry() {
-  if (!stvOn() || navigator.onLine === false) return;
+  if (!stvOn() || navigator.onLine === false || stvBlocked()) return;
   for (const it of (await listRecent()).filter(x => x.stvPending && !x.strava && !stvBusy.has(x.id))) {
     try { await stvUpload(it); toast('Sortie envoyée sur Strava', 3000); } catch { break; }
   }
@@ -752,26 +785,36 @@ async function stvRetry() {
 window.addEventListener('online', () => setTimeout(stvRetry, 3000));
 async function stvAuto(id) {
   if (!stvOn() || store.get('stvAuto') !== '1') return;
+  if (stvBlocked()) { setTimeout(() => toast('Sortie gardée · la mettre sur Strava ?', 6000, { label: 'Strava', run: async () => { const x = (await listRecent()).find(y => y.id === id); if (x) openStvManual(x); } }), 5200); return; }
   const it = (await listRecent()).find(x => x.id === id); if (!it) return;
   it.stvPending = true; await idb('readwrite', st => st.put(it)).catch(() => {});
   try { await stvUpload(it); toast('Sortie envoyée sur Strava', 4000, { label: 'Voir', run: () => window.open('https://www.strava.com/activities/' + it.strava, '_blank') }); }
-  catch (e) { if (!(e instanceof TypeError && navigator.onLine === false)) stvFail(it, e); }
+  catch (e) {
+    if (e instanceof TypeError && navigator.onLine === false) return;
+    if (isInactive(e)) { store.set('stvInactive', String(Date.now())); delete it.stvPending; idb('readwrite', st => st.put(it)).catch(() => {});
+      toast('Strava refuse l\'envoi direct sans abonnement', 6000, { label: 'Mettre sur Strava', run: () => openStvManual(it) }); return; }
+    stvFail(it, e);
+  }
 }
 function stvButton(it, keepMsg) {
   const b = $('sdStrava'), msg = $('sdStvMsg');
   if (!keepMsg) msg.hidden = true;
+  const done = it.strava || it.stravaManual;
   b.disabled = false;
-  b.classList.toggle('sent', !!it.strava);
-  b.textContent = it.strava ? 'Voir sur Strava ✓' : 'Envoyer sur Strava';
+  b.classList.toggle('sent', !!done);
+  b.textContent = it.strava ? 'Voir sur Strava ✓' : it.stravaManual ? 'Sur Strava ✓ · remettre' : 'Mettre sur Strava';
   b.onclick = async () => {
     if (it.strava) { window.open('https://www.strava.com/activities/' + it.strava, '_blank'); return; }
-    if (!stvOn()) { openStrava(); return; }
+    // envoi direct seulement si Strava l'accepte (compte connecté et appli active), sinon import manuel
+    if (!stvOn() || stvBlocked() || it.stravaManual) { openStvManual(it); return; }
     b.disabled = true; msg.hidden = true;
     try { await stvUpload(it, t => { b.textContent = t; }); toast('Sortie envoyée sur Strava', 3000); }
     catch (e) {
       stvFail(it, e);
-      msg.hidden = false; msg.className = 'so-msg err';
-      msg.textContent = 'Envoi impossible : ' + (e instanceof TypeError ? 'le relais ou Strava ne répond pas (' + e.message + ')' : e.message);
+      if (!isInactive(e)) {
+        msg.hidden = false; msg.className = 'so-msg err';
+        msg.textContent = 'Envoi impossible : ' + (e instanceof TypeError ? 'le relais ou Strava ne répond pas (' + e.message + ')' : e.message);
+      }
     }
     stvButton(it, true);
   };

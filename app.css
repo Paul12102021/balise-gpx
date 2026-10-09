@@ -379,3 +379,8 @@ body.sheet-open .sheet { max-height: calc(100% - env(safe-area-inset-top, 0px) -
 .stv-copy { flex: none; min-height: 32px; padding: 0 12px; border-radius: 16px; border: 1px solid var(--line); background: var(--panel); color: var(--ink); font: 600 13px var(--font); cursor: pointer; }
 .so-msg { grid-column: 1 / -1; margin: 0; font-size: 13px; color: var(--muted); }
 .so-msg.err { padding: 8px 10px; border-radius: 10px; background: var(--warn-bg); color: var(--warn-ink); }
+.sm-steps { margin: 0; padding-left: 0; list-style: none; display: flex; flex-direction: column; gap: 16px; font-size: 14px; line-height: 1.4; }
+.sm-steps li { display: flex; flex-direction: column; gap: 8px; }
+.sm-steps .btn { width: 100%; }
+.sm-steps small { color: var(--muted); }
+.sm-steps code { font-size: 12px; word-break: break-all; }
