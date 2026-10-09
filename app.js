@@ -4,7 +4,7 @@
 
 // La page et le code doivent être de la même version. Sinon (page gardée en cache
 // par le téléphone ou par GitHub), on recharge une page fraîche, au plus 3 fois.
-const APP_VERSION = 49;
+const APP_VERSION = 50;
 try {
   const meta = document.querySelector('meta[name="balise-version"]');
   const pageV = meta ? +meta.content : 0;
@@ -479,66 +479,197 @@ function recDuration(text) {
   }
   return ms;
 }
-let libTab = 'tr';
-function setLibTab(t) {
-  libTab = t;
-  $('libTabTr').classList.toggle('on', t === 'tr'); $('libTabRec').classList.toggle('on', t === 'rec');
-  $('libBrowse').hidden = t === 'rec'; $('libTip').hidden = t === 'rec';
-  renderLib();
-}
-$('libTabTr').onclick = () => setLibTab('tr');
-$('libTabRec').onclick = () => setLibTab('rec');
 const ICON_SHARE = '<svg viewBox="0 0 24 24"><path d="M12 15V3M7 8l5-5 5 5"/><path d="M5 13v7h14v-7"/></svg>';
 const ICON_DEL = '<svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></svg>';
+// Mes traces : les GPX ouverts (les sorties enregistrées ont leur propre écran)
 async function renderLib() {
-  const list = $('libList'), all = await listRecent();
-  const recs = libTab === 'rec';
-  const items = all.filter(it => isRec(it) === recs);
+  const list = $('libList'), items = (await listRecent()).filter(it => !isRec(it));
   list.innerHTML = '';
   $('libEmpty').hidden = items.length > 0;
-  $('libEmpty').textContent = recs ? 'Tes sorties enregistrées apparaîtront ici. Lance une navigation puis touche ● pour enregistrer.' : 'Les traces que tu ouvres apparaîtront ici.';
-  // sorties : durée et vitesse, rangées par mois, avec un total
-  if (recs) {
-    for (const it of items) if (it.ms == null && it.text) { it.ms = recDuration(it.text); idb('readwrite', st => st.put(it)).catch(() => {}); }
-    const d = items.reduce((a, it) => a + (it.dist || 0), 0), ms = items.reduce((a, it) => a + (it.ms || 0), 0), up = items.reduce((a, it) => a + (it.up || 0), 0);
-    $('libSum').hidden = !items.length;
-    $('libSum').innerHTML = `<b>${items.length}</b> sortie${items.length > 1 ? 's' : ''} · <b>${fmtDist(d)}</b> · ${fmtDur(ms / 1000)}${up ? ' · D+ ' + fmtM(up) : ''}`;
-  } else $('libSum').hidden = true;
-  let month = '';
   for (const it of items) {
-    const when = it.start || it.date;
-    if (recs) {
-      const m = new Date(when).toLocaleDateString('fr-FR', { month: 'long', year: 'numeric' });
-      if (m !== month) { month = m; const h = document.createElement('li'); h.className = 'lib-month'; h.textContent = m; list.appendChild(h); }
-    }
     const li = document.createElement('li');
     const open = document.createElement('button'); open.className = 'lib-item';
-    const sp = it.ms > 60000 ? ' · ' + (it.dist / (it.ms / 1000) * 3.6).toFixed(1).replace('.', ',') + ' km/h' : '';
     open.innerHTML = '<b></b><span></span>';
-    open.querySelector('b').textContent = recs ? it.name.replace(/^Sortie du /, '') : it.name;
-    open.querySelector('span').textContent = recs
-      ? `${fmtDist(it.dist)}${it.ms ? ' · ' + fmtDur(it.ms / 1000) : ''}${it.up != null ? ' · D+ ' + fmtM(it.up) : ''}${sp}`
-      : `${fmtDist(it.dist)}${it.up != null ? ' · D+ ' + fmtM(it.up) : ''} · ouverte le ${fmtDate(it.date)}`;
-    open.onclick = () => { closeLib(); loadText(it.text, !recs); if (recs) store.set('gpx', it.text.length < 4.5e6 ? it.text : ''); };
+    open.querySelector('b').textContent = it.name;
+    open.querySelector('span').textContent = `${fmtDist(it.dist)}${it.up != null ? ' · D+ ' + fmtM(it.up) : ''} · ouverte le ${fmtDate(it.date)}`;
+    open.onclick = () => { closeLib(); loadText(it.text); };
     const share = document.createElement('button'); share.className = 'lib-del'; share.setAttribute('aria-label', 'Exporter ' + it.name);
     share.innerHTML = ICON_SHARE; share.onclick = () => shareGPX(it.text, it.name);
-    const del = document.createElement('button'); del.className = 'lib-del'; del.setAttribute('aria-label', 'Supprimer ' + it.name);
-    del.innerHTML = ICON_DEL;
-    del.onclick = async () => {
-      // une sortie enregistrée n'existe qu'ici : on demande confirmation
-      if (recs && !del.dataset.armed) { del.dataset.armed = '1'; del.style.color = 'var(--warn)'; toast('Touche encore la croix pour supprimer cette sortie', 3000); setTimeout(() => { delete del.dataset.armed; del.style.color = ''; }, 3000); return; }
-      await idb('readwrite', st => st.delete(it.id)).catch(() => {}); renderLib();
-    };
+    const del = document.createElement('button'); del.className = 'lib-del'; del.setAttribute('aria-label', 'Retirer ' + it.name);
+    del.innerHTML = ICON_DEL; del.onclick = async () => { await idb('readwrite', st => st.delete(it.id)).catch(() => {}); renderLib(); };
     li.append(open, share, del); list.appendChild(li);
   }
 }
-async function openLib(tab) {
-  const items = await listRecent();
-  if (!items.length && tab !== 'rec') { $('fileIn').click(); return; } // rien en mémoire : on va directement aux fichiers
-  setLibTab(tab || (items.some(it => !isRec(it)) ? libTab : 'rec')); $('lib').hidden = false;
+async function openLib() {
+  const items = (await listRecent()).filter(it => !isRec(it));
+  if (!items.length) { $('fileIn').click(); return; } // rien en mémoire : on va directement aux fichiers
+  await renderLib(); $('lib').hidden = false;
+}
+
+// =====================================================================
+// Mes sorties : les sorties déjà faites, avec le détail de chacune
+// =====================================================================
+// lecture d'une sortie : points avec heure et segment (une reprise après pause = nouveau segment)
+function parseRec(text) {
+  const doc = new DOMParser().parseFromString(text, 'application/xml');
+  const segs = [...doc.getElementsByTagName('trkseg')], out = [];
+  (segs.length ? segs : [doc]).forEach((sg, si) => {
+    for (const n of sg.getElementsByTagName('trkpt')) {
+      const e = n.getElementsByTagName('ele')[0], t = n.getElementsByTagName('time')[0];
+      const p = { lat: +n.getAttribute('lat'), lon: +n.getAttribute('lon'), ele: e ? +e.textContent : null, t: t ? Date.parse(t.textContent) : NaN, s: si };
+      if (isFinite(p.lat) && isFinite(p.lon)) out.push(p);
+    }
+  });
+  return out;
+}
+function recStats(pts) {
+  let dist = 0, move = 0, up = 0, down = 0, lo = Infinity, hi = -Infinity, vmax = 0, last = null;
+  const segs = [];
+  pts.forEach((p, i) => { if (!i || p.s !== pts[i - 1].s) segs.push([]); segs[segs.length - 1].push(p); });
+  for (const g of segs) {
+    for (let i = 1; i < g.length; i++) dist += hav(g[i - 1], g[i]);
+    if (g.length > 1 && isFinite(g[0].t) && isFinite(g[g.length - 1].t)) move += g[g.length - 1].t - g[0].t;
+    // vitesse max : sur au moins 60 m et 15 s, pour ne pas compter les sauts du GPS
+    let j = 0, d = 0;
+    for (let i = 1; i < g.length; i++) {
+      d += hav(g[i - 1], g[i]);
+      while (j < i - 1 && (d - hav(g[j], g[j + 1]) >= 60) && g[i].t - g[j + 1].t >= 15000) { d -= hav(g[j], g[j + 1]); j++; }
+      const dt = (g[i].t - g[j].t) / 1000;
+      if (d >= 60 && dt >= 15) vmax = Math.max(vmax, d / dt);
+    }
+  }
+  for (const p of pts) {
+    if (p.ele == null || isNaN(p.ele)) continue;
+    lo = Math.min(lo, p.ele); hi = Math.max(hi, p.ele);
+    if (last == null) { last = p.ele; continue; }
+    if (p.ele - last > 3) { up += p.ele - last; last = p.ele; } else if (last - p.ele > 3) { down += last - p.ele; last = p.ele; }
+  }
+  const ts = pts.map(p => p.t).filter(isFinite);
+  return { dist, move, total: ts.length > 1 ? ts[ts.length - 1] - ts[0] : 0, up, down, lo: isFinite(lo) ? lo : null, hi: isFinite(hi) ? hi : null, vmax, start: ts[0] || null };
+}
+const kmh = v => v.toFixed(1).replace('.', ',') + ' km/h';
+
+async function openSorties() { $('sorties').hidden = false; showSoList(); }
+function closeSorties() { $('sorties').hidden = true; previewRedraw = null; }
+$('btnSorties').onclick = openSorties;
+$('soClose').onclick = $('soClose2').onclick = closeSorties;
+$('sorties').onclick = e => { if (e.target === $('sorties')) closeSorties(); };
+$('soBack').onclick = () => showSoList();
+
+async function showSoList() {
+  previewRedraw = null;
+  $('soDetail').hidden = true; $('soList').hidden = false;
+  const items = (await listRecent()).filter(isRec).sort((a, b) => (b.start || b.date) - (a.start || a.date));
+  for (const it of items) if (it.ms == null && it.text) { it.ms = recDuration(it.text); idb('readwrite', st => st.put(it)).catch(() => {}); }
+  const list = $('soItems'); list.innerHTML = '';
+  $('soEmpty').hidden = items.length > 0;
+  const d = items.reduce((a, it) => a + (it.dist || 0), 0), ms = items.reduce((a, it) => a + (it.ms || 0), 0), up = items.reduce((a, it) => a + (it.up || 0), 0);
+  $('soSum').hidden = !items.length;
+  $('soSum').innerHTML = `<b>${items.length}</b> sortie${items.length > 1 ? 's' : ''} · <b>${fmtDist(d)}</b> · ${fmtDur(ms / 1000)}${up ? ' · D+ ' + fmtM(up) : ''}`;
+  let month = '';
+  for (const it of items) {
+    const when = it.start || it.date;
+    const m = new Date(when).toLocaleDateString('fr-FR', { month: 'long', year: 'numeric' });
+    if (m !== month) { month = m; const h = document.createElement('li'); h.className = 'lib-month'; h.textContent = m; list.appendChild(h); }
+    const li = document.createElement('li');
+    const open = document.createElement('button'); open.className = 'lib-item';
+    open.innerHTML = '<b></b><span></span>';
+    open.querySelector('b').textContent = it.title || new Date(when).toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long' }) + ' · ' + new Date(when).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' }).replace(':', 'h');
+    const sp = it.ms > 60000 ? ' · ' + kmh(it.dist / (it.ms / 1000) * 3.6) : '';
+    open.querySelector('span').textContent = `${fmtDist(it.dist)}${it.ms ? ' · ' + fmtDur(it.ms / 1000) : ''}${it.up != null ? ' · D+ ' + fmtM(it.up) : ''}${sp}`;
+    open.onclick = () => showSoDetail(it);
+    const chev = document.createElement('span'); chev.className = 'lib-del'; chev.innerHTML = '<svg viewBox="0 0 24 24"><path d="m9 5 7 7-7 7"/></svg>';
+    li.append(open, chev); li.onclick = e => { if (e.target === li || e.target.closest('.lib-del')) showSoDetail(it); };
+    list.appendChild(li);
+  }
+}
+
+let previewRedraw = null;
+function showSoDetail(it) {
+  $('soList').hidden = true; $('soDetail').hidden = false;
+  $('sorties').querySelector('.lib-panel').scrollTop = 0;
+  const pts = parseRec(it.text), st = recStats(pts), when = st.start || it.start || it.date;
+  $('sdName').textContent = it.title || 'Sortie';
+  $('sdDate').textContent = new Date(when).toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }) + ' · départ ' + new Date(when).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' }).replace(':', 'h');
+  const move = st.move || it.ms, hasE = st.lo != null;
+  $('sdDist').textContent = fmtDist(st.dist);
+  $('sdMove').textContent = move ? fmtDur(move / 1000) : '–';
+  $('sdAvg').textContent = move > 60000 ? kmh(st.dist / (move / 1000) * 3.6) : '–';
+  $('sdUp').textContent = hasE ? fmtM(st.up) : '–';
+  $('sdDown').textContent = hasE ? fmtM(st.down) : '–';
+  $('sdMax').textContent = st.vmax ? kmh(st.vmax * 3.6) : '–';
+  $('sdTotal').textContent = st.total ? fmtDur(st.total / 1000) : '–';
+  $('sdMin').textContent = hasE ? fmtM(st.lo) : '–';
+  $('sdMaxE').textContent = hasE ? fmtM(st.hi) : '–';
+  $('sdProfile').hidden = !hasE;
+  previewRedraw = () => { drawRecMap($('sdMap'), pts); };
+  requestAnimationFrame(() => { previewRedraw && previewRedraw(); if (hasE) drawRecProfile($('sdProfile'), pts); });
+  $('sdFollow').onclick = () => { closeSorties(); loadText(it.text, false); store.set('gpx', it.text.length < 4.5e6 ? it.text : ''); setTimeout(() => startNav(), 300); };
+  $('sdExport').onclick = () => shareGPX(it.text, it.title || it.name);
+  $('sdRename').onclick = async () => {
+    const t = prompt('Nom de la sortie', it.title || '');
+    if (t == null) return;
+    it.title = t.trim() || undefined; await idb('readwrite', s => s.put(it)).catch(() => {});
+    $('sdName').textContent = it.title || 'Sortie';
+  };
+  const del = $('sdDelete'); del.textContent = 'Supprimer'; delete del.dataset.armed;
+  del.onclick = async () => {
+    if (!del.dataset.armed) { del.dataset.armed = '1'; del.textContent = 'Toucher encore pour supprimer'; return; }
+    await idb('readwrite', s => s.delete(it.id)).catch(() => {});
+    toast('Sortie supprimée'); showSoList();
+  };
+}
+// aperçu de la sortie sur un fond de carte (tuiles du fond choisi)
+function drawRecMap(cv, pts) {
+  const dpr = window.devicePixelRatio || 1, W = cv.clientWidth, H = cv.clientHeight;
+  if (!W) return;
+  cv.width = W * dpr; cv.height = H * dpr;
+  const ctx = cv.getContext('2d'); ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  ctx.fillStyle = cssVar('--mapbg') || '#E4E9DC'; ctx.fillRect(0, 0, W, H);
+  if (pts.length < 2) return;
+  const L = LAYERS[layerIdx].vector ? LAYERS[0] : LAYERS[layerIdx];
+  let z = Math.min(L.max, 17);
+  const bb = (zz) => { let a = Infinity, b = -Infinity, c = Infinity, d = -Infinity; for (const p of pts) { const x = wx(p.lon, zz), y = wy(p.lat, zz); a = Math.min(a, x); b = Math.max(b, x); c = Math.min(c, y); d = Math.max(d, y); } return [a, b, c, d]; };
+  let B = bb(z);
+  while (z > 3 && (B[1] - B[0] > W - 40 || B[3] - B[2] > H - 40)) { z--; B = bb(z); }
+  const ox = (B[0] + B[1]) / 2 - W / 2, oy = (B[2] + B[3]) / 2 - H / 2;
+  for (let ty = Math.floor(oy / 256); ty <= Math.floor((oy + H) / 256); ty++)
+    for (let tx = Math.floor(ox / 256); tx <= Math.floor((ox + W) / 256); tx++) {
+      const im = pipTile(z, tx, ty); if (im) ctx.drawImage(im, tx * 256 - ox, ty * 256 - oy, 256.5, 256.5);
+    }
+  const P = pts.map(p => [wx(p.lon, z) - ox, wy(p.lat, z) - oy, p.s]);
+  const stroke = (col, w) => {
+    ctx.beginPath();
+    P.forEach(([x, y, s], i) => (i && s === P[i - 1][2]) ? ctx.lineTo(x, y) : ctx.moveTo(x, y));
+    ctx.strokeStyle = col; ctx.lineWidth = w; ctx.lineCap = ctx.lineJoin = 'round'; ctx.stroke();
+  };
+  stroke('#fff', 7); stroke(COL.rec, 4);
+  const dot = ([x, y], col) => { ctx.beginPath(); ctx.arc(x, y, 6, 0, 7); ctx.fillStyle = col; ctx.fill(); ctx.lineWidth = 2.5; ctx.strokeStyle = '#fff'; ctx.stroke(); };
+  dot(P[0], cssVar('--go') || '#2F5E45'); dot(P[P.length - 1], '#C62828');
+}
+function drawRecProfile(cv, pts) {
+  const dpr = window.devicePixelRatio || 1, W = cv.clientWidth, H = cv.clientHeight;
+  if (!W) return;
+  cv.width = W * dpr; cv.height = H * dpr;
+  const ctx = cv.getContext('2d'); ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  const D = [0]; for (let i = 1; i < pts.length; i++) D.push(D[i - 1] + (pts[i].s === pts[i - 1].s ? hav(pts[i - 1], pts[i]) : 0));
+  const E = pts.map(p => p.ele), tot = D[D.length - 1] || 1;
+  let lo = Infinity, hi = -Infinity; E.forEach(e => { if (e != null) { lo = Math.min(lo, e); hi = Math.max(hi, e); } });
+  const pad = Math.max(10, (hi - lo) * .1); lo -= pad; hi += pad;
+  const L0 = 36, h = H - 20, w = W - L0 - 4, X = d => L0 + d / tot * w, Y = e => 4 + (1 - (e - lo) / (hi - lo)) * (h - 4);
+  ctx.font = '11px system-ui, sans-serif'; ctx.fillStyle = cssVar('--muted'); ctx.strokeStyle = cssVar('--line'); ctx.lineWidth = 1;
+  const step = [10, 20, 50, 100, 200, 500, 1000].find(s => (hi - lo) / s <= 4) || 1000;
+  ctx.textAlign = 'right'; ctx.textBaseline = 'middle';
+  for (let v = Math.ceil(lo / step) * step; v <= hi; v += step) { const y = Math.round(Y(v)) + .5; ctx.beginPath(); ctx.moveTo(L0, y); ctx.lineTo(W, y); ctx.stroke(); ctx.fillText(v + '', L0 - 4, y); }
+  ctx.textBaseline = 'bottom'; ctx.textAlign = 'left'; ctx.fillText('0', L0, H); ctx.textAlign = 'right'; ctx.fillText(fmtDist(tot), W, H);
+  const path = new Path2D(); let first = true;
+  pts.forEach((p, i) => { if (p.ele == null) return; const x = X(D[i]), y = Y(p.ele); first ? path.moveTo(x, y) : path.lineTo(x, y); first = false; });
+  const area = new Path2D(path); area.lineTo(X(tot), h); area.lineTo(L0, h); area.closePath();
+  ctx.fillStyle = COL.rec; ctx.globalAlpha = .15; ctx.fill(area); ctx.globalAlpha = 1;
+  ctx.strokeStyle = COL.rec; ctx.lineWidth = 2; ctx.stroke(path);
 }
 function closeLib() { $('lib').hidden = true; }
-$('btnOpen').onclick = () => openLib();
+$('btnOpen').onclick = openLib;
 $('libClose').onclick = closeLib;
 $('lib').onclick = e => { if (e.target === $('lib')) closeLib(); };
 $('libBrowse').onclick = () => { closeLib(); $('fileIn').click(); };
@@ -818,7 +949,7 @@ function pipTile(z, x, y) {
   if (!im) {
     const tpl = L.tiles[(x + y) % L.tiles.length];
     im = new Image(); im.crossOrigin = 'anonymous';
-    im.onload = () => pipSoon(); im.onerror = () => { im.bad = true; };
+    im.onload = () => { pipSoon(); if (previewRedraw) { clearTimeout(pipTile.t); pipTile.t = setTimeout(() => previewRedraw && previewRedraw(), 60); } }; im.onerror = () => { im.bad = true; };
     im.src = tpl.replace('{z}', z).replace('{x}', x).replace('{y}', y);
     pipTiles.set(key, im);
     if (pipTiles.size > 300) pipTiles.delete(pipTiles.keys().next().value);
@@ -1768,7 +1899,7 @@ async function endActivity(keep) {
   setActState('idle');
   if (!nav) stopGPS();
   $('finish').hidden = true;
-  if (keep) toast('Sortie gardée dans Mes sorties', 5000, { label: 'Voir', run: () => openLib('rec') }); else toast('Sortie supprimée', 4000);
+  if (keep) toast('Sortie gardée dans Mes sorties', 5000, { label: 'Voir', run: openSorties }); else toast('Sortie supprimée', 4000);
   if (finishThenExit) { finishThenExit = false; if (nav) stopNav(); }
 }
 $('finSave').onclick = () => endActivity(true);

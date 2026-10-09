@@ -82,7 +82,7 @@ body { font: 15px/1.35 var(--font); color: var(--ink); background: var(--paper);
   border: 1px solid var(--line); background: var(--paper); color: var(--ink); font: 600 13px var(--font); cursor: pointer; }
 .closebtn svg { width: 14px; height: 14px; fill: none; stroke: currentColor; stroke-width: 2.6; stroke-linecap: round; }
 #profile { width: 100%; height: 96px; display: block; }
-.actions { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 8px; }
+.actions { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-top: 8px; }
 
 .btn {
   display: inline-flex; align-items: center; justify-content: center; gap: 6px;
@@ -344,3 +344,18 @@ body.zone .hud, body.zone .sheet, body.zone .fab-col { display: none !important;
 
 /* réglages ouverts : le panneau monte presque tout en haut pour tout montrer d'un coup */
 body.sheet-open .sheet { max-height: calc(100% - env(safe-area-inset-top, 0px) - 12px); }
+
+/* ---------- Mes sorties ---------- */
+.lib-panel.tall { max-height: calc(100% - env(safe-area-inset-top, 0px) - 12px); }
+#soList, #soDetail { display: flex; flex-direction: column; gap: 12px; }
+#soList[hidden], #soDetail[hidden] { display: none; }
+.so-title { display: flex; flex-direction: column; gap: 2px; }
+.so-title b { font-size: 19px; }
+.so-title span { font-size: 13px; color: var(--muted); }
+.so-map { width: 100%; height: 230px; border-radius: 12px; background: var(--mapbg); display: block; }
+.so-prof { width: 100%; height: 110px; display: block; }
+.so-grid b { font-size: 17px; }
+.so-acts { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.so-acts .go { grid-column: 1 / -1; }
+.lib-item .so-row { display: flex; gap: 10px; }
+.actions .btn:not(.wide) { padding-left: 4px; padding-right: 4px; font-size: 14px; white-space: nowrap; }

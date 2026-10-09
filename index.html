@@ -8,13 +8,13 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<meta name="balise-version" content="49">
+<meta name="balise-version" content="50">
 <title>Pisteo</title>
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" href="icon.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
 <link rel="stylesheet" href="vendor/maplibre-gl.css">
-<link rel="stylesheet" href="app.css?v=49">
+<link rel="stylesheet" href="app.css?v=50">
 </head>
 <body>
 <div id="map" aria-label="Carte"></div>
@@ -136,6 +136,7 @@
       <svg viewBox="0 0 24 24"><path d="M12 2 19 21 12 17 5 21Z"/></svg>Naviguer
     </button>
     <button id="btnOpen" class="btn">Ouvrir un GPX</button>
+    <button id="btnSorties" class="btn">Mes sorties</button>
     <input type="file" id="fileIn" accept=".gpx,application/gpx+xml,application/xml,text/xml" hidden>
     <button id="btnMore" class="btn ghost">Réglages</button>
   </div>
@@ -191,15 +192,50 @@
       <b id="libTitle">Mes traces</b>
       <button id="libClose" class="closebtn" aria-label="Fermer"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></svg>Fermer</button>
     </div>
-    <div class="lib-tabs" role="tablist">
-      <button id="libTabTr" class="lib-tab on" role="tab">Traces ouvertes</button>
-      <button id="libTabRec" class="lib-tab" role="tab">Mes sorties</button>
-    </div>
     <button id="libBrowse" class="btn go">Chercher un fichier GPX…</button>
-    <p id="libSum" class="lib-sum" hidden></p>
     <ul id="libList" class="lib-list"></ul>
     <p id="libEmpty" class="note" hidden>Les traces que tu ouvres apparaîtront ici.</p>
     <p id="libTip" class="note">Astuce : dans ton gestionnaire de fichiers ou un mail, fais « Partager » sur un GPX puis choisis Pisteo.</p>
+  </div>
+</div>
+
+<div id="sorties" class="lib" hidden>
+  <div class="lib-panel tall" role="dialog" aria-label="Mes sorties">
+    <div id="soList">
+      <div class="lib-head">
+        <b>Mes sorties</b>
+        <button id="soClose" class="closebtn" aria-label="Fermer"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></svg>Fermer</button>
+      </div>
+      <p id="soSum" class="lib-sum" hidden></p>
+      <ul id="soItems" class="lib-list"></ul>
+      <p id="soEmpty" class="note" hidden>Tes sorties enregistrées apparaîtront ici. En navigation, touche ● pour enregistrer, puis « Terminer » et « Garder ».</p>
+    </div>
+    <div id="soDetail" hidden>
+      <div class="lib-head">
+        <button id="soBack" class="closebtn" aria-label="Retour à la liste"><svg viewBox="0 0 24 24"><path d="M15 5 8 12l7 7"/></svg>Mes sorties</button>
+        <button id="soClose2" class="closebtn" aria-label="Fermer"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></svg>Fermer</button>
+      </div>
+      <div class="so-title"><b id="sdName"></b><span id="sdDate"></span></div>
+      <canvas id="sdMap" class="so-map" aria-label="Carte de la sortie"></canvas>
+      <div class="np-grid so-grid">
+        <div><span>Distance</span><b id="sdDist">–</b></div>
+        <div><span>En mouvement</span><b id="sdMove">–</b></div>
+        <div><span>Vitesse moy.</span><b id="sdAvg">–</b></div>
+        <div><span>D+</span><b id="sdUp">–</b></div>
+        <div><span>D−</span><b id="sdDown">–</b></div>
+        <div><span>Vitesse max</span><b id="sdMax">–</b></div>
+        <div><span>Durée totale</span><b id="sdTotal">–</b></div>
+        <div><span>Alt. min</span><b id="sdMin">–</b></div>
+        <div><span>Alt. max</span><b id="sdMaxE">–</b></div>
+      </div>
+      <canvas id="sdProfile" class="so-prof" aria-label="Profil altimétrique"></canvas>
+      <div class="so-acts">
+        <button id="sdFollow" class="btn go">Refaire ce parcours</button>
+        <button id="sdExport" class="btn">Exporter le GPX</button>
+        <button id="sdRename" class="btn ghost">Renommer</button>
+        <button id="sdDelete" class="btn ghost danger">Supprimer</button>
+      </div>
+    </div>
   </div>
 </div>
 
@@ -299,6 +335,6 @@
 <div id="toast" class="toast" hidden></div>
 
 <script src="vendor/maplibre-gl.js"></script>
-<script src="app.js?v=49"></script>
+<script src="app.js?v=50"></script>
 </body>
 </html>
