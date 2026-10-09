@@ -4,7 +4,7 @@
 
 // La page et le code doivent être de la même version. Sinon (page gardée en cache
 // par le téléphone ou par GitHub), on recharge une page fraîche, au plus 3 fois.
-const APP_VERSION = 53;
+const APP_VERSION = 54;
 try {
   const meta = document.querySelector('meta[name="balise-version"]');
   const pageV = meta ? +meta.content : 0;
@@ -641,39 +641,33 @@ function showSoDetail(it) {
 // Strava : envoi des sorties (automatique ou à la demande)
 // Strava demande une « appli API » par utilisateur : Client ID et Secret restent sur le téléphone.
 // =====================================================================
-const STV_API = 'https://www.strava.com/api/v3';
+// Connexion via le relais Pisteo (Cloudflare Worker, voir strava-relay/worker.js) : il garde le secret
+// de l'appli Strava hors du code public et transmet les envois.
+const STRAVA_CLIENT_ID = '109821';
+const STRAVA_RELAY = ''; // adresse du relais, ex. https://pisteo-strava.xxx.workers.dev
 const stvTok = () => { try { return JSON.parse(store.get('stvTok') || 'null'); } catch { return null; } };
-const stvOn = () => !!(stvTok() && store.get('stvId') && store.get('stvSecret'));
+const stvOn = () => !!(stvTok() && STRAVA_RELAY);
 const stvBack = () => location.origin + location.pathname;
 function stvUI() {
   const t = stvTok(), on = stvOn();
-  $('stvSetup').hidden = on; $('stvConnect').hidden = on; $('stvOn').hidden = !on;
+  $('stvSetup').hidden = on; $('stvConnect').hidden = on || !STRAVA_RELAY; $('stvOn').hidden = !on;
+  $('stvNotReady').hidden = !!STRAVA_RELAY;
   $('stvWho').textContent = t && t.who ? t.who : 'ton compte';
   $('stvAuto').checked = store.get('stvAuto') === '1';
   $('stvStatus').textContent = on ? 'Connecté' + (store.get('stvAuto') === '1' ? ' · envoi automatique' : ' · envoi à la demande') : 'Non connecté';
-  $('stvSite').textContent = stvBack(); $('stvDomain').textContent = location.hostname;
-  $('stvId').value = store.get('stvId') || ''; $('stvSecret').value = store.get('stvSecret') || '';
-  $('stvHelp').hidden = on || store.get('stvTried') !== '1';
 }
 function openStrava() { stvUI(); $('strava').hidden = false; }
 $('btnStrava').onclick = openStrava;
-document.querySelectorAll('.stv-copy').forEach(b => b.onclick = async () => {
-  const t = $(b.dataset.copy).textContent;
-  try { await navigator.clipboard.writeText(t); b.textContent = 'Copié ✓'; } catch { b.textContent = 'Sélectionne et copie'; }
-  setTimeout(() => { b.textContent = 'Copier'; }, 2000);
-});
 $('stvClose').onclick = () => { $('strava').hidden = true; };
 $('strava').onclick = e => { if (e.target === $('strava')) $('strava').hidden = true; };
 $('stvAuto').onchange = e => { store.set('stvAuto', e.target.checked ? '1' : '0'); stvUI(); };
 $('stvOff').onclick = () => { store.set('stvTok', ''); stvUI(); toast('Strava déconnecté'); };
 $('stvConnect').onclick = () => {
-  const id = $('stvId').value.trim(), sec = $('stvSecret').value.trim();
-  if (!/^\d+$/.test(id) || sec.length < 20) { toast('Recopie le Client ID (des chiffres) et le Client Secret depuis strava.com/settings/api.', 5000); return; }
-  store.set('stvId', id); store.set('stvSecret', sec); store.set('stvTried', '1');
-  location.href = `https://www.strava.com/oauth/authorize?client_id=${id}&response_type=code&approval_prompt=auto&scope=read,activity:write&redirect_uri=${encodeURIComponent(stvBack() + '?strava=1')}`;
+  if (!STRAVA_RELAY) return;
+  location.href = `https://www.strava.com/oauth/authorize?client_id=${STRAVA_CLIENT_ID}&response_type=code&approval_prompt=auto&scope=read,activity:write&redirect_uri=${encodeURIComponent(stvBack() + '?strava=1')}`;
 };
 async function stvTokenReq(params) {
-  const r = await fetch('https://www.strava.com/oauth/token', { method: 'POST', body: new URLSearchParams(Object.assign({ client_id: store.get('stvId'), client_secret: store.get('stvSecret') }, params)) });
+  const r = await fetch(STRAVA_RELAY + '/token', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(params) });
   const j = await r.json().catch(() => ({}));
   if (!r.ok || !j.access_token) throw new Error(j.message || 'HTTP ' + r.status);
   return j;
@@ -684,17 +678,17 @@ async function stvReturn() {
   if (!q.has('strava')) return;
   history.replaceState(null, '', location.pathname);
   if (q.get('error') || !q.get('code')) { toast('Connexion à Strava annulée.', 4000); return; }
-  if (!/activity:write/.test(q.get('scope') || '')) { toast('Il faut cocher l\'autorisation « Envoyer des activités » sur la page Strava. Réessaie.', 6000); openStrava(); return; }
+  if (!/activity:write/.test(q.get('scope') || '')) { toast('Il faut laisser cochée l\'autorisation d\'envoyer des activités sur la page Strava. Réessaie.', 6000); openStrava(); return; }
   try {
-    const j = await stvTokenReq({ code: q.get('code'), grant_type: 'authorization_code' });
+    const j = await stvTokenReq({ code: q.get('code') });
     store.set('stvTok', JSON.stringify({ a: j.access_token, r: j.refresh_token, exp: j.expires_at, who: j.athlete ? `${j.athlete.firstname || ''} ${j.athlete.lastname || ''}`.trim() : '' }));
     toast('Connecté à Strava 🎉', 4000); openStrava(); stvRetry();
-  } catch (e) { toast('Connexion à Strava impossible : ' + e.message + '. Vérifie le Client Secret.', 6000); openStrava(); }
+  } catch (e) { toast('Connexion à Strava impossible : ' + e.message, 6000); openStrava(); }
 }
 async function stvAccess() {
   const t = stvTok(); if (!t) throw new Error('non connecté');
   if (t.exp * 1000 - 120000 > Date.now()) return t.a;
-  const j = await stvTokenReq({ grant_type: 'refresh_token', refresh_token: t.r });
+  const j = await stvTokenReq({ refresh_token: t.r });
   Object.assign(t, { a: j.access_token, r: j.refresh_token || t.r, exp: j.expires_at }); store.set('stvTok', JSON.stringify(t));
   return t.a;
 }
@@ -717,18 +711,18 @@ async function stvUploadNow(it, onStep) {
   f.append('data_type', 'gpx'); f.append('name', recTitle(it)); f.append('description', 'Enregistrée avec Pisteo');
   f.append('external_id', 'pisteo-' + String(it.start || it.date));
   onStep && onStep('Envoi…');
-  let r = await fetch(STV_API + '/uploads', { method: 'POST', headers: H, body: f });
+  let r = await fetch(STRAVA_RELAY + '/upload', { method: 'POST', headers: H, body: f });
   let u = await r.json().catch(() => ({}));
   if (!r.ok) throw new Error(u.message || 'HTTP ' + r.status);
   for (let k = 0; k < 30 && !u.activity_id && !u.error; k++) {
     onStep && onStep('Traitement par Strava…');
     await new Promise(z => setTimeout(z, 2000));
-    r = await fetch(STV_API + '/uploads/' + u.id, { headers: H }); u = await r.json().catch(() => u);
+    r = await fetch(STRAVA_RELAY + '/upload/' + u.id, { headers: H }); u = await r.json().catch(() => u);
   }
   let aid = u.activity_id;
   if (!aid && u.error) { const m = /activities\/(\d+)/.exec(u.error); if (m && /duplicate/i.test(u.error)) aid = +m[1]; else throw new Error(u.error.replace(/<[^>]+>/g, '')); }
   if (!aid) throw new Error('Strava met du temps à traiter la sortie, elle apparaîtra bientôt');
-  await fetch(STV_API + '/activities/' + aid, { method: 'PUT', headers: Object.assign({ 'Content-Type': 'application/json' }, H),
+  await fetch(STRAVA_RELAY + '/activity/' + aid, { method: 'PUT', headers: Object.assign({ 'Content-Type': 'application/json' }, H),
     body: JSON.stringify({ sport_type: recMode(it) === 'bike' ? 'Ride' : 'Walk' }) }).catch(() => {});
   it.strava = aid; delete it.stvPending;
   await idb('readwrite', st => st.put(it)).catch(() => {});

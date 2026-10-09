@@ -8,13 +8,13 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<meta name="balise-version" content="53">
+<meta name="balise-version" content="54">
 <title>Pisteo</title>
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" href="icon.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
 <link rel="stylesheet" href="vendor/maplibre-gl.css">
-<link rel="stylesheet" href="app.css?v=53">
+<link rel="stylesheet" href="app.css?v=54">
 </head>
 <body>
 <div id="map" aria-label="Carte"></div>
@@ -251,25 +251,10 @@
       <button id="stvClose" class="closebtn" aria-label="Fermer"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></svg>Fermer</button>
     </div>
     <div id="stvSetup">
-      <p class="note">Une seule fois : Strava demande que chaque appli ait sa « clé ». Tu crées la tienne en 2 minutes :</p>
-      <ol class="stv-steps">
-        <li>Ouvre <a href="https://www.strava.com/settings/api" target="_blank" rel="noopener">strava.com/settings/api</a> (connecté à ton compte Strava).</li>
-        <li>Remplis le formulaire :
-          <div class="stv-field"><span>Application Name</span><b>Pisteo</b></div>
-          <div class="stv-field"><span>Category</span><b>Visualizer</b></div>
-          <div class="stv-field"><span>Website</span><code id="stvSite"></code><button class="stv-copy" data-copy="stvSite">Copier</button></div>
-          <div class="stv-field hl"><span>Authorization Callback Domain</span><code id="stvDomain"></code><button class="stv-copy" data-copy="stvDomain">Copier</button></div>
-          <small>Pour le Callback Domain : colle exactement ce texte, <b>sans « https:// » et sans « / » à la fin</b>.</small>
-        </li>
-        <li>Une image est demandée : mets n'importe laquelle. Valide.</li>
-        <li>Strava affiche ton <b>Client ID</b> et ton <b>Client Secret</b> (touche « Afficher »). Copie-les ci-dessous.</li>
-      </ol>
-      <p id="stvHelp" class="fin-msg" hidden>Strava a répondu « redirect_uri invalid » ? Le « Authorization Callback Domain » de ton appli Strava n'est pas bon. Sur strava.com/settings/api, touche « Modifier » et remplace-le par exactement le texte surligné ci-dessus, puis réessaie.</p>
-      <input id="stvId" class="search" inputmode="numeric" placeholder="Client ID (ex. 123456)" autocomplete="off">
-      <input id="stvSecret" class="search" type="password" placeholder="Client Secret" autocomplete="off">
-      <p class="note">Ces codes restent sur ce téléphone, ils ne sont envoyés qu'à Strava.</p>
+      <p class="note">Connecte ton compte Strava une fois : tes sorties pourront ensuite y être envoyées d'un toucher, ou automatiquement.</p>
+      <p id="stvNotReady" class="fin-msg" hidden>La connexion Strava n'est pas encore activée sur cette version de Pisteo.</p>
     </div>
-    <button id="stvConnect" class="btn go">Se connecter à Strava</button>
+    <button id="stvConnect" class="btn strava">Se connecter avec Strava</button>
     <div id="stvOn" hidden>
       <p class="lib-sum">Connecté : <b id="stvWho"></b></p>
       <div class="row">
@@ -377,6 +362,6 @@
 <div id="toast" class="toast" hidden></div>
 
 <script src="vendor/maplibre-gl.js"></script>
-<script src="app.js?v=53"></script>
+<script src="app.js?v=54"></script>
 </body>
 </html>
