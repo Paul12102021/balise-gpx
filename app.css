@@ -372,3 +372,8 @@ body.sheet-open .sheet { max-height: calc(100% - env(safe-area-inset-top, 0px) -
 #stvSetup[hidden], #stvOn[hidden] { display: none; }
 .btn.strava { background: #FC4C02; border-color: #FC4C02; color: #fff; grid-column: 1 / -1; }
 .btn.strava.sent { background: transparent; color: #FC4C02; }
+.stv-field { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin: 6px 0; padding: 8px 10px; border-radius: 10px; background: var(--paper); }
+.stv-field span { flex-basis: 100%; font-size: 11px; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); }
+.stv-field code { flex: 1; min-width: 0; font: 600 14px/1.3 ui-monospace, monospace; word-break: break-all; }
+.stv-field.hl { outline: 2px solid #FC4C02; }
+.stv-copy { flex: none; min-height: 32px; padding: 0 12px; border-radius: 16px; border: 1px solid var(--line); background: var(--panel); color: var(--ink); font: 600 13px var(--font); cursor: pointer; }

@@ -4,7 +4,7 @@
 
 // La page et le code doivent être de la même version. Sinon (page gardée en cache
 // par le téléphone ou par GitHub), on recharge une page fraîche, au plus 3 fois.
-const APP_VERSION = 52;
+const APP_VERSION = 53;
 try {
   const meta = document.querySelector('meta[name="balise-version"]');
   const pageV = meta ? +meta.content : 0;
@@ -653,9 +653,15 @@ function stvUI() {
   $('stvStatus').textContent = on ? 'Connecté' + (store.get('stvAuto') === '1' ? ' · envoi automatique' : ' · envoi à la demande') : 'Non connecté';
   $('stvSite').textContent = stvBack(); $('stvDomain').textContent = location.hostname;
   $('stvId').value = store.get('stvId') || ''; $('stvSecret').value = store.get('stvSecret') || '';
+  $('stvHelp').hidden = on || store.get('stvTried') !== '1';
 }
 function openStrava() { stvUI(); $('strava').hidden = false; }
 $('btnStrava').onclick = openStrava;
+document.querySelectorAll('.stv-copy').forEach(b => b.onclick = async () => {
+  const t = $(b.dataset.copy).textContent;
+  try { await navigator.clipboard.writeText(t); b.textContent = 'Copié ✓'; } catch { b.textContent = 'Sélectionne et copie'; }
+  setTimeout(() => { b.textContent = 'Copier'; }, 2000);
+});
 $('stvClose').onclick = () => { $('strava').hidden = true; };
 $('strava').onclick = e => { if (e.target === $('strava')) $('strava').hidden = true; };
 $('stvAuto').onchange = e => { store.set('stvAuto', e.target.checked ? '1' : '0'); stvUI(); };
@@ -663,7 +669,7 @@ $('stvOff').onclick = () => { store.set('stvTok', ''); stvUI(); toast('Strava d�
 $('stvConnect').onclick = () => {
   const id = $('stvId').value.trim(), sec = $('stvSecret').value.trim();
   if (!/^\d+$/.test(id) || sec.length < 20) { toast('Recopie le Client ID (des chiffres) et le Client Secret depuis strava.com/settings/api.', 5000); return; }
-  store.set('stvId', id); store.set('stvSecret', sec);
+  store.set('stvId', id); store.set('stvSecret', sec); store.set('stvTried', '1');
   location.href = `https://www.strava.com/oauth/authorize?client_id=${id}&response_type=code&approval_prompt=auto&scope=read,activity:write&redirect_uri=${encodeURIComponent(stvBack() + '?strava=1')}`;
 };
 async function stvTokenReq(params) {
