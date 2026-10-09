@@ -4,7 +4,7 @@
 
 // La page et le code doivent être de la même version. Sinon (page gardée en cache
 // par le téléphone ou par GitHub), on recharge une page fraîche, au plus 3 fois.
-const APP_VERSION = 47;
+const APP_VERSION = 48;
 try {
   const meta = document.querySelector('meta[name="balise-version"]');
   const pageV = meta ? +meta.content : 0;
@@ -1165,7 +1165,7 @@ async function fetchRoute(a, b, ms = 12000) {
   try {
     const ll = q => `${q.lon.toFixed(6)},${q.lat.toFixed(6)}`;
     const r = await fetch(`https://brouter.de/brouter?lonlats=${ll(a)}|${ll(b)}&profile=${profile}&alternativeidx=0&format=geojson`, { signal: ctrl.signal });
-    if (!r.ok) throw new Error('HTTP ' + r.status);
+    if (!r.ok) { let m = ''; try { m = (await r.text()).slice(0, 200); } catch {} const e = new Error(m || 'HTTP ' + r.status); e.server = true; throw e; }
     const j = await r.json(), f = j.features && j.features[0];
     const pts = f.geometry.coordinates.map(c => ({ lon: c[0], lat: c[1], ele: c[2] != null ? c[2] : null }));
     return { pts, len: +f.properties['track-length'] || 0 };
@@ -1372,11 +1372,25 @@ async function goTo(dest) {
   toast('Calcul de l\'itinéraire…', 20000);
   const pos = await waitFix(20000);
   if (!pos) { toast('Position GPS introuvable. Va à découvert et réessaie.', 5000); return; }
-  let r;
-  try { r = await fetchRoute(pos, dest, 25000); }
-  catch {
-    await loadGraphs(); r = localRouteTo(pos, dest);
-    if (!r) { toast('Itinéraire impossible : pas de réseau, et cet endroit est hors des chemins téléchargés.', 5000); return; }
+  // un long trajet demande plus de temps au serveur : on attend en conséquence et on affiche l'attente
+  const km = hav(pos, dest) / 1000, wait = Math.round(clamp(25 + km * 0.4, 25, 120));
+  const t0 = Date.now(), tick = setInterval(() => {
+    const s = Math.round((Date.now() - t0) / 1000);
+    toast(`Calcul de l'itinéraire… ${s} s` + (km > 40 ? ` · long trajet (${Math.round(km)} km à vol d'oiseau), ça peut prendre jusqu'à ${wait >= 60 ? Math.round(wait / 60) + ' min' : wait + ' s'}` : ''), 3000);
+  }, 1000);
+  let r, err = null;
+  try { r = await fetchRoute(pos, dest, wait * 1000); }
+  catch (e) { err = e; }
+  clearInterval(tick);
+  if (err) {
+    const offline = navigator.onLine === false || (!err.server && err.name !== 'AbortError');
+    if (offline) { await loadGraphs(); r = localRouteTo(pos, dest); }
+    if (!r) {
+      const why = !offline ? (km > 150 ? `trajet trop long pour le serveur d'itinéraires (${Math.round(km)} km à vol d'oiseau). Choisis une étape plus proche` : err.name === 'AbortError' ? 'le serveur d\'itinéraires ne répond pas, réessaie dans un instant' : 'le serveur d\'itinéraires n\'a pas trouvé de chemin' + (/island|not mapped|position/i.test(err.message) ? ' (point hors des routes et chemins connus)' : ''))
+        : 'pas de réseau, et cet endroit est hors des chemins téléchargés';
+      toast('Itinéraire impossible : ' + why + '.', 7000);
+      return;
+    }
     toast('Pas de réseau : itinéraire calculé avec les chemins téléchargés', 4000);
   }
   r.pts.push({ lat: dest.lat, lon: dest.lon, ele: null });
@@ -1393,7 +1407,7 @@ async function reroute() {
   const dest = track.route;
   try {
     let r;
-    try { r = await fetchRoute(me, dest, 20000); }
+    try { r = await fetchRoute(me, dest, Math.round(clamp(25 + hav(me, dest) / 1000 * 0.4, 25, 120)) * 1000); }
     catch (e) { await loadGraphs(); r = localRouteTo(me, dest); if (!r) throw e; }
     r.pts.push({ lat: dest.lat, lon: dest.lon, ele: null });
     await showTrack({ name: 'Vers ' + dest.label, pts: r.pts }, false);
