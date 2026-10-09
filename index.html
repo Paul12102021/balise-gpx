@@ -8,13 +8,13 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<meta name="balise-version" content="44">
+<meta name="balise-version" content="45">
 <title>Pisteo</title>
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" href="icon.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
 <link rel="stylesheet" href="vendor/maplibre-gl.css">
-<link rel="stylesheet" href="app.css?v=44">
+<link rel="stylesheet" href="app.css?v=45">
 </head>
 <body>
 <div id="map" aria-label="Carte"></div>
@@ -38,6 +38,9 @@
 </div>
 
 <div class="fab-col">
+  <button id="btnPip" class="fab nav-only" title="Fenêtre réduite" aria-label="Passer en fenêtre réduite pour utiliser une autre appli">
+    <svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2"/><rect x="12" y="11" width="7" height="6" rx="1" fill="currentColor" stroke="none"/></svg>
+  </button>
   <button id="btnLayer" class="fab" title="Fond de carte" aria-label="Changer de fond de carte">
     <svg viewBox="0 0 24 24"><path d="M12 3 2 8l10 5 10-5-10-5Z"/><path d="m2 13 10 5 10-5"/></svg>
   </button>
@@ -291,6 +294,6 @@
 <div id="toast" class="toast" hidden></div>
 
 <script src="vendor/maplibre-gl.js"></script>
-<script src="app.js?v=44"></script>
+<script src="app.js?v=45"></script>
 </body>
 </html>

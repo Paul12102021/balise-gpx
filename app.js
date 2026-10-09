@@ -4,7 +4,7 @@
 
 // La page et le code doivent être de la même version. Sinon (page gardée en cache
 // par le téléphone ou par GitHub), on recharge une page fraîche, au plus 3 fois.
-const APP_VERSION = 44;
+const APP_VERSION = 45;
 try {
   const meta = document.querySelector('meta[name="balise-version"]');
   const pageV = meta ? +meta.content : 0;
@@ -686,7 +686,7 @@ async function startNav(free = false) {
   updateStats();
 }
 function stopNav() {
-  nav = false; document.body.classList.remove('nav', 'free'); toggleNavMore(false, true);
+  stopPip(); nav = false; document.body.classList.remove('nav', 'free'); toggleNavMore(false, true);
   stopSim(); clearRejoin(); isOff = false;
   try { speechSynthesis.cancel(); } catch {}
   setSrc('turn', EMPTY);
@@ -733,7 +733,98 @@ function setBanner(tone, dist, txt, icon, sub = '') {
   $('ntDist').textContent = dist; $('ntTxt').textContent = txt; $('ntSub').textContent = sub;
   const key = JSON.stringify(icon);
   if (key !== lastBannerKey) { $('ntIcon').innerHTML = arrowSVG(icon); lastBannerKey = key; }
+  bannerIcon = icon; pipSoon();
 }
+
+// =====================================================================
+// Fenêtre réduite (image dans l'image) : comme une vidéo YouTube, le guidage reste visible
+// dans un petit cadre pendant qu'on utilise une autre appli. Le cadre est une vidéo
+// fabriquée à partir d'un dessin, mis à jour à chaque position.
+// =====================================================================
+var bannerIcon = 'gps';
+var pip = { cv: null, video: null, on: false, imgs: new Map(), t: 0, timer: 0 };
+const pipOK = !!(document.pictureInPictureEnabled && window.HTMLCanvasElement && HTMLCanvasElement.prototype.captureStream);
+if (!pipOK) document.body.classList.add('nopip');
+function pipIcon(icon) { // image de la flèche (sans rotation : elle est faite au dessin)
+  const base = typeof icon === 'object' ? { rot: 0 } : icon, key = JSON.stringify(base);
+  let im = pip.imgs.get(key);
+  if (!im) {
+    const svg = arrowSVG(base).replace(/ style="[^"]*"/, '').replace('<svg ', '<svg xmlns="http://www.w3.org/2000/svg" width="96" height="96" fill="none" stroke="#fff" stroke-width="5" stroke-linecap="round" stroke-linejoin="round" ');
+    im = new Image(); im.onload = () => pipSoon(); im.src = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg);
+    pip.imgs.set(key, im);
+  }
+  return im;
+}
+function wrapText(ctx, txt, maxW, maxLines) {
+  const words = txt.split(' '), lines = []; let cur = '';
+  for (const w of words) { const t = cur ? cur + ' ' + w : w; if (ctx.measureText(t).width <= maxW || !cur) cur = t; else { lines.push(cur); cur = w; } }
+  if (cur) lines.push(cur);
+  if (lines.length > maxLines) { lines.length = maxLines; lines[maxLines - 1] = lines[maxLines - 1].replace(/\s*\S*$/, '') + '…'; }
+  return lines;
+}
+function drawPip() {
+  const c = pip.cv; if (!c) return;
+  const ctx = c.getContext('2d'), W = c.width, H = c.height;
+  const tone = $('navTop').dataset.tone;
+  ctx.fillStyle = cssVar({ off: '--warn', rejoin: '--me', gps: '--hud', done: '--ok' }[tone] || '--go') || '#2F5E45';
+  ctx.fillRect(0, 0, W, H);
+  // flèche
+  const im = pipIcon(bannerIcon), S = 150;
+  if (im.complete && im.naturalWidth) {
+    ctx.save(); ctx.translate(22 + S / 2, 26 + S / 2);
+    if (typeof bannerIcon === 'object') ctx.rotate(rad(bannerIcon.rot || 0));
+    ctx.drawImage(im, -S / 2, -S / 2, S, S); ctx.restore();
+  }
+  ctx.fillStyle = '#fff'; ctx.textBaseline = 'alphabetic';
+  const dist = $('ntDist').textContent, txt = $('ntTxt').textContent;
+  let y = 96;
+  if (dist) { ctx.font = '700 64px system-ui, sans-serif'; ctx.fillText(dist, 190, y); y += 46; } else y = 70;
+  ctx.font = '600 30px system-ui, sans-serif';
+  for (const l of wrapText(ctx, txt, W - 205, dist ? 2 : 3)) { ctx.fillText(l, 190, y); y += 36; }
+  const sub = $('ntSub').textContent;
+  if (sub) { // précision (retour à la trace, virage suivant…) sous la flèche
+    ctx.font = '500 22px system-ui, sans-serif'; ctx.globalAlpha = .88; y = Math.max(y + 2, 214);
+    for (const l of wrapText(ctx, sub, W - 44, 2)) { ctx.fillText(l, 22, y); y += 27; }
+    ctx.globalAlpha = 1;
+  }
+  // bas : arrivée et distance restante (ou distance / durée en balade libre)
+  ctx.fillStyle = 'rgba(0,0,0,.28)'; ctx.fillRect(0, H - 86, W, 86);
+  ctx.fillStyle = '#fff'; ctx.font = '700 34px system-ui, sans-serif';
+  const a = $('nbEta').textContent, b = $('nbRem').textContent, l2 = $('nbL2').textContent;
+  const bottom = track ? `Arrivée ${a}  ·  ${b}` : `${b} ${l2}  ·  ${$('nbUp').textContent}`;
+  ctx.textAlign = 'center'; ctx.fillText(bottom, W / 2, H - 31); ctx.textAlign = 'left';
+}
+// dessin groupé (au plus 4 fois par seconde), après la mise à jour des chiffres
+function pipSoon() {
+  if (!pip || !pip.on || pip.timer) return;
+  pip.timer = setTimeout(() => { pip.timer = 0; pip.t = Date.now(); drawPip(); }, Math.max(0, 250 - (Date.now() - pip.t)));
+}
+async function startPip() {
+  if (!pipOK) { toast('La fenêtre réduite n\'est pas disponible sur ce navigateur.'); return; }
+  try {
+    if (!pip.cv) {
+      pip.cv = document.createElement('canvas'); pip.cv.width = 480; pip.cv.height = 360;
+      const v = pip.video = document.createElement('video');
+      v.id = 'pipVideo'; v.muted = true; v.playsInline = true; v.setAttribute('playsinline', '');
+      v.srcObject = pip.cv.captureStream(4);
+      v.addEventListener('leavepictureinpicture', () => { pip.on = false; clearInterval(pip.tick); });
+      document.body.appendChild(v);
+    }
+    pip.on = true; drawPip();
+    await pip.video.play();
+    await pip.video.requestPictureInPicture();
+    clearInterval(pip.tick);
+    pip.tick = setInterval(() => { updateStats(); pipSoon(); }, 1000); // le flux doit recevoir des images régulièrement
+  } catch (e) {
+    pip.on = false;
+    toast('Impossible d\'ouvrir la fenêtre réduite' + (e && e.message ? ' : ' + e.message : ''), 4000);
+  }
+}
+function stopPip() {
+  if (document.pictureInPictureElement) document.exitPictureInPicture().catch(() => {});
+  pip.on = false; clearInterval(pip.tick);
+}
+$('btnPip').onclick = () => document.pictureInPictureElement ? stopPip() : startPip();
 
 let lastTurnKey = '';
 const spoken = new Map();
@@ -1233,6 +1324,7 @@ function fitStat(id) {
   for (let fs = 21; el.scrollWidth > el.clientWidth + 1 && fs > 13; fs--) el.style.fontSize = (fs - 1) + 'px';
 }
 function updateStats() {
+  pipSoon();
   const info = remainingInfo();
   $('sDist').textContent = info ? fmtDist(info.rem) : '–';
   $('sUp').textContent = info && track.hasEle ? fmtM(info.up) : '–';

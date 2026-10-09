@@ -42,6 +42,8 @@
 }
 [hidden] { display: none !important; }
 body:not(.nav) .nav-only { display: none !important; }
+body.nopip #btnPip { display: none !important; }
+#pipVideo { position: fixed; left: 0; top: 0; width: 2px; height: 2px; opacity: 0; pointer-events: none; }
 body.nav .ov-only { display: none !important; }
 body.nav { --ctrl-bottom: calc(var(--nav-h, 92px) + 4px); }
 body.nav .maplibregl-ctrl-bottom-left { left: 84px; }
