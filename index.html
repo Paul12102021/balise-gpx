@@ -8,13 +8,13 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<meta name="balise-version" content="50">
+<meta name="balise-version" content="51">
 <title>Pisteo</title>
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" href="icon.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
 <link rel="stylesheet" href="vendor/maplibre-gl.css">
-<link rel="stylesheet" href="app.css?v=50">
+<link rel="stylesheet" href="app.css?v=51">
 </head>
 <body>
 <div id="map" aria-label="Carte"></div>
@@ -215,7 +215,7 @@
         <button id="soBack" class="closebtn" aria-label="Retour à la liste"><svg viewBox="0 0 24 24"><path d="M15 5 8 12l7 7"/></svg>Mes sorties</button>
         <button id="soClose2" class="closebtn" aria-label="Fermer"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></svg>Fermer</button>
       </div>
-      <div class="so-title"><b id="sdName"></b><span id="sdDate"></span></div>
+      <div class="so-title"><b id="sdName"></b><span id="sdDate"></span><button id="sdMode" class="chip so-chip"></button></div>
       <canvas id="sdMap" class="so-map" aria-label="Carte de la sortie"></canvas>
       <div class="np-grid so-grid">
         <div><span>Distance</span><b id="sdDist">–</b></div>
@@ -335,6 +335,6 @@
 <div id="toast" class="toast" hidden></div>
 
 <script src="vendor/maplibre-gl.js"></script>
-<script src="app.js?v=50"></script>
+<script src="app.js?v=51"></script>
 </body>
 </html>

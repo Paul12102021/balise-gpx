@@ -4,7 +4,7 @@
 
 // La page et le code doivent être de la même version. Sinon (page gardée en cache
 // par le téléphone ou par GitHub), on recharge une page fraîche, au plus 3 fois.
-const APP_VERSION = 50;
+const APP_VERSION = 51;
 try {
   const meta = document.querySelector('meta[name="balise-version"]');
   const pageV = meta ? +meta.content : 0;
@@ -548,6 +548,15 @@ function recStats(pts) {
   return { dist, move, total: ts.length > 1 ? ts[ts.length - 1] - ts[0] : 0, up, down, lo: isFinite(lo) ? lo : null, hi: isFinite(hi) ? hi : null, vmax, start: ts[0] || null };
 }
 const kmh = v => v.toFixed(1).replace('.', ',') + ' km/h';
+// vélo ou à pied : gardé à l'enregistrement ; pour les anciennes sorties, deviné d'après la vitesse
+const ICON_BIKE = '<svg viewBox="0 0 24 24"><circle cx="5.5" cy="16.5" r="3.5"/><circle cx="18.5" cy="16.5" r="3.5"/><path d="M5.5 16.5 9 9h6l3.5 7.5M9 9 12 16.5h1.5L15 9M8 6h3"/></svg>';
+const ICON_FOOT = '<svg viewBox="0 0 24 24"><circle cx="13" cy="4" r="2"/><path d="M8 21l3-7 3 3v4M11 14l1-5-3 2-1 3M12 9l3 3h3"/></svg>';
+function recMode(it) {
+  if (it.mode) return it.mode;
+  return it.ms > 60000 && it.dist / (it.ms / 1000) * 3.6 > 9 ? 'bike' : 'foot';
+}
+const modeLabel = m => m === 'bike' ? 'À vélo' : 'À pied';
+const modeIcon = m => m === 'bike' ? ICON_BIKE : ICON_FOOT;
 
 async function openSorties() { $('sorties').hidden = false; showSoList(); }
 function closeSorties() { $('sorties').hidden = true; previewRedraw = null; }
@@ -565,7 +574,8 @@ async function showSoList() {
   $('soEmpty').hidden = items.length > 0;
   const d = items.reduce((a, it) => a + (it.dist || 0), 0), ms = items.reduce((a, it) => a + (it.ms || 0), 0), up = items.reduce((a, it) => a + (it.up || 0), 0);
   $('soSum').hidden = !items.length;
-  $('soSum').innerHTML = `<b>${items.length}</b> sortie${items.length > 1 ? 's' : ''} · <b>${fmtDist(d)}</b> · ${fmtDur(ms / 1000)}${up ? ' · D+ ' + fmtM(up) : ''}`;
+  const byMode = m => { const g = items.filter(it => recMode(it) === m); return g.length ? `<span class="so-mode">${modeIcon(m)}<b>${fmtDist(g.reduce((a, it) => a + (it.dist || 0), 0))}</b> ${m === 'bike' ? 'à vélo' : 'à pied'} (${g.length})</span>` : ''; };
+  $('soSum').innerHTML = `<b>${items.length}</b> sortie${items.length > 1 ? 's' : ''} · <b>${fmtDist(d)}</b> · ${fmtDur(ms / 1000)}${up ? ' · D+ ' + fmtM(up) : ''}<br>${byMode('bike')}${byMode('foot')}`;
   let month = '';
   for (const it of items) {
     const when = it.start || it.date;
@@ -573,13 +583,16 @@ async function showSoList() {
     if (m !== month) { month = m; const h = document.createElement('li'); h.className = 'lib-month'; h.textContent = m; list.appendChild(h); }
     const li = document.createElement('li');
     const open = document.createElement('button'); open.className = 'lib-item';
+    const md = recMode(it);
+    li.classList.add('so-li');
+    const ic = document.createElement('span'); ic.className = 'so-ic ' + md; ic.innerHTML = modeIcon(md); ic.title = modeLabel(md);
     open.innerHTML = '<b></b><span></span>';
     open.querySelector('b').textContent = it.title || new Date(when).toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long' }) + ' · ' + new Date(when).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' }).replace(':', 'h');
     const sp = it.ms > 60000 ? ' · ' + kmh(it.dist / (it.ms / 1000) * 3.6) : '';
     open.querySelector('span').textContent = `${fmtDist(it.dist)}${it.ms ? ' · ' + fmtDur(it.ms / 1000) : ''}${it.up != null ? ' · D+ ' + fmtM(it.up) : ''}${sp}`;
     open.onclick = () => showSoDetail(it);
     const chev = document.createElement('span'); chev.className = 'lib-del'; chev.innerHTML = '<svg viewBox="0 0 24 24"><path d="m9 5 7 7-7 7"/></svg>';
-    li.append(open, chev); li.onclick = e => { if (e.target === li || e.target.closest('.lib-del')) showSoDetail(it); };
+    li.append(ic, open, chev); li.onclick = e => { if (e.target === li || e.target.closest('.lib-del')) showSoDetail(it); };
     list.appendChild(li);
   }
 }
@@ -590,6 +603,10 @@ function showSoDetail(it) {
   $('sorties').querySelector('.lib-panel').scrollTop = 0;
   const pts = parseRec(it.text), st = recStats(pts), when = st.start || it.start || it.date;
   $('sdName').textContent = it.title || 'Sortie';
+  const setMode = m => { $('sdMode').innerHTML = modeIcon(m) + modeLabel(m); $('sdMode').className = 'chip so-chip ' + m; };
+  setMode(recMode(it));
+  // si l'appli s'est trompée (ancienne sortie), on corrige d'un toucher
+  $('sdMode').onclick = async () => { it.mode = recMode(it) === 'bike' ? 'foot' : 'bike'; setMode(it.mode); await idb('readwrite', s => s.put(it)).catch(() => {}); };
   $('sdDate').textContent = new Date(when).toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }) + ' · départ ' + new Date(when).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' }).replace(':', 'h');
   const move = st.move || it.ms, hasE = st.lo != null;
   $('sdDist').textContent = fmtDist(st.dist);
@@ -1883,7 +1900,7 @@ async function endActivity(keep) {
     const btn = $('finSave'); btn.disabled = true; btn.textContent = 'Enregistrement…';
     try {
       await saveRecent({ name, total: recDist(), hasEle: rec.some(p => p.ele != null), totalUp: recUp() }, toGPX(name), true,
-        { kind: 'rec', ms: act.ms, start: act.start || (rec[0] && rec[0].t) || Date.now() });
+        { kind: 'rec', ms: act.ms, start: act.start || (rec[0] && rec[0].t) || Date.now(), mode: profile === 'trekking' ? 'bike' : 'foot' });
     } catch {
       // on ne perd rien : la sortie reste en cours (en pause) et peut être exportée
       if (actState === 'on') { act.since = Date.now(); }

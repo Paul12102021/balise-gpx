@@ -359,3 +359,10 @@ body.sheet-open .sheet { max-height: calc(100% - env(safe-area-inset-top, 0px) -
 .so-acts .go { grid-column: 1 / -1; }
 .lib-item .so-row { display: flex; gap: 10px; }
 .actions .btn:not(.wide) { padding-left: 4px; padding-right: 4px; font-size: 14px; white-space: nowrap; }
+.so-li { gap: 10px; }
+.so-ic { flex: none; width: 38px; height: 38px; border-radius: 50%; display: grid; place-items: center; background: var(--paper); color: var(--go-ink); }
+.so-ic.bike { color: var(--track); }
+.so-ic svg, .so-mode svg, .so-chip svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 1.9; stroke-linecap: round; stroke-linejoin: round; }
+.so-mode { display: inline-flex; align-items: center; gap: 4px; margin-right: 14px; margin-top: 4px; }
+.so-mode svg { width: 17px; height: 17px; }
+.so-chip { align-self: flex-start; display: inline-flex; align-items: center; gap: 6px; margin-top: 6px; }
