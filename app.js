@@ -4,7 +4,7 @@
 
 // La page et le code doivent être de la même version. Sinon (page gardée en cache
 // par le téléphone ou par GitHub), on recharge une page fraîche, au plus 3 fois.
-const APP_VERSION = 45;
+const APP_VERSION = 46;
 try {
   const meta = document.querySelector('meta[name="balise-version"]');
   const pageV = meta ? +meta.content : 0;
@@ -762,37 +762,95 @@ function wrapText(ctx, txt, maxW, maxLines) {
   if (lines.length > maxLines) { lines.length = maxLines; lines[maxLines - 1] = lines[maxLines - 1].replace(/\s*\S*$/, '') + '…'; }
   return lines;
 }
+// La carte de la fenêtre réduite est dessinée à la main à partir des tuiles (la carte principale
+// ne se redessine plus quand l'appli est en arrière-plan) : centrée sur toi, sens de la marche vers le haut.
+const pipTiles = new Map();
+function pipTile(z, x, y) {
+  const L = LAYERS[layerIdx].vector ? LAYERS[0] : LAYERS[layerIdx];
+  const n = 2 ** z; x = ((x % n) + n) % n;
+  const key = L.id + '/' + z + '/' + x + '/' + y;
+  let im = pipTiles.get(key);
+  if (!im) {
+    const tpl = L.tiles[(x + y) % L.tiles.length];
+    im = new Image(); im.crossOrigin = 'anonymous';
+    im.onload = () => pipSoon(); im.onerror = () => { im.bad = true; };
+    im.src = tpl.replace('{z}', z).replace('{x}', x).replace('{y}', y);
+    pipTiles.set(key, im);
+    if (pipTiles.size > 300) pipTiles.delete(pipTiles.keys().next().value);
+  }
+  return im.complete && im.naturalWidth && !im.bad ? im : null;
+}
+const wx = (lon, z) => (lon + 180) / 360 * 256 * 2 ** z;
+const wy = (lat, z) => { const r = rad(lat); return (1 - Math.log(Math.tan(r) + 1 / Math.cos(r)) / Math.PI) / 2 * 256 * 2 ** z; };
+function drawPipMap(ctx, W, top, H) {
+  const L = LAYERS[layerIdx].vector ? LAYERS[0] : LAYERS[layerIdx];
+  const sp = speedEma || 1.2, z = Math.min(L.max, sp > 7 ? 15 : 16);
+  const cx = W / 2, cy = top + H * 0.68; // ta position, un peu en bas pour voir devant
+  ctx.save();
+  ctx.beginPath(); ctx.rect(0, top, W, H); ctx.clip();
+  ctx.fillStyle = cssVar('--mapbg') || '#E4E9DC'; ctx.fillRect(0, top, W, H);
+  if (!me) { ctx.restore(); return; }
+  const mx = wx(me.lon, z), my = wy(me.lat, z), R = Math.hypot(W, H) * 0.8;
+  const h = heading != null ? heading : 0;
+  ctx.translate(cx, cy); ctx.rotate(-rad(h));
+  // tuiles autour de toi
+  const t0x = Math.floor((mx - R) / 256), t1x = Math.floor((mx + R) / 256), t0y = Math.floor((my - R) / 256), t1y = Math.floor((my + R) / 256);
+  for (let ty = t0y; ty <= t1y; ty++) for (let tx = t0x; tx <= t1x; tx++) {
+    const im = pipTile(z, tx, ty);
+    if (im) ctx.drawImage(im, tx * 256 - mx, ty * 256 - my, 256.5, 256.5);
+  }
+  const line = (pts, color, width, dash, from = 0, to = pts.length) => {
+    ctx.beginPath(); let started = false;
+    for (let k = from; k < to; k++) {
+      const x = wx(pts[k].lon, z) - mx, y = wy(pts[k].lat, z) - my;
+      if (Math.abs(x) > R * 2 || Math.abs(y) > R * 2) { started = false; continue; }
+      started ? ctx.lineTo(x, y) : ctx.moveTo(x, y); started = true;
+    }
+    ctx.setLineDash(dash || []); ctx.lineWidth = width; ctx.strokeStyle = color; ctx.lineCap = 'round'; ctx.lineJoin = 'round'; ctx.stroke(); ctx.setLineDash([]);
+  };
+  if (track) {
+    const cut = done ? Math.min(track.pts.length, pointAt(track, done.along).i + 2) : 0;
+    if (cut > 1) line(track.pts, COL.done, 6, null, 0, cut);
+    line(track.pts, '#fff', 9, null, Math.max(0, cut - 1)); line(track.pts, COL.track, 6, null, Math.max(0, cut - 1));
+  }
+  if (rejoin) { line(rejoin.pts, '#fff', 8, null); line(rejoin.pts, COL.me, 5, [2, 10]); }
+  ctx.restore();
+  // ta position : flèche bleue (toujours vers le haut, la carte tourne)
+  ctx.save(); ctx.translate(cx, cy);
+  ctx.fillStyle = 'rgba(30,111,217,.18)'; ctx.beginPath(); ctx.arc(0, 0, 26, 0, 7); ctx.fill();
+  ctx.beginPath(); ctx.moveTo(0, -17); ctx.lineTo(12, 13); ctx.lineTo(0, 6); ctx.lineTo(-12, 13); ctx.closePath();
+  ctx.fillStyle = COL.me; ctx.strokeStyle = '#fff'; ctx.lineWidth = 3; ctx.lineJoin = 'round'; ctx.fill(); ctx.stroke();
+  ctx.restore();
+}
 function drawPip() {
   const c = pip.cv; if (!c) return;
-  const ctx = c.getContext('2d'), W = c.width, H = c.height;
+  const ctx = c.getContext('2d'), W = c.width, H = c.height, TOP = 92, BOT = 58;
+  drawPipMap(ctx, W, TOP, H - TOP - BOT);
+  // bandeau du haut : flèche, distance et consigne
   const tone = $('navTop').dataset.tone;
   ctx.fillStyle = cssVar({ off: '--warn', rejoin: '--me', gps: '--hud', done: '--ok' }[tone] || '--go') || '#2F5E45';
-  ctx.fillRect(0, 0, W, H);
-  // flèche
-  const im = pipIcon(bannerIcon), S = 150;
+  ctx.fillRect(0, 0, W, TOP);
+  const im = pipIcon(bannerIcon), S = 66;
   if (im.complete && im.naturalWidth) {
-    ctx.save(); ctx.translate(22 + S / 2, 26 + S / 2);
+    ctx.save(); ctx.translate(14 + S / 2, TOP / 2);
     if (typeof bannerIcon === 'object') ctx.rotate(rad(bannerIcon.rot || 0));
     ctx.drawImage(im, -S / 2, -S / 2, S, S); ctx.restore();
   }
   ctx.fillStyle = '#fff'; ctx.textBaseline = 'alphabetic';
-  const dist = $('ntDist').textContent, txt = $('ntTxt').textContent;
-  let y = 96;
-  if (dist) { ctx.font = '700 64px system-ui, sans-serif'; ctx.fillText(dist, 190, y); y += 46; } else y = 70;
-  ctx.font = '600 30px system-ui, sans-serif';
-  for (const l of wrapText(ctx, txt, W - 205, dist ? 2 : 3)) { ctx.fillText(l, 190, y); y += 36; }
-  const sub = $('ntSub').textContent;
-  if (sub) { // précision (retour à la trace, virage suivant…) sous la flèche
-    ctx.font = '500 22px system-ui, sans-serif'; ctx.globalAlpha = .88; y = Math.max(y + 2, 214);
-    for (const l of wrapText(ctx, sub, W - 44, 2)) { ctx.fillText(l, 22, y); y += 27; }
-    ctx.globalAlpha = 1;
+  const dist = $('ntDist').textContent, txt = $('ntTxt').textContent, X = 92, TW = W - X - 10;
+  if (dist) {
+    ctx.font = '700 38px system-ui, sans-serif'; ctx.fillText(dist, X, 44);
+    ctx.font = '600 21px system-ui, sans-serif'; ctx.fillText(wrapText(ctx, txt, TW, 1)[0] || '', X, 74);
+  } else {
+    ctx.font = '600 24px system-ui, sans-serif';
+    wrapText(ctx, txt, TW, 2).forEach((l, k, a) => ctx.fillText(l, X, (a.length > 1 ? 40 : 54) + k * 30));
   }
-  // bas : arrivée et distance restante (ou distance / durée en balade libre)
-  ctx.fillStyle = 'rgba(0,0,0,.28)'; ctx.fillRect(0, H - 86, W, 86);
-  ctx.fillStyle = '#fff'; ctx.font = '700 34px system-ui, sans-serif';
+  // bandeau du bas : arrivée et distance restante (ou distance / durée en balade libre)
+  ctx.fillStyle = cssVar('--hud') || '#1F2B25'; ctx.fillRect(0, H - BOT, W, BOT);
+  ctx.fillStyle = '#fff'; ctx.font = '700 25px system-ui, sans-serif'; ctx.textAlign = 'center';
   const a = $('nbEta').textContent, b = $('nbRem').textContent, l2 = $('nbL2').textContent;
-  const bottom = track ? `Arrivée ${a}  ·  ${b}` : `${b} ${l2}  ·  ${$('nbUp').textContent}`;
-  ctx.textAlign = 'center'; ctx.fillText(bottom, W / 2, H - 31); ctx.textAlign = 'left';
+  ctx.fillText(track ? `Arrivée ${a}  ·  ${b}` : `${b} ${l2}  ·  ${$('nbUp').textContent}`, W / 2, H - 20);
+  ctx.textAlign = 'left';
 }
 // dessin groupé (au plus 4 fois par seconde), après la mise à jour des chiffres
 function pipSoon() {
@@ -803,7 +861,7 @@ async function startPip() {
   if (!pipOK) { toast('La fenêtre réduite n\'est pas disponible sur ce navigateur.'); return; }
   try {
     if (!pip.cv) {
-      pip.cv = document.createElement('canvas'); pip.cv.width = 480; pip.cv.height = 360;
+      pip.cv = document.createElement('canvas'); pip.cv.width = 360; pip.cv.height = 480;
       const v = pip.video = document.createElement('video');
       v.id = 'pipVideo'; v.muted = true; v.playsInline = true; v.setAttribute('playsinline', '');
       v.srcObject = pip.cv.captureStream(4);
