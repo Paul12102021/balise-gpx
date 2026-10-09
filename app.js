@@ -4,7 +4,7 @@
 
 // La page et le code doivent être de la même version. Sinon (page gardée en cache
 // par le téléphone ou par GitHub), on recharge une page fraîche, au plus 3 fois.
-const APP_VERSION = 54;
+const APP_VERSION = 55;
 try {
   const meta = document.querySelector('meta[name="balise-version"]');
   const pageV = meta ? +meta.content : 0;
@@ -644,7 +644,7 @@ function showSoDetail(it) {
 // Connexion via le relais Pisteo (Cloudflare Worker, voir strava-relay/worker.js) : il garde le secret
 // de l'appli Strava hors du code public et transmet les envois.
 const STRAVA_CLIENT_ID = '109821';
-const STRAVA_RELAY = ''; // adresse du relais, ex. https://pisteo-strava.xxx.workers.dev
+const STRAVA_RELAY = 'https://pisteo-strava.lecouillardpaul.workers.dev'; // relais Cloudflare (strava-relay/worker.js)
 const stvTok = () => { try { return JSON.parse(store.get('stvTok') || 'null'); } catch { return null; } };
 const stvOn = () => !!(stvTok() && STRAVA_RELAY);
 const stvBack = () => location.origin + location.pathname;
