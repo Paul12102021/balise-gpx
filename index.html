@@ -8,13 +8,13 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<meta name="balise-version" content="61">
+<meta name="balise-version" content="62">
 <title>Pisteo</title>
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" href="icon.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
 <link rel="stylesheet" href="vendor/maplibre-gl.css">
-<link rel="stylesheet" href="app.css?v=61">
+<link rel="stylesheet" href="app.css?v=62">
 </head>
 <body>
 <div id="map" aria-label="Carte"></div>
@@ -40,6 +40,9 @@
 <div class="fab-col">
   <button id="btnPip" class="fab nav-only" title="Fenêtre réduite" aria-label="Passer en fenêtre réduite pour utiliser une autre appli">
     <svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2"/><rect x="12" y="11" width="7" height="6" rx="1" fill="currentColor" stroke="none"/></svg>
+  </button>
+  <button id="btnEcoFab" class="fab nav-only" title="Économie de batterie" aria-label="Économie de batterie (écran noir entre les virages)">
+    <svg viewBox="0 0 24 24"><rect x="3" y="7" width="16" height="10" rx="2"/><path d="M21 10.5v3"/><path class="bolt" d="m11.5 8.5-2.5 4h3l-1.5 3"/></svg>
   </button>
   <button id="btnLayer" class="fab" title="Fond de carte" aria-label="Changer de fond de carte">
     <svg viewBox="0 0 24 24"><path d="M12 3 2 8l10 5 10-5-10-5Z"/><path d="m2 13 10 5 10-5"/></svg>
@@ -165,8 +168,8 @@
       <input type="checkbox" id="autoRec" class="check">
     </div>
     <div class="row">
-      <label for="optEco">Économie de batterie en navigation<br><small>Équilibrée : carte allégée · Maximum : écran noir entre les virages</small></label>
-      <select id="optEco"><option value="off">Non</option><option value="eco">Équilibrée</option><option value="max">Maximum</option></select>
+      <label for="optEco">Économie de batterie en navigation<br><small>Écran noir entre les virages · <button id="ecoInfoLink" class="linkbtn">en savoir plus</button></small></label>
+      <input type="checkbox" id="optEco" class="check">
     </div>
     <div class="row">
       <label for="optBanner">Indications en navigation<br><small>Toucher le bandeau le réduit ou l'agrandit</small></label>
@@ -331,6 +334,29 @@
   </div>
 </div>
 
+<div id="ecoInfo" class="lib" hidden>
+  <div class="lib-panel" role="dialog" aria-label="Économie de batterie">
+    <div class="lib-head">
+      <b>Économie de batterie</b>
+      <button id="eiClose" class="closebtn" aria-label="Fermer"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></svg>Fermer</button>
+    </div>
+    <p class="note">L'écran est ce qui consomme le plus. En navigation, l'appli affiche donc un <b>écran noir</b> entre les virages : sur la plupart des téléphones, un pixel noir est éteint et ne consomme presque rien.</p>
+    <ul class="ei-list">
+      <li><b>Entre les virages</b> : écran noir avec seulement la consigne (« ↑ 2,4 km · Continuez sur la trace »), la distance restante et l'heure d'arrivée.</li>
+      <li><b>La carte revient toute seule</b> environ 200 m avant chaque virage, si tu sors de la trace, pendant un calcul de retour et à l'arrivée.</li>
+      <li><b>Touche l'écran noir</b> pour voir la carte 15 secondes.</li>
+      <li><b>La voix et les vibrations</b> continuent de te guider normalement.</li>
+      <li><b>Carte allégée</b> : à plat (sans 3D), thème sombre, recentrée toutes les 3 s loin des virages.</li>
+      <li><b>L'enregistrement</b> de ta sortie n'est pas affecté.</li>
+    </ul>
+    <p class="note">À activer ou couper à tout moment avec le bouton pile 🔋 à droite de la carte en navigation.</p>
+    <div class="ei-acts">
+      <button id="eiOff" class="btn ghost">Ne pas activer</button>
+      <button id="eiOn" class="btn go">Activer</button>
+    </div>
+  </div>
+</div>
+
 <div id="maps" class="lib" hidden>
   <div class="lib-panel" role="dialog" aria-label="Cartes hors ligne">
     <div class="lib-head">
@@ -433,6 +459,6 @@
 <div id="toast" class="toast" hidden></div>
 
 <script src="vendor/maplibre-gl.js"></script>
-<script src="app.js?v=61"></script>
+<script src="app.js?v=62"></script>
 </body>
 </html>

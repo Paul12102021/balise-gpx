@@ -4,7 +4,7 @@
 
 // La page et le code doivent être de la même version. Sinon (page gardée en cache
 // par le téléphone ou par GitHub), on recharge une page fraîche, au plus 3 fois.
-const APP_VERSION = 61;
+const APP_VERSION = 62;
 try {
   const meta = document.querySelector('meta[name="balise-version"]');
   const pageV = meta ? +meta.content : 0;
@@ -1502,16 +1502,28 @@ function setBannerSize(v, quiet) {
 }
 $('optBanner').onchange = e => setBannerSize(e.target.value);
 
-// ---------- économie de batterie ----------
-var eco = store.get('eco') || 'off', ecoWakeUntil = 0, ecoThemeSet = false;
-const ECO_LBL = { off: 'Économie : non', eco: 'Économie : équilibrée', max: 'Économie : maximum' };
+// ---------- économie de batterie (écran noir entre les virages + carte allégée) ----------
+var eco = store.get('eco') === 'max' ? 'max' : 'off', ecoWakeUntil = 0, ecoThemeSet = false;
 function ecoNear() { return nextDist < 220 || isOff || arrived || routing; }
 function setEco(v, quiet) {
-  eco = ECO_LBL[v] ? v : 'off'; store.set('eco', eco);
-  $('optEco').value = eco; $('npEco').textContent = ECO_LBL[eco]; $('npEco').classList.toggle('off', eco === 'off');
-  if (!quiet) toast(eco === 'max' ? 'Économie maximum : écran noir entre les virages, la carte revient à l\'approche' : eco === 'eco' ? 'Économie équilibrée : carte allégée' : 'Économie de batterie désactivée', 3500);
+  eco = v === 'max' ? 'max' : 'off'; store.set('eco', eco);
+  const on = eco === 'max';
+  $('optEco').checked = on;
+  $('npEco').textContent = on ? 'Économie de batterie' : 'Économie de batterie'; $('npEco').classList.toggle('off', !on);
+  $('btnEcoFab').classList.toggle('on', on);
+  if (!quiet) toast(on ? 'Économie de batterie activée : écran noir entre les virages' : 'Économie de batterie désactivée', 3000);
   applyEco();
 }
+// activer : on explique d'abord ce que ça fait (sauf si déjà vu)
+function askEco() {
+  if (eco === 'max') { setEco('off'); return; }
+  if (store.get('ecoSeen') === '1') { setEco('max'); return; }
+  $('ecoInfo').hidden = false;
+}
+$('eiOn').onclick = () => { store.set('ecoSeen', '1'); $('ecoInfo').hidden = true; setEco('max'); };
+$('eiOff').onclick = $('eiClose').onclick = () => { $('ecoInfo').hidden = true; setEco(eco, true); };
+$('ecoInfo').onclick = e => { if (e.target === $('ecoInfo')) { $('ecoInfo').hidden = true; setEco(eco, true); } };
+$('ecoInfoLink').onclick = e => { e.preventDefault(); e.stopPropagation(); $('ecoInfo').hidden = false; };
 function applyEco() {
   const on = nav && eco !== 'off';
   try { map.setPixelRatio(on ? Math.min(window.devicePixelRatio || 1, 1.5) : null); } catch {}
@@ -1536,8 +1548,9 @@ function ecoCheck() {
 }
 function ecoWake(ms) { ecoWakeUntil = Date.now() + ms; ecoCheck(); setTimeout(ecoCheck, ms + 100); }
 $('ecoBlack').onclick = () => ecoWake(15000);
-$('optEco').onchange = e => setEco(e.target.value);
-$('npEco').onclick = () => setEco({ off: 'eco', eco: 'max', max: 'off' }[eco]);
+$('optEco').onchange = e => { if (e.target.checked) { e.target.checked = false; askEco(); } else setEco('off'); };
+$('npEco').onclick = askEco;
+$('btnEcoFab').onclick = askEco;
 setEco(eco, true);
 setInterval(() => { if (nav && eco === 'max') ecoCheck(); }, 2000);
 $('npBanner').onclick = () => setBannerSize({ normal: 'compact', compact: 'hidden', hidden: 'normal' }[store.get('banner') || 'normal']);

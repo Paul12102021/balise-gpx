@@ -414,3 +414,7 @@ body.nav .loop-bar { display: none; }
 .lb-info span { font-size: 13px; color: var(--muted); font-variant-numeric: tabular-nums; }
 .lb-acts { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
 .lb-acts .btn { padding: 0 4px; white-space: nowrap; }
+.ei-list { margin: 0; padding-left: 18px; display: flex; flex-direction: column; gap: 8px; font-size: 14px; line-height: 1.4; }
+.ei-acts { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+#btnEcoFab.on { background: var(--go); color: #fff; }
+#btnEcoFab .bolt { stroke-width: 1.8; }
