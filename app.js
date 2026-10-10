@@ -4,7 +4,7 @@
 
 // La page et le code doivent être de la même version. Sinon (page gardée en cache
 // par le téléphone ou par GitHub), on recharge une page fraîche, au plus 3 fois.
-const APP_VERSION = 62;
+const APP_VERSION = 63;
 try {
   const meta = document.querySelector('meta[name="balise-version"]');
   const pageV = meta ? +meta.content : 0;
@@ -2473,7 +2473,6 @@ async function updateStorageInfo() {
 setTimeout(ensurePlaces, 4000);
 window.addEventListener('online', () => setTimeout(ensurePlaces, 2000));
 async function openMaps() {
-  toggleMore(false);
   $('maps').hidden = false;
   $('showPacks').checked = store.get('showPacks') !== '0';
   updateOfflineInfo(); updateStorageInfo(); renderPacks();
