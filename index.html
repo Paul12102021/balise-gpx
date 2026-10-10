@@ -8,13 +8,13 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<meta name="balise-version" content="59">
+<meta name="balise-version" content="60">
 <title>Pisteo</title>
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" href="icon.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
 <link rel="stylesheet" href="vendor/maplibre-gl.css">
-<link rel="stylesheet" href="app.css?v=59">
+<link rel="stylesheet" href="app.css?v=60">
 </head>
 <body>
 <div id="map" aria-label="Carte"></div>
@@ -202,6 +202,7 @@
       <button id="libClose" class="closebtn" aria-label="Fermer"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></svg>Fermer</button>
     </div>
     <button id="libBrowse" class="btn go">Chercher un fichier GPX…</button>
+    <button id="libLoop" class="btn">⟳ Proposer une boucle</button>
     <ul id="libList" class="lib-list"></ul>
     <p id="libEmpty" class="note" hidden>Les traces que tu ouvres apparaîtront ici.</p>
     <p id="libTip" class="note">Astuce : dans ton gestionnaire de fichiers ou un mail, fais « Partager » sur un GPX puis choisis Pisteo.</p>
@@ -294,6 +295,42 @@
   </div>
 </div>
 
+<div id="loop" class="lib" hidden>
+  <div class="lib-panel" role="dialog" aria-label="Proposer une boucle">
+    <div class="lib-head">
+      <b>Proposer une boucle</b>
+      <button id="loopClose" class="closebtn" aria-label="Fermer"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></svg>Fermer</button>
+    </div>
+    <div class="lp-block">
+      <span class="lp-l">Départ</span>
+      <div class="seg"><button id="lpFromMe" class="on">Ma position</button><button id="lpFromMap">Un point sur la carte</button></div>
+      <small id="lpFromTxt" class="lp-small"></small>
+    </div>
+    <div class="lp-block">
+      <span class="lp-l">Je me déplace</span>
+      <div class="seg"><button id="lpFoot">À pied</button><button id="lpBike">À vélo</button></div>
+    </div>
+    <div class="lp-block">
+      <span class="lp-l">Je veux faire</span>
+      <div class="seg"><button id="lpByKm" class="on">Une distance</button><button id="lpByTime">Une durée</button></div>
+      <div class="lp-val"><input id="lpVal" class="search" type="number" inputmode="decimal" min="1" step="any"><span id="lpUnit">km</span></div>
+      <div id="lpQuick" class="lp-quick"></div>
+    </div>
+    <button id="lpGo" class="btn go">Proposer un itinéraire</button>
+    <p class="note">La boucle part et revient au même endroit, sur les routes et chemins adaptés (BRouter · OpenStreetMap). Chaque proposition prend une direction différente.</p>
+  </div>
+</div>
+
+<div id="loopBar" class="loop-bar" hidden>
+  <div class="lb-info"><b id="lbTitle"></b><span id="lbSub"></span></div>
+  <div class="lb-acts">
+    <button id="lbAgain" class="btn small">⟳ Autre</button>
+    <button id="lbEdit" class="btn small">Modifier</button>
+    <button id="lbKeep" class="btn small">Garder</button>
+    <button id="lbGo" class="btn small go">Naviguer</button>
+  </div>
+</div>
+
 <div id="maps" class="lib" hidden>
   <div class="lib-panel" role="dialog" aria-label="Cartes hors ligne">
     <div class="lib-head">
@@ -367,6 +404,7 @@
     <div class="dest-btns">
       <button id="destPick" class="btn">Choisir sur la carte</button>
       <button id="destFree" class="btn">Balade libre</button>
+      <button id="destLoop" class="btn go wide2">⟳ Proposer une boucle</button>
     </div>
     <div class="row">
       <label for="destProf">Je me déplace</label>
@@ -377,7 +415,7 @@
 </div>
 
 <div id="pickBanner" class="pausepill pick" hidden>
-  <span>Touche la carte à l'endroit où tu veux aller</span>
+  <span id="pickTxt">Touche la carte à l'endroit où tu veux aller</span>
   <button id="pickCancel" class="btn small">Annuler</button>
 </div>
 
@@ -395,6 +433,6 @@
 <div id="toast" class="toast" hidden></div>
 
 <script src="vendor/maplibre-gl.js"></script>
-<script src="app.js?v=59"></script>
+<script src="app.js?v=60"></script>
 </body>
 </html>

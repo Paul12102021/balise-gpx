@@ -4,7 +4,7 @@
 
 // La page et le code doivent être de la même version. Sinon (page gardée en cache
 // par le téléphone ou par GitHub), on recharge une page fraîche, au plus 3 fois.
-const APP_VERSION = 59;
+const APP_VERSION = 60;
 try {
   const meta = document.querySelector('meta[name="balise-version"]');
   const pageV = meta ? +meta.content : 0;
@@ -402,7 +402,7 @@ function closeTrack(quiet) {
   if (!track) return;
   const savedText = store.get('gpx');
   if (nav) stopNav();
-  track = null; progress = null; done = null; clearRejoin();
+  track = null; progress = null; done = null; clearRejoin(); $('loopBar').hidden = true;
   setSrc('track', EMPTY); setSrc('turn', EMPTY);
   startMk.remove(); endMk.remove();
   store.set('gpx', '');
@@ -1796,14 +1796,144 @@ async function ensurePlaces() {
 }
 
 // choisir l'arrivée en touchant la carte
-let picking = false;
-$('destPick').onclick = () => { closeDest(); picking = true; $('pickBanner').hidden = false; };
-$('pickCancel').onclick = () => { picking = false; $('pickBanner').hidden = true; };
+let picking = false; // false, ou la fonction à appeler avec le point touché
+function startPick(txt, cb) { picking = cb; $('pickTxt').textContent = txt; $('pickBanner').hidden = false; }
+$('destPick').onclick = () => { closeDest(); startPick('Touche la carte à l\'endroit où tu veux aller', p => goTo(Object.assign(p, { label: 'le point choisi' }))); };
+$('pickCancel').onclick = () => { const cb = picking; picking = false; $('pickBanner').hidden = true; if (cb && cb.cancel) cb.cancel(); };
 map.on('click', e => {
   if (!picking) return;
-  picking = false; $('pickBanner').hidden = true;
-  goTo({ lat: e.lngLat.lat, lon: e.lngLat.lng, label: 'le point choisi' });
+  const cb = picking; picking = false; $('pickBanner').hidden = true;
+  cb({ lat: e.lngLat.lat, lon: e.lngLat.lng });
 });
+
+// =====================================================================
+// Boucle proposée : à partir d'un point, une distance ou une durée → un itinéraire qui revient au départ
+// =====================================================================
+const loopCfg = { from: null, byTime: false, val: null, seed: Math.random() * 360 };
+let loopRes = null;
+function lpSpeed() { return profile === 'trekking' ? { v: 16, climb: 800 } : { v: 4.5, climb: 600 }; }
+function lpUI() {
+  const bike = profile === 'trekking';
+  $('lpFoot').classList.toggle('on', !bike); $('lpBike').classList.toggle('on', bike);
+  $('lpFromMe').classList.toggle('on', !loopCfg.from); $('lpFromMap').classList.toggle('on', !!loopCfg.from);
+  $('lpFromTxt').textContent = loopCfg.from ? `Point choisi (${loopCfg.from.lat.toFixed(4)}, ${loopCfg.from.lon.toFixed(4)}) · touche « Un point sur la carte » pour en changer` : (me ? 'Position GPS actuelle' : 'La position GPS sera recherchée');
+  $('lpByKm').classList.toggle('on', !loopCfg.byTime); $('lpByTime').classList.toggle('on', loopCfg.byTime);
+  $('lpUnit').textContent = loopCfg.byTime ? 'min' : 'km';
+  const def = loopCfg.byTime ? (bike ? 90 : 60) : (bike ? 30 : 8);
+  if (loopCfg.val == null) $('lpVal').value = def;
+  const q = loopCfg.byTime ? [[30, '30 min'], [60, '1 h'], [90, '1 h 30'], [120, '2 h'], [180, '3 h']] : (bike ? [[15, '15 km'], [30, '30 km'], [50, '50 km'], [80, '80 km']] : [[5, '5 km'], [8, '8 km'], [12, '12 km'], [20, '20 km']]);
+  $('lpQuick').innerHTML = '';
+  for (const [v, l] of q) { const b = document.createElement('button'); b.textContent = l; b.onclick = () => { $('lpVal').value = v; loopCfg.val = v; }; $('lpQuick').appendChild(b); }
+}
+function openLoop() { closeDest(); closeLib(); toggleMore(false); $('loopBar').hidden = true; lpUI(); $('loop').hidden = false; }
+$('destLoop').onclick = openLoop; $('libLoop').onclick = openLoop;
+$('loopClose').onclick = () => { $('loop').hidden = true; };
+$('loop').onclick = e => { if (e.target === $('loop')) $('loop').hidden = true; };
+$('lpFoot').onclick = () => { setProfile('hiking-mountain', true); loopCfg.val = null; lpUI(); };
+$('lpBike').onclick = () => { setProfile('trekking', true); loopCfg.val = null; lpUI(); };
+$('lpByKm').onclick = () => { loopCfg.byTime = false; loopCfg.val = null; lpUI(); };
+$('lpByTime').onclick = () => { loopCfg.byTime = true; loopCfg.val = null; lpUI(); };
+$('lpVal').oninput = e => { loopCfg.val = +e.target.value || null; };
+$('lpFromMe').onclick = () => { loopCfg.from = null; lpUI(); };
+$('lpFromMap').onclick = () => {
+  $('loop').hidden = true;
+  const cb = p => { loopCfg.from = p; lpUI(); $('loop').hidden = false; };
+  cb.cancel = () => { $('loop').hidden = false; };
+  startPick('Touche la carte au point de départ de la boucle', cb);
+};
+$('lpGo').onclick = () => { const v = +$('lpVal').value; if (!(v > 0)) { toast('Indique une distance ou une durée.'); return; } loopCfg.val = v; $('loop').hidden = true; makeLoop(); };
+
+// itinéraire passant par plusieurs points : BRouter, sinon chemins téléchargés
+async function routeVia(pts, ms) {
+  const ll = q => `${q.lon.toFixed(6)},${q.lat.toFixed(6)}`;
+  const ctrl = new AbortController(), timer = setTimeout(() => ctrl.abort(), ms);
+  try {
+    const r = await fetch(`https://brouter.de/brouter?lonlats=${pts.map(ll).join('|')}&profile=${profile}&alternativeidx=0&format=geojson`, { signal: ctrl.signal });
+    if (!r.ok) { const e = new Error((await r.text().catch(() => '')).slice(0, 160) || 'HTTP ' + r.status); e.server = true; throw e; }
+    const f = (await r.json()).features[0];
+    return f.geometry.coordinates.map(c => ({ lon: c[0], lat: c[1], ele: c[2] != null ? c[2] : null }));
+  } catch (e) {
+    if (e.server || e.name === 'AbortError') throw e;
+    // pas de réseau : enchaînement d'itinéraires sur les chemins téléchargés
+    await loadGraphs();
+    const out = [];
+    for (let k = 1; k < pts.length; k++) { const r = localRouteTo(pts[k - 1], pts[k]); if (!r) throw e; out.push(...r.pts); }
+    return out;
+  } finally { clearTimeout(timer); }
+}
+// estimation du temps (même règle que la navigation : allure + montée)
+function loopEst(p) { const s = lpSpeed(); return p.total / (s.v / 3.6) + (p.hasEle ? p.totalUp / s.climb * 3600 : 0); }
+// points de passage : un cercle qui passe par le départ, orienté au hasard, parcouru par 3 points
+function loopPoints(c, r, ang) {
+  const R = 6371000, dLat = d => d / R * 180 / Math.PI, dLon = d => d / (R * Math.cos(rad(c.lat))) * 180 / Math.PI;
+  const off = (p, a, d) => ({ lat: p.lat + dLat(d * Math.cos(rad(a))), lon: p.lon + dLon(d * Math.sin(rad(a))) });
+  const ctr = off(c, ang, r), pts = [c];
+  for (const k of [1, 2, 3]) pts.push(off(ctr, ang + 180 + k * 90 + (Math.random() - .5) * 30, r * (0.85 + Math.random() * 0.3)));
+  pts.push(c);
+  return pts;
+}
+async function makeLoop() {
+  if (nav) { toast('Quitte d\'abord la navigation.'); return; }
+  let start = loopCfg.from;
+  if (!start) {
+    if (!startGPS()) return;
+    toast('Recherche de ta position…', 15000);
+    const pos = await waitFix(20000);
+    if (!pos) { toast('Position GPS introuvable : choisis un point de départ sur la carte.', 5000); openLoop(); return; }
+    start = { lat: pos.lat, lon: pos.lon };
+  }
+  const sp = lpSpeed(), target = loopCfg.byTime ? loopCfg.val * 60 : loopCfg.val * 1000; // secondes ou mètres
+  const measure = p => loopCfg.byTime ? loopEst(p) : p.total;
+  // première estimation du rayon : une boucle routée fait environ 7 fois le rayon
+  let dist0 = loopCfg.byTime ? loopCfg.val / 60 * sp.v * 1000 * 0.85 : target;
+  let r = dist0 / 7, best = null, ang = loopCfg.seed;
+  loopCfg.seed = (loopCfg.seed + 137.5) % 360; // la prochaine proposition partira dans une autre direction
+  const t0 = Date.now(), tick = setInterval(() => toast(`Recherche d'une boucle… ${Math.round((Date.now() - t0) / 1000)} s`, 3000), 1000);
+  try {
+    for (let tryN = 0; tryN < 4; tryN++) {
+      let pts;
+      try { pts = await routeVia(loopPoints(start, r, ang), 45000); }
+      catch (e) {
+        if (!e.server) throw e;
+        ang = (ang + 60) % 360; continue; // point dans la mer, sans chemin… : autre direction
+      }
+      const p = makePath(pts, ''), m = measure(p), err = Math.abs(m - target) / target;
+      if (!best || err < best.err) best = { pts, err, m };
+      if (err < 0.08) break;
+      r *= clamp(target / m, 0.5, 2); // on agrandit ou on réduit la boucle
+    }
+  } catch (e) {
+    clearInterval(tick);
+    toast(navigator.onLine === false ? 'Pas de réseau : boucle possible seulement dans une zone dont les chemins sont téléchargés.' : 'Le serveur d\'itinéraires ne répond pas. Réessaie dans un instant.', 6000);
+    return;
+  }
+  clearInterval(tick);
+  if (!best) { toast('Aucune boucle trouvée ici. Essaie un autre point de départ.', 5000); return; }
+  showLoop(best.pts);
+}
+function loopGPX(pts, name) {
+  const esc = s => s.replace(/[<&>]/g, c => ({ '<': '&lt;', '&': '&amp;', '>': '&gt;' }[c]));
+  return `<?xml version="1.0" encoding="UTF-8"?>\n<gpx version="1.1" creator="Pisteo" xmlns="http://www.topografix.com/GPX/1/1">\n  <trk><name>${esc(name)}</name><trkseg>\n` +
+    pts.map(p => `    <trkpt lat="${p.lat.toFixed(6)}" lon="${p.lon.toFixed(6)}">${p.ele != null ? `<ele>${(+p.ele).toFixed(1)}</ele>` : ''}</trkpt>`).join('\n') + '\n  </trkseg></trk>\n</gpx>\n';
+}
+function showLoop(pts) {
+  const p = makePath(pts, ''), bike = profile === 'trekking';
+  const name = `Boucle ${bike ? 'à vélo' : 'à pied'} de ${fmtDist(p.total)}`;
+  const text = loopGPX(pts, name);
+  loopRes = { text, name };
+  loadText(text, false); store.set('gpx', text);
+  const est = loopEst(p);
+  $('lbTitle').textContent = name;
+  $('lbSub').textContent = `${p.hasEle ? 'D+ ' + fmtM(p.totalUp) + ' · ' : ''}environ ${fmtDur(est)}` + (loopCfg.byTime ? ` (demandé : ${fmtDur(loopCfg.val * 60)})` : ` (demandé : ${loopCfg.val} km)`);
+  $('lbKeep').textContent = 'Garder'; $('lbKeep').disabled = false;
+  $('loopBar').hidden = false;
+  // toute la boucle visible au-dessus du panneau et de la barre de proposition
+  setTimeout(() => { try { map.fitBounds(boundsOf([pts]), { padding: { top: 80, bottom: $('sheet').offsetHeight + $('loopBar').offsetHeight + 30, left: 30, right: 70 }, bearing: 0, pitch: 0, duration: 600 }); } catch {} }, 350);
+}
+$('lbAgain').onclick = () => { $('loopBar').hidden = true; makeLoop(); };
+$('lbEdit').onclick = () => { $('loopBar').hidden = true; openLoop(); };
+$('lbKeep').onclick = async () => { if (!loopRes || !track) return; await saveRecent(track, loopRes.text); $('lbKeep').textContent = 'Gardée ✓'; $('lbKeep').disabled = true; toast('Boucle gardée dans « Ouvrir un GPX »', 3000); };
+$('lbGo').onclick = () => { $('loopBar').hidden = true; startNav(); };
 // appui long sur la carte : y aller
 map.on('contextmenu', e => {
   const d = { lat: e.lngLat.lat, lon: e.lngLat.lng, label: 'le point choisi' };
