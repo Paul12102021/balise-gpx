@@ -4,7 +4,7 @@
 
 // La page et le code doivent être de la même version. Sinon (page gardée en cache
 // par le téléphone ou par GitHub), on recharge une page fraîche, au plus 3 fois.
-const APP_VERSION = 60;
+const APP_VERSION = 61;
 try {
   const meta = document.querySelector('meta[name="balise-version"]');
   const pageV = meta ? +meta.content : 0;
@@ -1674,7 +1674,6 @@ function openDest() {
   toggleMore(false);
   $('destProf').value = profile;
   $('dest').hidden = false;
-  setTimeout(() => $('destQ').focus(), 50);
 }
 function closeDest() { $('dest').hidden = true; $('destQ').blur(); }
 $('destClose').onclick = closeDest;
