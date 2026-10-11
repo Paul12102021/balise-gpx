@@ -4,7 +4,7 @@
 
 // La page et le code doivent être de la même version. Sinon (page gardée en cache
 // par le téléphone ou par GitHub), on recharge une page fraîche, au plus 3 fois.
-const APP_VERSION = 74;
+const APP_VERSION = 75;
 try {
   const meta = document.querySelector('meta[name="balise-version"]');
   const pageV = meta ? +meta.content : 0;
@@ -2047,6 +2047,7 @@ function rtTagDist(t) {
   return u === 'mi' ? v * 1609 : u === 'm' ? v : v * 1000;
 }
 // relations OSM → liste triée (grands itinéraires d'abord, puis du plus proche au plus loin)
+const RT_BIG_NET = /^(icn|ncn|rcn|iwn|nwn|rwn)$/;
 function rtListFrom(json, at) {
   const out = [], seen = new Set();
   for (const e of (json && json.elements) || []) {
@@ -2054,7 +2055,9 @@ function rtListFrom(json, at) {
     seen.add(e.id);
     const t = e.tags, cat = rtCat(t), b = e.bounds;
     if (t.state === 'proposed' || t.disused || t.abandoned) continue;
-    let near = null, big = false;
+    // grands réseaux (EuroVelo, véloroutes, GR, GRP) : le serveur ne calcule pas leur emprise, trop coûteuse
+    let near = null, big = !b && RT_BIG_NET.test(t.network || '');
+    if (big) near = 0;
     if (b) {
       const diag = hav({ lat: b.minlat, lon: b.minlon }, { lat: b.maxlat, lon: b.maxlon });
       big = diag > 40000;
@@ -2181,7 +2184,7 @@ async function overpassFast(q, onWait, mirrorFirst) {
 const rtCache = new Map(); // recherches déjà faites (mode + lieu) : pas de nouvelle demande en changeant de mode
 const rt = { at: null, fromMap: false, list: null, key: '', res: null, busy: false };
 const rtBike = () => profile === 'trekking';
-const rtRadius = () => rtBike() ? 30000 : 15000; // zone de recherche
+const rtRadius = () => rtBike() ? 20000 : 12000; // zone de recherche
 const rtCut = () => rtBike() ? 25000 : 12000; // portion chargée d'un grand itinéraire (rayon)
 function rtBox(c, r) {
   const dLat = r / 111320, dLon = r / (111320 * Math.cos(rad(c.lat)));
@@ -2217,12 +2220,18 @@ async function rtSearch() {
   $('rtList').innerHTML = '';
   $('rtStatus').textContent = `Recherche des parcours ${bike ? 'vélo' : 'à pied'} dans un rayon de ${rtRadius() / 1000} km${rt.fromMap || !me ? ' autour du centre de la carte' : ' autour de toi'}…`;
   const sel = bike ? '["route"~"^(bicycle|mtb)$"]' : '["route"~"^(hiking|foot)$"]';
-  const q = `[out:json][timeout:60];relation["type"="route"]${sel}(${rtBox(at, rtRadius())});out tags bb;`;
+  // l'emprise (bb) n'est demandée que pour les petits parcours : pour une EuroVelo ou un GR,
+  // le serveur devrait reconstituer tout l'itinéraire à travers l'Europe, ce qui prend très longtemps
+  const q = `[out:json][timeout:40];relation["type"="route"]${sel}(${rtBox(at, rtRadius())})->.a;`
+    + `relation.a["network"~"^(icn|ncn|rcn|iwn|nwn|rwn)$"]->.g;(.a; - .g;)->.p;.g out tags;.p out tags bb;`;
   rt.busy = true;
   try {
     if (rtCache.has(rt.key)) { rt.list = rtCache.get(rt.key); rtRender(); return; }
-    const json = await overpassFast(q, secs => { $('rtStatus').textContent = `Serveurs OpenStreetMap très demandés : nouvel essai dans ${secs} s…`; });
+    // recherche déjà faite ici il y a moins d'une semaine : affichage immédiat
+    try { const s = JSON.parse(store.get('rt:' + rt.key) || 'null'); if (s && Date.now() - s.t < 7 * 864e5) { rt.list = rtListFrom(s.j, at); rtCache.set(rt.key, rt.list); rtRender(); return; } } catch {}
+    const json = await overpassFast(q, secs => { $('rtStatus').textContent = `Serveurs OpenStreetMap très demandés : nouvel essai dans ${secs} s…`; }, true);
     rt.list = rtListFrom(json, at); rtCache.set(rt.key, rt.list);
+    store.set('rt:' + rt.key, JSON.stringify({ t: Date.now(), j: { elements: (json.elements || []).map(e => ({ type: e.type, id: e.id, tags: e.tags, bounds: e.bounds })) } }));
     rtRender();
   } catch (e) {
     $('rtStatus').textContent = navigator.onLine === false ? 'Pas de réseau : la recherche de parcours balisés a besoin d\'une connexion.' : `Recherche impossible (${e.message}). Réessaie dans un instant.`;
