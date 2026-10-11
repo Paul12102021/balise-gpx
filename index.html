@@ -8,13 +8,13 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<meta name="balise-version" content="71">
+<meta name="balise-version" content="72">
 <title>Pisteo</title>
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" href="icon.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
 <link rel="stylesheet" href="vendor/maplibre-gl.css">
-<link rel="stylesheet" href="app.css?v=71">
+<link rel="stylesheet" href="app.css?v=72">
 </head>
 <body>
 <div id="map" aria-label="Carte"></div>
@@ -214,6 +214,7 @@
     <button id="libBrowse" class="btn go">Chercher un fichier GPX…</button>
     <button id="libLoop" class="btn">⟳ Proposer une boucle</button>
     <button id="libPlan" class="btn">✎ Tracer un itinéraire</button>
+    <button id="libRoutes" class="btn">⚑ Parcours balisés autour de moi</button>
     <ul id="libList" class="lib-list"></ul>
     <p id="libEmpty" class="note" hidden>Les traces que tu ouvres apparaîtront ici.</p>
     <p id="libTip" class="note">Astuce : dans ton gestionnaire de fichiers ou un mail, fais « Partager » sur un GPX puis choisis Pisteo.</p>
@@ -342,6 +343,32 @@
   </div>
 </div>
 
+<div id="routes" class="lib" hidden>
+  <div class="lib-panel tall" role="dialog" aria-label="Parcours balisés">
+    <div class="lib-head">
+      <b>Parcours balisés</b>
+      <button id="rtClose" class="closebtn" aria-label="Fermer"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></svg>Fermer</button>
+    </div>
+    <div class="lp-block">
+      <span class="lp-l">Je me déplace</span>
+      <div class="seg"><button id="rtFoot">À pied</button><button id="rtBike">À vélo</button></div>
+      <div class="seg"><button id="rtFromMe" class="on">Autour de moi</button><button id="rtFromMap">Autour de la carte</button></div>
+    </div>
+    <p id="rtStatus" class="note"></p>
+    <ul id="rtList" class="lib-list"></ul>
+    <p class="note">Sentiers et véloroutes balisés recensés par OpenStreetMap (GR, PR, EuroVelo, véloroutes, VTT). Pour les grands itinéraires, seule la portion autour du point choisi est chargée. Données © contributeurs OpenStreetMap, altitudes IGN.</p>
+  </div>
+</div>
+
+<div id="rtBar" class="loop-bar" hidden>
+  <div class="lb-info"><b id="rtbTitle"></b><span id="rtbSub"></span></div>
+  <div class="lb-acts">
+    <button id="rtbBack" class="btn small">↩ Autres parcours</button>
+    <button id="rtbKeep" class="btn small">Garder</button>
+    <button id="rtbGo" class="btn small go">Naviguer</button>
+  </div>
+</div>
+
 <div id="ecoInfo" class="lib" hidden>
   <div class="lib-panel" role="dialog" aria-label="Économie de batterie">
     <div class="lib-head">
@@ -440,6 +467,7 @@
       <button id="destFree" class="btn">Balade libre</button>
       <button id="destLoop" class="btn go wide2">⟳ Proposer une boucle</button>
       <button id="destPlan" class="btn wide2">✎ Tracer un itinéraire point par point</button>
+      <button id="destRoutes" class="btn wide2">⚑ Parcours balisés autour de moi</button>
     </div>
     <div class="row">
       <label for="destProf">Je me déplace</label>
@@ -480,6 +508,6 @@
 <div id="toast" class="toast" hidden></div>
 
 <script src="vendor/maplibre-gl.js"></script>
-<script src="app.js?v=71"></script>
+<script src="app.js?v=72"></script>
 </body>
 </html>

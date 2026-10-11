@@ -4,7 +4,7 @@
 
 // La page et le code doivent être de la même version. Sinon (page gardée en cache
 // par le téléphone ou par GitHub), on recharge une page fraîche, au plus 3 fois.
-const APP_VERSION = 71;
+const APP_VERSION = 72;
 try {
   const meta = document.querySelector('meta[name="balise-version"]');
   const pageV = meta ? +meta.content : 0;
@@ -421,7 +421,7 @@ function closeTrack(quiet) {
   if (!track) return;
   const savedText = store.get('gpx');
   if (nav) stopNav();
-  track = null; progress = null; done = null; clearRejoin(); $('loopBar').hidden = true;
+  track = null; progress = null; done = null; clearRejoin(); $('loopBar').hidden = true; $('rtBar').hidden = true;
   setSrc('track', EMPTY); setSrc('turn', EMPTY);
   startMk.remove(); endMk.remove();
   store.set('gpx', '');
@@ -2014,6 +2014,268 @@ $('lbKeep').onclick = async () => { if (!loopRes || !track) return; await saveRe
 $('lbGo').onclick = () => { $('loopBar').hidden = true; startNav(); };
 
 // =====================================================================
+// Parcours balisés autour de moi : sentiers (GR, GRP, PR) et véloroutes (EuroVelo, nationales,
+// régionales, boucles, VTT) recensés par OpenStreetMap. Pour un grand itinéraire, on ne charge
+// que la portion autour du point choisi.
+// =====================================================================
+const RT_CAT = {
+  gr:  { rank: 0, badge: 'GR', label: 'Grande randonnée' },
+  grp: { rank: 1, badge: 'GRP', label: 'Randonnée régionale' },
+  pr:  { rank: 2, badge: 'PR', label: 'Randonnée locale' },
+  ev:  { rank: 0, badge: 'EuroVelo', label: 'Véloroute européenne' },
+  vn:  { rank: 1, badge: 'Véloroute', label: 'Véloroute nationale' },
+  vr:  { rank: 2, badge: 'Véloroute', label: 'Véloroute régionale' },
+  vl:  { rank: 3, badge: 'Boucle vélo', label: 'Circuit vélo local' },
+  vtt: { rank: 4, badge: 'VTT', label: 'Circuit VTT' },
+};
+function rtCat(t) {
+  const n = t.network || '';
+  if (t.route === 'mtb') return 'vtt';
+  if (t.route === 'bicycle') return n === 'icn' ? 'ev' : n === 'ncn' ? 'vn' : n === 'rcn' ? 'vr' : 'vl';
+  return n === 'iwn' || n === 'nwn' ? 'gr' : n === 'rwn' ? 'grp' : 'pr';
+}
+function rtName(t) {
+  const name = t['name:fr'] || t.name || '', ref = t.ref || '';
+  if (!name) return ref || 'Itinéraire sans nom';
+  return ref && !name.replace(/\s/g, '').toLowerCase().includes(ref.replace(/\s/g, '').toLowerCase()) ? `${ref} · ${name}` : name;
+}
+// distance annoncée par OSM (« 12 km », « 12.5 », « 8 mi »), en mètres
+function rtTagDist(t) {
+  const m = String(t.distance || '').replace(',', '.').match(/^\s*([\d.]+)\s*(km|mi|m)?\s*$/i);
+  if (!m) return null;
+  const v = +m[1], u = (m[2] || 'km').toLowerCase();
+  return u === 'mi' ? v * 1609 : u === 'm' ? v : v * 1000;
+}
+// relations OSM → liste triée (grands itinéraires d'abord, puis du plus proche au plus loin)
+function rtListFrom(json, at) {
+  const out = [], seen = new Set();
+  for (const e of (json && json.elements) || []) {
+    if (e.type !== 'relation' || !e.tags || seen.has(e.id)) continue;
+    seen.add(e.id);
+    const t = e.tags, cat = rtCat(t), b = e.bounds;
+    if (t.state === 'proposed' || t.disused || t.abandoned) continue;
+    let near = null, big = false;
+    if (b) {
+      const diag = hav({ lat: b.minlat, lon: b.minlon }, { lat: b.maxlat, lon: b.maxlon });
+      big = diag > 40000;
+      const inside = at.lat >= b.minlat && at.lat <= b.maxlat && at.lon >= b.minlon && at.lon <= b.maxlon;
+      near = big || inside ? 0 : hav(at, { lat: (b.minlat + b.maxlat) / 2, lon: (b.minlon + b.maxlon) / 2 });
+    }
+    out.push({ id: e.id, tags: t, cat, name: rtName(t), dist: rtTagDist(t), near, big, bounds: b });
+  }
+  out.sort((a, b) => RT_CAT[a.cat].rank - RT_CAT[b.cat].rank || (a.near ?? 1e9) - (b.near ?? 1e9) || a.name.localeCompare(b.name, 'fr'));
+  return out;
+}
+// Les chemins d'une relation (dans le désordre, parfois coupés au bord de la zone) → une trace continue.
+// On part du plus long morceau et on raccroche à chaque bout le morceau le plus proche
+// (d'abord bout à bout, puis avec un petit trou), jusqu'à ne plus rien trouver. On garde la plus longue chaîne.
+const RT_SKIP_ROLES = /^(alternative|excursion|approach|connection|link|backward|platform|stop|guidepost)$/;
+function rtSegments(rel) {
+  const segs = [];
+  for (const m of rel.members || []) {
+    if (m.type !== 'way' || !m.geometry || RT_SKIP_ROLES.test(m.role || '')) continue;
+    let cur = [];
+    for (const g of m.geometry) {
+      if (!g || g.lat == null) { if (cur.length > 1) segs.push(cur); cur = []; continue; }
+      cur.push({ lat: g.lat, lon: g.lon });
+    }
+    if (cur.length > 1) segs.push(cur);
+  }
+  return segs;
+}
+function rtLen(pts) { let d = 0; for (let i = 1; i < pts.length; i++) d += hav(pts[i - 1], pts[i]); return d; }
+function rtChain(segs) {
+  const left = segs.map(s => ({ pts: s, len: rtLen(s), used: false }));
+  const chains = [];
+  const nearest = (end, tol) => {
+    let best = null;
+    for (const s of left) {
+      if (s.used) continue;
+      const a = hav(end, s.pts[0]), b = hav(end, s.pts[s.pts.length - 1]), d = Math.min(a, b);
+      if (d <= tol && (!best || d < best.d - 0.5 || (Math.abs(d - best.d) <= 0.5 && s.len > best.s.len))) best = { s, d, rev: b < a };
+    }
+    return best;
+  };
+  for (;;) {
+    let seed = null;
+    for (const s of left) if (!s.used && (!seed || s.len > seed.len)) seed = s;
+    if (!seed) break;
+    seed.used = true;
+    let chain = seed.pts.slice(), len = seed.len;
+    for (const atEnd of [true, false]) {
+      for (;;) {
+        const end = atEnd ? chain[chain.length - 1] : chain[0];
+        const f = nearest(end, 25) || nearest(end, 150);
+        if (!f) break;
+        f.s.used = true; len += f.s.len + f.d;
+        let p = f.rev ? f.s.pts.slice().reverse() : f.s.pts.slice(); // p commence près de « end »
+        if (atEnd) chain = chain.concat(f.d < 1 ? p.slice(1) : p);
+        else { p = p.reverse(); chain = (f.d < 1 ? p.slice(0, -1) : p).concat(chain); }
+      }
+    }
+    chains.push({ pts: chain, len });
+  }
+  chains.sort((a, b) => b.len - a.len);
+  return chains.length ? chains[0] : null;
+}
+// un itinéraire linéaire part du bout le plus proche du point de départ
+function rtOrient(pts, at) {
+  if (!at || pts.length < 2) return pts;
+  const a = pts[0], b = pts[pts.length - 1];
+  if (hav(a, b) < 300) return pts; // boucle
+  return hav(at, b) < hav(at, a) ? pts.slice().reverse() : pts;
+}
+// altitudes IGN (service public, France précise, reste du monde approximatif) : on interroge
+// au plus ~500 points régulièrement espacés, puis on interpole. En cas d'échec : trace sans altitude.
+async function rtElevate(pts) {
+  const n = pts.length, step = Math.max(1, Math.ceil(n / 500)), idx = [];
+  for (let i = 0; i < n; i += step) idx.push(i);
+  if (idx[idx.length - 1] !== n - 1) idx.push(n - 1);
+  const z = new Array(n).fill(null);
+  try {
+    for (let k = 0; k < idx.length; k += 100) {
+      const part = idx.slice(k, k + 100);
+      const url = 'https://data.geopf.fr/altimetrie/1.0/calcul/alti/rest/elevation.json?resource=ign_rge_alti_wld&delimiter=%7C&zonly=true&indent=false'
+        + '&lon=' + part.map(i => pts[i].lon.toFixed(6)).join('%7C') + '&lat=' + part.map(i => pts[i].lat.toFixed(6)).join('%7C');
+      const ctrl = new AbortController(), timer = setTimeout(() => ctrl.abort(), 20000);
+      let j;
+      try { const r = await fetch(url, { signal: ctrl.signal }); if (!r.ok) return pts; j = await r.json(); } finally { clearTimeout(timer); }
+      const els = (j && j.elevations) || [];
+      if (els.length !== part.length) return pts;
+      part.forEach((i, q) => { const v = typeof els[q] === 'object' && els[q] ? els[q].z : els[q]; z[i] = typeof v === 'number' && v > -1000 ? v : null; });
+    }
+  } catch { return pts; }
+  // interpolation à la distance entre deux points connus
+  const cum = [0]; for (let i = 1; i < n; i++) cum.push(cum[i - 1] + hav(pts[i - 1], pts[i]));
+  let prev = -1;
+  for (let i = 0; i < n; i++) {
+    if (z[i] == null) continue;
+    if (prev >= 0) for (let k = prev + 1; k < i; k++) { const f = cum[i] > cum[prev] ? (cum[k] - cum[prev]) / (cum[i] - cum[prev]) : 0; z[k] = z[prev] + (z[i] - z[prev]) * f; }
+    prev = i;
+  }
+  if (z.filter(v => v != null).length < n * 0.8) return pts;
+  return pts.map((p, i) => ({ lat: p.lat, lon: p.lon, ele: z[i] != null ? Math.round(z[i] * 10) / 10 : null }));
+}
+
+const rt = { at: null, fromMap: false, list: null, key: '', res: null, busy: false };
+const rtBike = () => profile === 'trekking';
+const rtRadius = () => rtBike() ? 30000 : 15000; // zone de recherche
+const rtCut = () => rtBike() ? 40000 : 15000; // portion chargée d'un grand itinéraire (rayon)
+function rtBox(c, r) {
+  const dLat = r / 111320, dLon = r / (111320 * Math.cos(rad(c.lat)));
+  return [c.lat - dLat, c.lon - dLon, c.lat + dLat, c.lon + dLon].map(v => v.toFixed(5)).join(',');
+}
+function rtHere() {
+  if (!rt.fromMap && me) return { lat: me.lat, lon: me.lon };
+  const c = map.getCenter(); return { lat: c.lat, lon: c.lng };
+}
+function rtUI() {
+  const bike = rtBike();
+  $('rtFoot').classList.toggle('on', !bike); $('rtBike').classList.toggle('on', bike);
+  $('rtFromMe').classList.toggle('on', !rt.fromMap); $('rtFromMap').classList.toggle('on', rt.fromMap);
+}
+function openRoutes() {
+  if (nav) { toast('Quitte d\'abord la navigation.'); return; }
+  closeDest(); closeLib(); toggleMore(false); $('loopBar').hidden = true; $('rtBar').hidden = true;
+  rtUI(); $('routes').hidden = false;
+  if (!me && !rt.fromMap && startGPS()) {
+    // on laisse quelques secondes au GPS ; sans position, on cherche autour du centre de la carte
+    $('rtList').innerHTML = ''; $('rtStatus').textContent = 'Recherche de ta position…';
+    waitFix(10000).then(() => { if (!$('routes').hidden) rtSearch(); });
+    return;
+  }
+  const at = rtHere(), key = profile + ':' + at.lat.toFixed(2) + ',' + at.lon.toFixed(2);
+  if (rt.list && rt.key === key) rtRender(); else rtSearch();
+}
+function closeRoutes() { $('routes').hidden = true; }
+async function rtSearch() {
+  if (rt.busy) return;
+  const at = rtHere(), bike = rtBike();
+  rt.at = at; rt.key = profile + ':' + at.lat.toFixed(2) + ',' + at.lon.toFixed(2); rt.list = null;
+  $('rtList').innerHTML = '';
+  $('rtStatus').textContent = `Recherche des parcours ${bike ? 'vélo' : 'à pied'} dans un rayon de ${rtRadius() / 1000} km${rt.fromMap || !me ? ' autour du centre de la carte' : ' autour de toi'}…`;
+  const sel = bike ? '["route"~"^(bicycle|mtb)$"]' : '["route"~"^(hiking|foot)$"]';
+  const q = `[out:json][timeout:60];relation["type"="route"]${sel}(${rtBox(at, rtRadius())});out tags bb;`;
+  rt.busy = true;
+  try {
+    const json = await overpass(q, 2, secs => { $('rtStatus').textContent = `Le serveur OpenStreetMap demande d'attendre ${secs} s…`; });
+    rt.list = rtListFrom(json, at);
+    rtRender();
+  } catch (e) {
+    $('rtStatus').textContent = navigator.onLine === false ? 'Pas de réseau : la recherche de parcours balisés a besoin d\'une connexion.' : `Recherche impossible (${e.message}). Réessaie dans un instant.`;
+  } finally { rt.busy = false; }
+}
+function rtRender() {
+  const list = $('rtList'), items = rt.list || [];
+  list.innerHTML = '';
+  $('rtStatus').textContent = items.length ? `${items.length} parcours balisé${items.length > 1 ? 's' : ''} ${rt.fromMap || !me ? 'autour du centre de la carte' : 'autour de toi'}. Touche-en un pour le voir.`
+    : `Aucun parcours ${rtBike() ? 'vélo' : 'à pied'} balisé recensé ici. Essaie l'autre mode, ou déplace la carte et choisis « Autour de la carte ».`;
+  for (const it of items.slice(0, 80)) {
+    const li = document.createElement('li');
+    const b = document.createElement('button'); b.className = 'lib-item';
+    b.innerHTML = '<b></b><span></span>';
+    const c = RT_CAT[it.cat];
+    b.querySelector('b').textContent = it.name;
+    const bits = [c.badge === 'Véloroute' || c.badge === 'Boucle vélo' ? c.label : `${c.badge} · ${c.label}`];
+    if (it.dist) bits.push(fmtDist(it.dist));
+    bits.push(it.big ? 'portion autour de toi' : it.near ? 'à ' + fmtDist(it.near) : 'passe tout près');
+    b.querySelector('span').textContent = bits.join(' · ');
+    b.onclick = () => rtOpen(it);
+    li.appendChild(b); list.appendChild(li);
+  }
+}
+async function rtOpen(it) {
+  if (rt.busy) return;
+  rt.busy = true; closeRoutes();
+  const t0 = Date.now(), tick = setInterval(() => toast(`Chargement du parcours… ${Math.round((Date.now() - t0) / 1000)} s`, 3000), 1000);
+  toast('Chargement du parcours…', 3000);
+  try {
+    const cut = it.big ? `(${rtBox(rt.at, rtCut())})` : '';
+    const json = await overpass(`[out:json][timeout:90];relation(${it.id});out geom${cut};`, 2, secs => toast(`Le serveur OpenStreetMap demande d'attendre ${secs} s`, 4000));
+    const rel = ((json && json.elements) || []).find(e => e.type === 'relation');
+    const ch = rel && rtChain(rtSegments(rel));
+    if (!ch || ch.pts.length < 2 || ch.len < 100) { clearInterval(tick); toast('Ce parcours n\'a pas de tracé exploitable dans OpenStreetMap.', 5000); $('routes').hidden = false; return; }
+    const partial = it.big || (it.dist && ch.len < it.dist * 0.8);
+    const pts = await rtElevate(rtOrient(ch.pts, rt.at));
+    clearInterval(tick);
+    rtShow(it, pts, partial);
+  } catch (e) {
+    clearInterval(tick);
+    toast(navigator.onLine === false ? 'Pas de réseau : impossible de charger le parcours.' : `Chargement impossible (${e.message}).`, 5000);
+    $('routes').hidden = false;
+  } finally { rt.busy = false; }
+}
+function rtShow(it, pts, partial) {
+  const name = it.name + (partial ? ' (portion)' : '');
+  const text = loopGPX(pts, name);
+  loadText(text, false); store.set('gpx', text);
+  const p = makePath(pts, ''), est = loopEst(p);
+  rt.res = { text, name };
+  $('rtbTitle').textContent = name;
+  $('rtbSub').textContent = `${RT_CAT[it.cat].label} · ${fmtDist(p.total)}${p.hasEle ? ' · D+ ' + fmtM(p.totalUp) : ''} · environ ${fmtDur(est)}` + (partial ? ` · portion autour ${rt.fromMap || !me ? 'du point choisi' : 'de toi'}` : '');
+  $('rtbKeep').textContent = 'Garder'; $('rtbKeep').disabled = false;
+  $('rtBar').hidden = false;
+  setTimeout(() => { try { map.fitBounds(boundsOf([pts]), { padding: { top: 80, bottom: $('sheet').offsetHeight + $('rtBar').offsetHeight + 30, left: 30, right: 70 }, bearing: 0, pitch: 0, duration: 600 }); } catch {} }, 350);
+}
+$('destRoutes').onclick = openRoutes; $('libRoutes').onclick = openRoutes;
+$('rtClose').onclick = closeRoutes;
+$('routes').onclick = e => { if (e.target === $('routes')) closeRoutes(); };
+$('rtFoot').onclick = () => { if (!rtBike()) return; setProfile('hiking-mountain', true); rtUI(); rtSearch(); };
+$('rtBike').onclick = () => { if (rtBike()) return; setProfile('trekking', true); rtUI(); rtSearch(); };
+$('rtFromMe').onclick = () => {
+  if (!rt.fromMap) return;
+  rt.fromMap = false; rtUI();
+  if (me) { rtSearch(); return; }
+  if (!startGPS()) return;
+  $('rtStatus').textContent = 'Recherche de ta position…';
+  waitFix(20000).then(pos => { if (pos) rtSearch(); else $('rtStatus').textContent = 'Position GPS introuvable : choisis « Autour de la carte ».'; });
+};
+$('rtFromMap').onclick = () => { if (rt.fromMap) { rtSearch(); return; } rt.fromMap = true; rtUI(); rtSearch(); };
+$('rtbBack').onclick = () => { $('rtBar').hidden = true; openRoutes(); };
+$('rtbKeep').onclick = async () => { if (!rt.res || !track) return; await saveRecent(track, rt.res.text); $('rtbKeep').textContent = 'Gardé ✓'; $('rtbKeep').disabled = true; toast('Parcours gardé dans « Ouvrir un GPX »', 3000); };
+$('rtbGo').onclick = () => { $('rtBar').hidden = true; startNav(); };
+
+// =====================================================================
 // Tracer un itinéraire point par point : chaque toucher sur la carte ajoute un point,
 // relié au précédent par les chemins (BRouter, ou chemins téléchargés), ou en ligne droite
 // =====================================================================
@@ -3510,7 +3772,7 @@ if (saved) { try { showTrack(parseGPX(saved)); } catch { drawProfile(); } } else
 checkShared();
 stvReturn(); setTimeout(stvRetry, 8000);
 stvUI();
-const VERSION = APP_VERSION + ' · 8 oct. 2026';
+const VERSION = APP_VERSION + ' · 11 oct. 2026';
 $('note').textContent = (window.isSecureContext ? '' : 'Attention : le GPS ne fonctionne qu\'en HTTPS. ') + 'Version ' + VERSION;
 // Mises à jour : on vérifie à chaque ouverture et on recharge dès qu'une nouvelle version est prête
 // (jamais pendant une navigation ou un enregistrement : on attend la fin)
