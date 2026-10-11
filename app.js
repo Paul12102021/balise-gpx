@@ -4,7 +4,7 @@
 
 // La page et le code doivent être de la même version. Sinon (page gardée en cache
 // par le téléphone ou par GitHub), on recharge une page fraîche, au plus 3 fois.
-const APP_VERSION = 77;
+const APP_VERSION = 78;
 try {
   const meta = document.querySelector('meta[name="balise-version"]');
   const pageV = meta ? +meta.content : 0;
@@ -2233,7 +2233,7 @@ async function rtSearch() {
   const sel = bike ? '["route"~"^(bicycle|mtb)$"]' : '["route"~"^(hiking|foot)$"]';
   // l'emprise (bb) n'est demandée que pour les petits parcours : pour une EuroVelo ou un GR,
   // le serveur devrait reconstituer tout l'itinéraire à travers l'Europe, ce qui prend très longtemps
-  const q = `[out:json][timeout:40];relation["type"="route"]${sel}(${rtBox(at, rtRadius())})->.a;`
+  const q = `[out:json][timeout:25];relation["type"="route"]${sel}(${rtBox(at, rtRadius())})->.a;`
     + `relation.a["network"~"^(icn|ncn|rcn|iwn|nwn|rwn)$"]->.g;(.a; - .g;)->.p;.g out tags;.p out tags bb;`;
   rt.busy = true;
   try {
@@ -2267,6 +2267,37 @@ function rtRender() {
     li.appendChild(b); list.appendChild(li);
   }
 }
+// Tracé déjà mis en ordre par Waymarked Trails (le site qui dessine le calque) : une simple
+// demande de fichier, rapide, sans passer par les serveurs OpenStreetMap souvent saturés.
+// Pas pour les très grands itinéraires (EuroVelo, GR nationaux) : fichier trop lourd.
+function rtWmtOk(it) { return !/^(icn|iwn|nwn)$/.test(it.tags.network || ''); }
+async function rtFromWmt(it, signal) {
+  const fl = it.tags.route === 'mtb' ? 'mtb' : it.tags.route === 'bicycle' ? 'cycling' : 'hiking';
+  const ctrl = new AbortController(), timer = setTimeout(() => ctrl.abort(), 12000);
+  const onAbort = () => ctrl.abort(); if (signal) signal.addEventListener('abort', onAbort);
+  try {
+    const r = await fetch(`https://${fl}.waymarkedtrails.org/api/v1/details/relation/${it.id}/geometry/gpx`, { signal: ctrl.signal });
+    if (!r.ok) return null;
+    const doc = new DOMParser().parseFromString(await r.text(), 'application/xml'), segs = [];
+    const groups = [...doc.getElementsByTagName('trkseg'), ...doc.getElementsByTagName('rte')];
+    for (const g of groups) {
+      const pts = [...g.getElementsByTagName('trkpt'), ...g.getElementsByTagName('rtept')].map(n => ({ lat: +n.getAttribute('lat'), lon: +n.getAttribute('lon') })).filter(q => isFinite(q.lat) && isFinite(q.lon));
+      if (pts.length > 1) segs.push(pts);
+    }
+    return segs.length ? segs : null;
+  } catch { return null; } finally { clearTimeout(timer); if (signal) signal.removeEventListener('abort', onAbort); }
+}
+// portion d'un tracé dans la zone autour du point : le morceau continu qui passe le plus près du point
+function rtClip(pts, at, r) {
+  const dLat = r / 111320, dLon = r / (111320 * Math.cos(rad(at.lat)));
+  const inBox = q => Math.abs(q.lat - at.lat) <= dLat && Math.abs(q.lon - at.lon) <= dLon;
+  const runs = []; let cur = [];
+  for (const q of pts) { if (inBox(q)) cur.push(q); else if (cur.length) { runs.push(cur); cur = []; } }
+  if (cur.length) runs.push(cur);
+  let best = null, bd = Infinity;
+  for (const run of runs) { if (run.length < 2) continue; for (const q of run) { const d = hav(q, at); if (d < bd) { bd = d; best = run; } } }
+  return best || pts;
+}
 let rtLoad = null; // chargement en cours : un nouveau choix l'annule
 async function rtOpen(it) {
   if (rtLoad) rtLoad.abort();
@@ -2284,11 +2315,17 @@ async function rtOpen(it) {
   }, 1000);
   const stop = () => { clearInterval(tick); if (rtLoad === ctrl) rtLoad = null; };
   try {
-    const cut = it.big ? `(${rtBox(rt.at, rtCut())})` : '';
-    const json = await overpassFast(`[out:json][timeout:90];relation(${it.id});out geom${cut};`, secs => toast(`Serveurs OpenStreetMap très demandés : nouvel essai dans ${secs} s`, 4000), true, ctrl.signal);
+    let segs = rtWmtOk(it) ? await rtFromWmt(it, ctrl.signal) : null;
     if (ctrl.signal.aborted) throw Object.assign(new Error('annulé'), { cancel: true });
-    const rel = ((json && json.elements) || []).find(e => e.type === 'relation');
-    const ch = rel && rtChain(rtSegments(rel));
+    if (!segs) {
+      const cut = it.big ? `(${rtBox(rt.at, rtCut())})` : '';
+      const json = await overpassFast(`[out:json][timeout:25];relation(${it.id});out geom${cut};`, secs => toast(`Serveurs OpenStreetMap très demandés : nouvel essai dans ${secs} s`, 4000), true, ctrl.signal);
+      if (ctrl.signal.aborted) throw Object.assign(new Error('annulé'), { cancel: true });
+      const rel = ((json && json.elements) || []).find(e => e.type === 'relation');
+      segs = rel ? rtSegments(rel) : null;
+    }
+    const ch = segs && rtChain(segs);
+    if (ch && it.big) { ch.pts = rtClip(ch.pts, rt.at, rtCut()); ch.len = rtLen(ch.pts); }
     if (!ch || ch.pts.length < 2 || ch.len < 100) { stop(); toast('Ce parcours n\'a pas de tracé exploitable dans OpenStreetMap.', 5000); return; }
     const partial = it.big || (it.dist && ch.len < it.dist * 0.8);
     // altitudes : on les attend au plus 3 s, sinon le parcours s'affiche tout de suite et le D+ arrive ensuite
