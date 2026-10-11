@@ -4,7 +4,7 @@
 
 // La page et le code doivent être de la même version. Sinon (page gardée en cache
 // par le téléphone ou par GitHub), on recharge une page fraîche, au plus 3 fois.
-const APP_VERSION = 72;
+const APP_VERSION = 73;
 try {
   const meta = document.querySelector('meta[name="balise-version"]');
   const pageV = meta ? +meta.content : 0;
@@ -2157,6 +2157,24 @@ async function rtElevate(pts) {
   return pts.map((p, i) => ({ lat: p.lat, lon: p.lon, ele: z[i] != null ? Math.round(z[i] * 10) / 10 : null }));
 }
 
+// Le serveur principal d'OpenStreetMap fait souvent patienter : pour ces petites demandes,
+// on essaie d'abord un serveur libre tout de suite, sinon des serveurs miroirs, et en dernier recours on patiente.
+const OVERPASS_MIRRORS = ['https://overpass.private.coffee/api/interpreter', 'https://overpass.kumi.systems/api/interpreter'];
+async function overpassFast(q, onWait) {
+  const post = async (url, ms) => {
+    const ctrl = new AbortController(), timer = setTimeout(() => ctrl.abort(), ms);
+    try {
+      const r = await fetch(url, { method: 'POST', body: 'data=' + encodeURIComponent(q), headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, signal: ctrl.signal });
+      return r.ok ? await r.json() : null;
+    } catch { return null; } finally { clearTimeout(timer); }
+  };
+  let free = false;
+  try { free = /\d+ slots? available now/.test(await (await fetch('https://overpass-api.de/api/status', { cache: 'no-store' })).text()); } catch {}
+  if (free) { const j = await post(OVERPASS, 60000); if (j) return j; }
+  for (const m of OVERPASS_MIRRORS) { const j = await post(m, 45000); if (j) return j; }
+  return overpass(q, 2, onWait);
+}
+const rtCache = new Map(); // recherches déjà faites (mode + lieu) : pas de nouvelle demande en changeant de mode
 const rt = { at: null, fromMap: false, list: null, key: '', res: null, busy: false };
 const rtBike = () => profile === 'trekking';
 const rtRadius = () => rtBike() ? 30000 : 15000; // zone de recherche
@@ -2198,8 +2216,9 @@ async function rtSearch() {
   const q = `[out:json][timeout:60];relation["type"="route"]${sel}(${rtBox(at, rtRadius())});out tags bb;`;
   rt.busy = true;
   try {
-    const json = await overpass(q, 2, secs => { $('rtStatus').textContent = `Le serveur OpenStreetMap demande d'attendre ${secs} s…`; });
-    rt.list = rtListFrom(json, at);
+    if (rtCache.has(rt.key)) { rt.list = rtCache.get(rt.key); rtRender(); return; }
+    const json = await overpassFast(q, secs => { $('rtStatus').textContent = `Serveurs OpenStreetMap très demandés : nouvel essai dans ${secs} s…`; });
+    rt.list = rtListFrom(json, at); rtCache.set(rt.key, rt.list);
     rtRender();
   } catch (e) {
     $('rtStatus').textContent = navigator.onLine === false ? 'Pas de réseau : la recherche de parcours balisés a besoin d\'une connexion.' : `Recherche impossible (${e.message}). Réessaie dans un instant.`;
@@ -2231,7 +2250,7 @@ async function rtOpen(it) {
   toast('Chargement du parcours…', 3000);
   try {
     const cut = it.big ? `(${rtBox(rt.at, rtCut())})` : '';
-    const json = await overpass(`[out:json][timeout:90];relation(${it.id});out geom${cut};`, 2, secs => toast(`Le serveur OpenStreetMap demande d'attendre ${secs} s`, 4000));
+    const json = await overpassFast(`[out:json][timeout:90];relation(${it.id});out geom${cut};`, secs => toast(`Serveurs OpenStreetMap très demandés : nouvel essai dans ${secs} s`, 4000));
     const rel = ((json && json.elements) || []).find(e => e.type === 'relation');
     const ch = rel && rtChain(rtSegments(rel));
     if (!ch || ch.pts.length < 2 || ch.len < 100) { clearInterval(tick); toast('Ce parcours n\'a pas de tracé exploitable dans OpenStreetMap.', 5000); $('routes').hidden = false; return; }
