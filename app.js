@@ -4,7 +4,7 @@
 
 // La page et le code doivent être de la même version. Sinon (page gardée en cache
 // par le téléphone ou par GitHub), on recharge une page fraîche, au plus 3 fois.
-const APP_VERSION = 86;
+const APP_VERSION = 87;
 try {
   const meta = document.querySelector('meta[name="balise-version"]');
   const pageV = meta ? +meta.content : 0;
@@ -2620,7 +2620,12 @@ function rtCheckMoved() {
 }
 map.on('moveend', rtCheckMoved);
 $('rtHere').onclick = () => { $('rtHere').hidden = true; rt.fromMap = true; rtUI(); rtSearch(); };
-$('rtbBack').onclick = () => { $('rtBar').hidden = true; if (rtMapOn) { rtSheetOpen(true); rtRender(); } else openRoutes(); };
+// « Autres parcours » : le parcours regardé est retiré de la carte (il reste dans « Ouvrir un GPX » s'il a été gardé)
+$('rtbBack').onclick = () => {
+  $('rtBar').hidden = true;
+  if (rtMapOn) { rtSheetOpen(true); rtRender(); } else openRoutes();
+  if (track && rt.res && track.name.startsWith(rt.res.name)) closeTrack(true);
+};
 $('rtbKeep').onclick = async () => { if (!rt.res || !track) return; await saveRecent(track, rt.res.text); $('rtbKeep').textContent = 'Gardé ✓'; $('rtbKeep').disabled = true; toast('Parcours gardé dans « Ouvrir un GPX »', 3000); };
 $('rtbGo').onclick = () => { $('rtBar').hidden = true; startNav(); };
 
