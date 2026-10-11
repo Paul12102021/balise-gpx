@@ -4,7 +4,7 @@
 
 // La page et le code doivent être de la même version. Sinon (page gardée en cache
 // par le téléphone ou par GitHub), on recharge une page fraîche, au plus 3 fois.
-const APP_VERSION = 81;
+const APP_VERSION = 82;
 try {
   const meta = document.querySelector('meta[name="balise-version"]');
   const pageV = meta ? +meta.content : 0;
@@ -422,6 +422,8 @@ function closeTrack(quiet) {
   const savedText = store.get('gpx');
   if (nav) stopNav();
   track = null; progress = null; done = null; clearRejoin(); $('loopBar').hidden = true; $('rtBar').hidden = true;
+  // parcours balisés : on quitte leur affichage avec la trace (sauf si leur panneau est ouvert)
+  if (rtMapOn && $('routes').hidden) rtHideMap();
   setSrc('track', EMPTY); setSrc('turn', EMPTY);
   startMk.remove(); endMk.remove();
   store.set('gpx', '');
@@ -1097,6 +1099,8 @@ map.on('rotate', () => { if (nav && (!track || (rejoin && rejoin.straight))) gui
 
 async function startNav(free = false) {
   if (!track && !free) { openDest(); return; }
+  // en navigation, la carte ne montre que ta trace : les parcours balisés sont retirés
+  if (rtMapOn) { rtHideMap(); closeRoutes(); }
   if (!startGPS()) return;
   nav = true; arrived = false; isOff = false; offCount = 0;
   navTrackId = track ? track.id : null;
@@ -2594,7 +2598,7 @@ $('btnNorth').onclick = () => {
 // ---------- Parcours balisés dessinés sur la carte (calque Waymarked Trails, données OpenStreetMap) ----------
 // Un calque d'images transparent : aussi rapide que le fond de carte, rien à calculer.
 // Toucher une ligne cherche quels parcours passent là (petite demande) et les propose.
-let rtMapOn = false;
+var rtMapOn = false; // var : lu aussi par du code placé plus haut
 const WMT_ATTR = 'Parcours <a href="https://waymarkedtrails.org" target="_blank">© waymarkedtrails.org</a> (CC BY-SA)';
 async function rtOverlay(on) {
   await ready;
