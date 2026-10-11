@@ -4,7 +4,7 @@
 
 // La page et le code doivent être de la même version. Sinon (page gardée en cache
 // par le téléphone ou par GitHub), on recharge une page fraîche, au plus 3 fois.
-const APP_VERSION = 73;
+const APP_VERSION = 74;
 try {
   const meta = document.querySelector('meta[name="balise-version"]');
   const pageV = meta ? +meta.content : 0;
@@ -2128,22 +2128,25 @@ function rtOrient(pts, at) {
 // altitudes IGN (service public, France précise, reste du monde approximatif) : on interroge
 // au plus ~500 points régulièrement espacés, puis on interpole. En cas d'échec : trace sans altitude.
 async function rtElevate(pts) {
-  const n = pts.length, step = Math.max(1, Math.ceil(n / 500)), idx = [];
+  const n = pts.length, step = Math.max(1, Math.ceil(n / 400)), idx = [];
   for (let i = 0; i < n; i += step) idx.push(i);
   if (idx[idx.length - 1] !== n - 1) idx.push(n - 1);
   const z = new Array(n).fill(null);
-  try {
-    for (let k = 0; k < idx.length; k += 100) {
-      const part = idx.slice(k, k + 100);
-      const url = 'https://data.geopf.fr/altimetrie/1.0/calcul/alti/rest/elevation.json?resource=ign_rge_alti_wld&delimiter=%7C&zonly=true&indent=false'
-        + '&lon=' + part.map(i => pts[i].lon.toFixed(6)).join('%7C') + '&lat=' + part.map(i => pts[i].lat.toFixed(6)).join('%7C');
-      const ctrl = new AbortController(), timer = setTimeout(() => ctrl.abort(), 20000);
-      let j;
-      try { const r = await fetch(url, { signal: ctrl.signal }); if (!r.ok) return pts; j = await r.json(); } finally { clearTimeout(timer); }
-      const els = (j && j.elevations) || [];
-      if (els.length !== part.length) return pts;
+  // toutes les demandes partent en même temps
+  const one = async part => {
+    const url = 'https://data.geopf.fr/altimetrie/1.0/calcul/alti/rest/elevation.json?resource=ign_rge_alti_wld&delimiter=%7C&zonly=true&indent=false'
+      + '&lon=' + part.map(i => pts[i].lon.toFixed(6)).join('%7C') + '&lat=' + part.map(i => pts[i].lat.toFixed(6)).join('%7C');
+    const ctrl = new AbortController(), timer = setTimeout(() => ctrl.abort(), 15000);
+    try {
+      const r = await fetch(url, { signal: ctrl.signal }); if (!r.ok) throw new Error('alti');
+      const els = ((await r.json()) || {}).elevations || [];
+      if (els.length !== part.length) throw new Error('alti');
       part.forEach((i, q) => { const v = typeof els[q] === 'object' && els[q] ? els[q].z : els[q]; z[i] = typeof v === 'number' && v > -1000 ? v : null; });
-    }
+    } finally { clearTimeout(timer); }
+  };
+  try {
+    const parts = []; for (let k = 0; k < idx.length; k += 100) parts.push(idx.slice(k, k + 100));
+    await Promise.all(parts.map(one));
   } catch { return pts; }
   // interpolation à la distance entre deux points connus
   const cum = [0]; for (let i = 1; i < n; i++) cum.push(cum[i - 1] + hav(pts[i - 1], pts[i]));
@@ -2160,7 +2163,7 @@ async function rtElevate(pts) {
 // Le serveur principal d'OpenStreetMap fait souvent patienter : pour ces petites demandes,
 // on essaie d'abord un serveur libre tout de suite, sinon des serveurs miroirs, et en dernier recours on patiente.
 const OVERPASS_MIRRORS = ['https://overpass.private.coffee/api/interpreter', 'https://overpass.kumi.systems/api/interpreter'];
-async function overpassFast(q, onWait) {
+async function overpassFast(q, onWait, mirrorFirst) {
   const post = async (url, ms) => {
     const ctrl = new AbortController(), timer = setTimeout(() => ctrl.abort(), ms);
     try {
@@ -2168,17 +2171,18 @@ async function overpassFast(q, onWait) {
       return r.ok ? await r.json() : null;
     } catch { return null; } finally { clearTimeout(timer); }
   };
+  if (mirrorFirst) { const j = await post(OVERPASS_MIRRORS[0], 45000); if (j) return j; }
   let free = false;
   try { free = /\d+ slots? available now/.test(await (await fetch('https://overpass-api.de/api/status', { cache: 'no-store' })).text()); } catch {}
   if (free) { const j = await post(OVERPASS, 60000); if (j) return j; }
-  for (const m of OVERPASS_MIRRORS) { const j = await post(m, 45000); if (j) return j; }
+  for (const m of OVERPASS_MIRRORS.slice(mirrorFirst ? 1 : 0)) { const j = await post(m, 45000); if (j) return j; }
   return overpass(q, 2, onWait);
 }
 const rtCache = new Map(); // recherches déjà faites (mode + lieu) : pas de nouvelle demande en changeant de mode
 const rt = { at: null, fromMap: false, list: null, key: '', res: null, busy: false };
 const rtBike = () => profile === 'trekking';
 const rtRadius = () => rtBike() ? 30000 : 15000; // zone de recherche
-const rtCut = () => rtBike() ? 40000 : 15000; // portion chargée d'un grand itinéraire (rayon)
+const rtCut = () => rtBike() ? 25000 : 12000; // portion chargée d'un grand itinéraire (rayon)
 function rtBox(c, r) {
   const dLat = r / 111320, dLon = r / (111320 * Math.cos(rad(c.lat)));
   return [c.lat - dLat, c.lon - dLon, c.lat + dLat, c.lon + dLon].map(v => v.toFixed(5)).join(',');
@@ -2250,30 +2254,37 @@ async function rtOpen(it) {
   toast('Chargement du parcours…', 3000);
   try {
     const cut = it.big ? `(${rtBox(rt.at, rtCut())})` : '';
-    const json = await overpassFast(`[out:json][timeout:90];relation(${it.id});out geom${cut};`, secs => toast(`Serveurs OpenStreetMap très demandés : nouvel essai dans ${secs} s`, 4000));
+    const json = await overpassFast(`[out:json][timeout:90];relation(${it.id});out geom${cut};`, secs => toast(`Serveurs OpenStreetMap très demandés : nouvel essai dans ${secs} s`, 4000), true);
     const rel = ((json && json.elements) || []).find(e => e.type === 'relation');
     const ch = rel && rtChain(rtSegments(rel));
     if (!ch || ch.pts.length < 2 || ch.len < 100) { clearInterval(tick); toast('Ce parcours n\'a pas de tracé exploitable dans OpenStreetMap.', 5000); $('routes').hidden = false; return; }
     const partial = it.big || (it.dist && ch.len < it.dist * 0.8);
-    const pts = await rtElevate(rtOrient(ch.pts, rt.at));
+    // altitudes : on les attend au plus 3 s, sinon le parcours s'affiche tout de suite et le D+ arrive ensuite
+    const flat = rtOrient(ch.pts, rt.at), elevP = rtElevate(flat);
+    const pts = await Promise.race([elevP, new Promise(r => setTimeout(() => r(null), 3000))]);
     clearInterval(tick);
-    rtShow(it, pts, partial);
+    if (pts) { rtShow(it, pts, partial); return; }
+    rtShow(it, flat, partial);
+    const shown = rt.res;
+    elevP.then(e => { if (e !== flat && rt.res === shown && !nav) rtShow(it, e, partial, true); });
   } catch (e) {
     clearInterval(tick);
     toast(navigator.onLine === false ? 'Pas de réseau : impossible de charger le parcours.' : `Chargement impossible (${e.message}).`, 5000);
     $('routes').hidden = false;
   } finally { rt.busy = false; }
 }
-function rtShow(it, pts, partial) {
+function rtShow(it, pts, partial, update) {
   const name = it.name + (partial ? ' (portion)' : '');
   const text = loopGPX(pts, name);
-  loadText(text, false); store.set('gpx', text);
+  if (update) { try { showTrack(parseGPX(text)); } catch { return; } } else loadText(text, false);
+  store.set('gpx', text);
   const p = makePath(pts, ''), est = loopEst(p);
   rt.res = { text, name };
   $('rtbTitle').textContent = name;
   $('rtbSub').textContent = `${RT_CAT[it.cat].label} · ${fmtDist(p.total)}${p.hasEle ? ' · D+ ' + fmtM(p.totalUp) : ''} · environ ${fmtDur(est)}` + (partial ? ` · portion autour ${rt.fromMap || !me ? 'du point choisi' : 'de toi'}` : '');
-  $('rtbKeep').textContent = 'Garder'; $('rtbKeep').disabled = false;
+  if (!update) { $('rtbKeep').textContent = 'Garder'; $('rtbKeep').disabled = false; }
   $('rtBar').hidden = false;
+  if (update) return;
   setTimeout(() => { try { map.fitBounds(boundsOf([pts]), { padding: { top: 80, bottom: $('sheet').offsetHeight + $('rtBar').offsetHeight + 30, left: 30, right: 70 }, bearing: 0, pitch: 0, duration: 600 }); } catch {} }, 350);
 }
 $('destRoutes').onclick = openRoutes; $('libRoutes').onclick = openRoutes;
