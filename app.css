@@ -461,3 +461,7 @@ body.rtmode .fab-col { top: auto !important; bottom: calc(var(--rt-peek, 140px) 
 /* le titre reste visible en haut quand on fait défiler la liste, pour pouvoir toujours glisser */
 #routes.rt-sheet .rt-grab { position: sticky; top: -6px; z-index: 2; background: var(--panel); margin: -6px -16px 0; padding: 6px 16px 6px; }
 #routes.rt-sheet.collapsed .lib-panel { overflow: hidden; }
+.rt-here { position: fixed; z-index: 26; left: 50%; transform: translateX(-50%); top: calc(env(safe-area-inset-top, 0px) + 74px);
+  background: var(--panel); color: var(--ink); border: 1px solid var(--line); border-radius: 20px; padding: 10px 16px;
+  font: 600 14px var(--font); box-shadow: 0 4px 16px rgba(0,0,0,.25); cursor: pointer; white-space: nowrap; }
+body.nav .rt-here { display: none; }
