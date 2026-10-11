@@ -438,3 +438,8 @@ body.plan .plan-tools { display: grid; grid-template-columns: repeat(5, 1fr); ga
 .pt.go { background: var(--go); color: #fff; }
 .pt:disabled { opacity: .35; }
 body.plan .hud, body.plan .sheet, body.plan .fab-col, body.plan .loop-bar { display: none !important; }
+.plan-wp { width: 18px; height: 18px; border-radius: 50%; background: #fff; border: 3px solid #7B3FE4; box-shadow: 0 1px 4px rgba(0,0,0,.35); cursor: grab; touch-action: none; }
+.plan-wp::after { content: ""; position: absolute; inset: -12px; border-radius: 50%; } /* zone de toucher plus large */
+.plan-wp.start { background: #2F5E45; }
+.plan-wp.end { background: #C62828; width: 22px; height: 22px; }
+.plan-wp.drag { transform-origin: center; box-shadow: 0 0 0 8px rgba(123,63,228,.25); }

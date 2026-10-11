@@ -4,7 +4,7 @@
 
 // La page et le code doivent être de la même version. Sinon (page gardée en cache
 // par le téléphone ou par GitHub), on recharge une page fraîche, au plus 3 fois.
-const APP_VERSION = 70;
+const APP_VERSION = 71;
 try {
   const meta = document.querySelector('meta[name="balise-version"]');
   const pageV = meta ? +meta.content : 0;
@@ -2018,7 +2018,57 @@ $('lbGo').onclick = () => { $('loopBar').hidden = true; startNav(); };
 // relié au précédent par les chemins (BRouter, ou chemins téléchargés), ou en ligne droite
 // =====================================================================
 var planning = false;
-const plan = { wps: [], segs: [], straight: false, queue: Promise.resolve(), busy: 0 };
+const plan = { wps: [], segs: [], straight: false, queue: Promise.resolve(), busy: 0, mks: [], dragging: -1 };
+// points déplaçables : un marqueur par point (glisser pour déplacer, toucher pour supprimer)
+function planMarkers() {
+  while (plan.mks.length > plan.wps.length) plan.mks.pop().remove();
+  while (plan.mks.length < plan.wps.length) {
+    const el = document.createElement('div'); el.className = 'plan-wp';
+    const mk = new maplibregl.Marker({ element: el, draggable: true });
+    mk.on('dragstart', () => { plan.dragging = plan.mks.indexOf(mk); el.classList.add('drag'); });
+    mk.on('dragend', () => {
+      const k = plan.mks.indexOf(mk); el.classList.remove('drag'); plan.dragging = -1;
+      if (k < 0) return;
+      const ll = mk.getLngLat(); plan.wps[k] = { lat: ll.lat, lon: ll.lng };
+      el.dataset.moved = '1'; setTimeout(() => { delete el.dataset.moved; }, 300);
+      if (k > 0) planSeg(k - 1);
+      if (k < plan.wps.length - 1) planSeg(k);
+      planDraw();
+    });
+    el.addEventListener('click', ev => {
+      ev.stopPropagation();
+      if (el.dataset.moved) return;
+      const k = plan.mks.indexOf(mk); if (k < 0) return;
+      toast(k === 0 ? 'Point de départ' : k === plan.wps.length - 1 ? 'Dernier point' : `Point ${k + 1}`, 4000, { label: 'Supprimer', run: () => planRemove(k) });
+    });
+    mk.setLngLat([0, 0]).addTo(map);
+    plan.mks.push(mk);
+  }
+  plan.mks.forEach((mk, k) => {
+    const w = plan.wps[k], el = mk.getElement();
+    if (k !== plan.dragging) mk.setLngLat([w.lon, w.lat]);
+    el.classList.toggle('start', k === 0); el.classList.toggle('end', k > 0 && k === plan.wps.length - 1);
+  });
+}
+// (re)calcul du segment i, entre les points i et i+1
+function planSeg(i) {
+  const a = plan.wps[i], b = plan.wps[i + 1];
+  const seg = { pts: [a, b], pending: true };
+  plan.segs[i] = seg; plan.busy++;
+  plan.queue = plan.queue.then(async () => {
+    if (plan.segs.includes(seg)) { const pts = await planSegment(a, b); seg.pts = pts; seg.pending = false; }
+    plan.busy--; if (planning) planDraw();
+  });
+}
+function planRemove(k) {
+  const n = plan.wps.length;
+  plan.wps.splice(k, 1);
+  if (n <= 1) { plan.segs = []; }
+  else if (k === 0) plan.segs.shift();
+  else if (k === n - 1) plan.segs.pop();
+  else { plan.segs.splice(k - 1, 2, null); planSeg(k - 1); }
+  planDraw();
+}
 function openPlan() {
   if (nav) { toast('Quitte d\'abord la navigation.'); return; }
   closeDest(); closeLib(); toggleMore(false, true); $('loopBar').hidden = true;
@@ -2026,7 +2076,7 @@ function openPlan() {
   plan.wps = []; plan.segs = []; planDraw();
   if (me) map.easeTo({ center: [me.lon, me.lat], zoom: Math.max(map.getZoom(), 14), pitch: 0, bearing: 0, duration: 600 });
 }
-function closePlan() { planning = false; document.body.classList.remove('plan'); plan.wps = []; plan.segs = []; setSrc('plan', EMPTY); }
+function closePlan() { planning = false; document.body.classList.remove('plan'); plan.wps = []; plan.segs = []; planMarkers(); setSrc('plan', EMPTY); }
 $('destPlan').onclick = openPlan; $('libPlan').onclick = openPlan;
 $('pbClose').onclick = () => {
   if (plan.wps.length > 1 && !$('pbClose').dataset.armed) { $('pbClose').dataset.armed = '1'; $('pbClose').textContent = 'Sûr ?'; setTimeout(() => { delete $('pbClose').dataset.armed; $('pbClose').textContent = 'Quitter'; }, 2500); return; }
@@ -2054,8 +2104,8 @@ function planAdd(p) {
 function planAll() { const out = []; plan.segs.forEach((sg, k) => out.push(...(k ? sg.pts.slice(1) : sg.pts))); return out; }
 function planDraw() {
   const feats = plan.segs.map(sg => ({ type: 'Feature', properties: { pending: !!sg.pending }, geometry: { type: 'LineString', coordinates: sg.pts.map(q => [q.lon, q.lat]) } }));
-  plan.wps.forEach((w, k) => feats.push({ type: 'Feature', properties: { start: k === 0, end: k > 0 && k === plan.wps.length - 1 }, geometry: { type: 'Point', coordinates: [w.lon, w.lat] } }));
   setSrc('plan', { type: 'FeatureCollection', features: feats });
+  planMarkers();
   const n = plan.wps.length, all = planAll();
   if (!n) { $('pbStats').textContent = 'Touche la carte pour placer le départ'; }
   else if (n === 1) { $('pbStats').textContent = 'Départ placé · touche le point suivant'; }
@@ -2063,7 +2113,7 @@ function planDraw() {
     const pth = makePath(all, '');
     $('pbStats').textContent = `${fmtDist(pth.total)}${pth.hasEle ? ' · D+ ' + fmtM(pth.totalUp) : ''} · ${n} points` + (plan.busy ? ' · calcul…' : '');
   }
-  $('pbHint').textContent = plan.straight ? 'Mode ligne droite : les points sont reliés directement' : 'Chaque toucher ajoute un point · l\'itinéraire suit les chemins';
+  $('pbHint').textContent = (plan.straight ? 'Ligne droite' : 'Suit les chemins') + (n > 1 ? ' · glisse un point pour le déplacer, touche-le pour le supprimer' : ' · chaque toucher ajoute un point');
   $('ptUndo').disabled = !n; $('ptClear').disabled = !n; $('ptLoop').disabled = n < 2; $('ptDone').disabled = n < 2;
   $('ptModeL').textContent = plan.straight ? 'Ligne droite' : 'Chemins';
 }
