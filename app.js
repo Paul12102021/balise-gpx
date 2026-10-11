@@ -4,7 +4,7 @@
 
 // La page et le code doivent être de la même version. Sinon (page gardée en cache
 // par le téléphone ou par GitHub), on recharge une page fraîche, au plus 3 fois.
-const APP_VERSION = 67;
+const APP_VERSION = 68;
 try {
   const meta = document.querySelector('meta[name="balise-version"]');
   const pageV = meta ? +meta.content : 0;
@@ -1394,7 +1394,10 @@ function guidance() {
   else setBanner(tone, fmtDist(dTo), info.txt, info.icon, sub);
 
   const key = path.id + ':' + Math.round(next.along);
-  if (key !== lastTurnKey) { lastTurnKey = key; setSrc('turn', next.arrive ? EMPTY : pointFeature(pointAt(path, next.along))); }
+  if (key !== lastTurnKey) {
+    // virage passé : la carte reste encore 20 s, le temps de vérifier qu'on part dans la bonne direction
+    if (lastTurnKey && nav && eco === 'max') ecoWake(20000);
+    lastTurnKey = key; setSrc('turn', next.arrive ? EMPTY : pointFeature(pointAt(path, next.along))); }
 
   // annonces vocales : une à l'approche, une au moment de tourner
   const s = Math.max(speedEma || 1.2, 1);
@@ -1527,7 +1530,13 @@ $('optBanner').onchange = e => setBannerSize(e.target.value);
 
 // ---------- économie de batterie (écran noir entre les virages + carte allégée) ----------
 var eco = store.get('eco') === 'max' ? 'max' : 'off', ecoWakeUntil = 0, ecoThemeSet = false;
-function ecoNear() { return nextDist < 220 || isOff || arrived || routing; }
+// carte visible : à l'approche d'un virage, dès qu'on s'écarte de la trace (avant même l'alerte), hors trace,
+// pendant un retour calculé, à l'arrivée
+function ecoNear() {
+  if (nextDist < 220 || arrived || routing) return true;
+  if (rejoin) return !!rejoin.straight; // retour calculé : écran noir entre ses virages ; ligne droite : carte visible
+  return isOff || !!(track && progress && progress.dist > 25);
+}
 function setEco(v, quiet) {
   eco = v === 'max' ? 'max' : 'off'; store.set('eco', eco);
   const on = eco === 'max';
@@ -1687,6 +1696,7 @@ async function requestRejoin(manual) {
   guidance();
 }
 function setRejoinPath(pts, target, straight) {
+  if (nav && eco === 'max') setTimeout(() => ecoWake(20000), 0); // nouveau chemin de retour : on le montre
   rejoin = makePath(pts, 'Retour'); rejoin.target = target; rejoin.straight = straight;
   rejoinProg = me ? project(rejoin, me) : null;
   setSrc('rejoin', lineFeature(rejoin.pts));
