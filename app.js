@@ -4,7 +4,7 @@
 
 // La page et le code doivent être de la même version. Sinon (page gardée en cache
 // par le téléphone ou par GitHub), on recharge une page fraîche, au plus 3 fois.
-const APP_VERSION = 65;
+const APP_VERSION = 66;
 try {
   const meta = document.querySelector('meta[name="balise-version"]');
   const pageV = meta ? +meta.content : 0;
@@ -268,6 +268,19 @@ map.on('load', () => {
   const w = (a, b) => ['interpolate', ['linear'], ['zoom'], 10, a, 18, b];
   map.addLayer({ id: 'track-casing', type: 'line', source: 'track', layout: round, paint: { 'line-color': '#fff', 'line-width': w(5, 14), 'line-opacity': .9 } });
   map.addLayer({ id: 'track', type: 'line', source: 'track', layout: round, paint: { 'line-width': w(3, 9), 'line-gradient': gradient(0) } });
+  // sens du parcours : petits chevrons blancs discrets le long de la trace
+  try {
+    const cv = document.createElement('canvas'); cv.width = cv.height = 32;
+    const c = cv.getContext('2d');
+    c.strokeStyle = '#fff'; c.lineWidth = 5; c.lineCap = 'round'; c.lineJoin = 'round';
+    c.beginPath(); c.moveTo(11, 7); c.lineTo(21, 16); c.lineTo(11, 25); c.stroke();
+    map.addImage('chev', c.getImageData(0, 0, 32, 32), { pixelRatio: 2 });
+    map.addLayer({ id: 'track-dir', type: 'symbol', source: 'track', minzoom: 11,
+      layout: { 'symbol-placement': 'line', 'symbol-spacing': ['interpolate', ['linear'], ['zoom'], 11, 70, 17, 130], 'icon-image': 'chev',
+        'icon-size': ['interpolate', ['linear'], ['zoom'], 11, 0.5, 18, 0.95], 'icon-allow-overlap': true, 'icon-ignore-placement': true,
+        'icon-rotation-alignment': 'map', 'icon-pitch-alignment': 'map' },
+      paint: { 'icon-opacity': 0.8 } });
+  } catch { /* sans les chevrons, la trace reste affichée */ }
   map.addLayer({ id: 'rec', type: 'line', source: 'rec', layout: round, paint: { 'line-color': COL.rec, 'line-width': w(2, 5) } });
   map.addLayer({ id: 'rejoin-casing', type: 'line', source: 'rejoin', layout: round, paint: { 'line-color': '#fff', 'line-width': w(5, 13) } });
   map.addLayer({ id: 'rejoin', type: 'line', source: 'rejoin', layout: round, paint: { 'line-color': COL.me, 'line-width': w(3, 8), 'line-dasharray': [1.2, 1] } });
