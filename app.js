@@ -4,7 +4,7 @@
 
 // La page et le code doivent être de la même version. Sinon (page gardée en cache
 // par le téléphone ou par GitHub), on recharge une page fraîche, au plus 3 fois.
-const APP_VERSION = 80;
+const APP_VERSION = 81;
 try {
   const meta = document.querySelector('meta[name="balise-version"]');
   const pageV = meta ? +meta.content : 0;
@@ -2223,11 +2223,12 @@ const rtSheet = { collapsed: false };
 function rtPeek() { const s = $('rtStatus'); return s.offsetTop + s.offsetHeight + 14; }
 function rtSetCollapsed(c) {
   rtSheet.collapsed = c;
+  $('routes').classList.toggle('collapsed', c);
+  if (c) $('rtPanel').scrollTop = 0; // réduit : on montre toujours le titre, jamais le milieu de la liste
   requestAnimationFrame(() => {
     const pnl = $('rtPanel'), peek = rtPeek();
     document.documentElement.style.setProperty('--rt-peek', peek + 'px');
     pnl.style.setProperty('--rt-y', (c ? Math.max(0, pnl.offsetHeight - peek) : 0) + 'px');
-    if (!c) pnl.scrollTop = 0;
   });
 }
 function rtSheetOpen(collapsed) {

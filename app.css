@@ -458,3 +458,6 @@ body.plan .hud, body.plan .sheet, body.plan .fab-col, body.plan .loop-bar { disp
 .rt-grab #rtStatus { font-size: 13px; }
 body.rtmode .sheet { display: none !important; }
 body.rtmode .fab-col { top: auto !important; bottom: calc(var(--rt-peek, 140px) + 12px) !important; }
+/* le titre reste visible en haut quand on fait défiler la liste, pour pouvoir toujours glisser */
+#routes.rt-sheet .rt-grab { position: sticky; top: -6px; z-index: 2; background: var(--panel); margin: -6px -16px 0; padding: 6px 16px 6px; }
+#routes.rt-sheet.collapsed .lib-panel { overflow: hidden; }
