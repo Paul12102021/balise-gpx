@@ -4,7 +4,7 @@
 
 // La page et le code doivent être de la même version. Sinon (page gardée en cache
 // par le téléphone ou par GitHub), on recharge une page fraîche, au plus 3 fois.
-const APP_VERSION = 66;
+const APP_VERSION = 67;
 try {
   const meta = document.querySelector('meta[name="balise-version"]');
   const pageV = meta ? +meta.content : 0;
@@ -1896,6 +1896,32 @@ async function routeVia(pts, ms) {
     return out;
   } finally { clearTimeout(timer); }
 }
+// Retire les culs-de-sac (aller-retour sur le même bout de chemin, créés quand un point de passage
+// tombe au bout d'une impasse). Quand le tracé repasse là où il était peu avant, et que ce morceau
+// est un simple aller-retour (sa longueur ≈ 2 × sa portée), on le coupe. Une vraie petite boucle
+// (longueur bien plus grande que 2 × sa portée) est gardée.
+function removeSpurs(pts) {
+  const total = pts.reduce((a, p, i) => a + (i ? hav(pts[i - 1], p) : 0), 0);
+  const maxSpur = Math.min(3000, Math.max(400, total * 0.2));
+  const out = [], cum = [];
+  for (const p of pts) {
+    const n = out.length;
+    if (n >= 2) {
+      const lastC = cum[n - 1] + hav(out[n - 1], p);
+      for (let j = n - 2; j >= 0 && lastC - cum[j] <= maxSpur; j--) {
+        if (hav(out[j], p) > 12) continue;
+        const seg = lastC - cum[j];
+        let reach = 0; for (let k = j + 1; k < n; k++) reach = Math.max(reach, hav(out[j], out[k]));
+        if (seg > 15 && seg <= 2.4 * reach + 20) { out.length = j + 1; cum.length = j + 1; }
+        break;
+      }
+      if (hav(out[out.length - 1], p) < 1) continue;
+    }
+    cum.push(out.length ? cum[out.length - 1] + hav(out[out.length - 1], p) : 0);
+    out.push(p);
+  }
+  return out.length > 1 ? out : pts;
+}
 // estimation du temps (même règle que la navigation : allure + montée)
 function loopEst(p) { const s = lpSpeed(); return p.total / (s.v / 3.6) + (p.hasEle ? p.totalUp / s.climb * 3600 : 0); }
 // points de passage : un cercle qui passe par le départ, orienté au hasard, parcouru par 3 points
@@ -1927,7 +1953,7 @@ async function makeLoop() {
   try {
     for (let tryN = 0; tryN < 4; tryN++) {
       let pts;
-      try { pts = await routeVia(loopPoints(start, r, ang), 45000); }
+      try { pts = removeSpurs(await routeVia(loopPoints(start, r, ang), 45000)); }
       catch (e) {
         if (!e.server) throw e;
         ang = (ang + 60) % 360; continue; // point dans la mer, sans chemin… : autre direction
