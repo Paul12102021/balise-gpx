@@ -4,7 +4,7 @@
 
 // La page et le code doivent être de la même version. Sinon (page gardée en cache
 // par le téléphone ou par GitHub), on recharge une page fraîche, au plus 3 fois.
-const APP_VERSION = 83;
+const APP_VERSION = 84;
 try {
   const meta = document.querySelector('meta[name="balise-version"]');
   const pageV = meta ? +meta.content : 0;
@@ -2198,7 +2198,7 @@ async function overpassFast(q, onWait, mirrorFirst, signal) {
         const r = await fetch(url, { method: 'POST', body: 'data=' + encodeURIComponent(q), headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, signal: ctrl.signal });
         finish(r.ok ? await r.json() : null);
       } catch { finish(null); } finally { clearTimeout(timer); }
-    }, k * 5000));
+    }, k * 3000));
   });
   ctrls.forEach(c => c.abort());
   if (signal && signal.aborted) { const err = new Error('annulé'); err.cancel = true; throw err; }
@@ -2392,14 +2392,26 @@ function rtGeom(it) {
   const p = (async () => {
     let g = await rtLoadGeo(key);
     if (!g) {
-      let segs = null;
-      if (rtWmtOk(it) && !rt.wmtDown) { segs = await rtFromWmt(it); if (!segs) rt.wmtFails = (rt.wmtFails || 0) + 1; else rt.wmtFails = 0; if (rt.wmtFails >= 2) rt.wmtDown = true; }
-      if (!segs) {
-        const cut = it.big ? `(${rtBox(at, rtCut())})` : '';
-        const json = await overpassFast(`[out:json][timeout:25];relation(${it.id});out geom${cut};`, null, true);
-        const rel = ((json && json.elements) || []).find(e => e.type === 'relation');
-        segs = rel ? rtSegments(rel) : null;
-      }
+      // Waymarked Trails et OpenStreetMap en course : OSM part si Waymarked échoue ou tarde
+      // (2,5 s, ou 6 s quand Waymarked a déjà répondu vite ce jour-là) ; la première réponse gagne
+      const segs = await new Promise(resolve => {
+        let left = 0, done = false, osmGo = false;
+        const fin = s => { if (done) return; if (s) { done = true; resolve(s); } else if (--left === 0) { done = true; resolve(null); } };
+        const osm = () => {
+          if (osmGo || done) return; osmGo = true; left++;
+          const cut = it.big ? `(${rtBox(at, rtCut())})` : '';
+          overpassFast(`[out:json][timeout:25];relation(${it.id});out geom${cut};`, null, true)
+            .then(json => { const rel = ((json && json.elements) || []).find(e => e.type === 'relation'); fin(rel ? rtSegments(rel) : null); }, () => fin(null));
+        };
+        if (rtWmtOk(it) && !rt.wmtDown) {
+          left++; const t0 = Date.now(), timer = setTimeout(osm, rt.wmtGood ? 6000 : 2500);
+          rtFromWmt(it).then(s => {
+            if (s) { rt.wmtFails = 0; if (Date.now() - t0 < 3000) rt.wmtGood = true; clearTimeout(timer); }
+            else { rt.wmtFails = (rt.wmtFails || 0) + 1; if (rt.wmtFails >= 2) rt.wmtDown = true; osm(); }
+            fin(s);
+          });
+        } else osm();
+      });
       const ch = segs && rtChain(segs);
       if (ch && it.big) { ch.pts = rtClip(ch.pts, at, rtCut()); ch.len = rtLen(ch.pts); }
       if (!ch || ch.pts.length < 2 || ch.len < 100) throw new Error('pas de tracé');
@@ -2427,12 +2439,13 @@ async function rtEnrich() {
   let i = 0;
   const worker = async () => {
     while (gen === rt.gen && i < items.length) {
+      while (rtLoad && gen === rt.gen) await new Promise(res => setTimeout(res, 300)); // ton choix passe d'abord
       const it = items[i++];
       try { const g = await rtGeom(it); if (gen !== rt.gen) return; rtChanged(); await rtElev(g); } catch { it.fail = true; }
       if (gen === rt.gen) rtChanged();
     }
   };
-  await Promise.all([worker(), worker(), worker()]);
+  await Promise.all([worker(), worker()]);
 }
 let rtChT = 0;
 function rtChanged() {
