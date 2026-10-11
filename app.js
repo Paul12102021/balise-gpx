@@ -4,7 +4,7 @@
 
 // La page et le code doivent être de la même version. Sinon (page gardée en cache
 // par le téléphone ou par GitHub), on recharge une page fraîche, au plus 3 fois.
-const APP_VERSION = 75;
+const APP_VERSION = 76;
 try {
   const meta = document.querySelector('meta[name="balise-version"]');
   const pageV = meta ? +meta.content : 0;
@@ -295,7 +295,7 @@ map.on('load', () => {
 });
 async function setSrc(id, data) { await ready; const s = map.getSource(id); if (s) s.setData(data); }
 
-const baseBefore = () => map.getLayer('packs-fill') ? 'packs-fill' : 'track-casing';
+const baseBefore = () => map.getLayer('wmt-0') ? 'wmt-0' : map.getLayer('packs-fill') ? 'packs-fill' : 'track-casing';
 function removeBase() {
   if (map.getLayer('base')) map.removeLayer('base');
   if (map.getSource('base')) map.removeSource('base');
@@ -1853,6 +1853,8 @@ $('destPick').onclick = () => { closeDest(); startPick('Touche la carte à l\'en
 $('pickCancel').onclick = () => { const cb = picking; picking = false; $('pickBanner').hidden = true; if (cb && cb.cancel) cb.cancel(); };
 map.on('click', e => {
   if (planning) { planAdd({ lat: e.lngLat.lat, lon: e.lngLat.lng }); return; }
+  // parcours balisés affichés : toucher une ligne ouvre le parcours
+  if (!picking && rtMapOn && !nav && $('routes').hidden) { rtTap({ lat: e.lngLat.lat, lon: e.lngLat.lng }); return; }
   if (!picking) return;
   const cb = picking; picking = false; $('pickBanner').hidden = true;
   cb({ lat: e.lngLat.lat, lon: e.lngLat.lng });
@@ -2201,7 +2203,7 @@ function rtUI() {
 }
 function openRoutes() {
   if (nav) { toast('Quitte d\'abord la navigation.'); return; }
-  closeDest(); closeLib(); toggleMore(false); $('loopBar').hidden = true; $('rtBar').hidden = true;
+  closeDest(); closeLib(); toggleMore(false); $('loopBar').hidden = true; $('rtBar').hidden = true; $('rtMapBar').hidden = true;
   rtUI(); $('routes').hidden = false;
   if (!me && !rt.fromMap && startGPS()) {
     // on laisse quelques secondes au GPS ; sans position, on cherche autour du centre de la carte
@@ -2210,11 +2212,12 @@ function openRoutes() {
     return;
   }
   const at = rtHere(), key = profile + ':' + at.lat.toFixed(2) + ',' + at.lon.toFixed(2);
-  if (rt.list && rt.key === key) rtRender(); else rtSearch();
+  if (rt.list && rt.key === key && !rt.tapped) rtRender(); else rtSearch();
 }
 function closeRoutes() { $('routes').hidden = true; }
 async function rtSearch() {
   if (rt.busy) return;
+  rt.tapped = false;
   const at = rtHere(), bike = rtBike();
   rt.at = at; rt.key = profile + ':' + at.lat.toFixed(2) + ',' + at.lon.toFixed(2); rt.list = null;
   $('rtList').innerHTML = '';
@@ -2240,7 +2243,7 @@ async function rtSearch() {
 function rtRender() {
   const list = $('rtList'), items = rt.list || [];
   list.innerHTML = '';
-  $('rtStatus').textContent = items.length ? `${items.length} parcours balisé${items.length > 1 ? 's' : ''} ${rt.fromMap || !me ? 'autour du centre de la carte' : 'autour de toi'}. Touche-en un pour le voir.`
+  $('rtStatus').textContent = rt.tapped ? `${items.length} parcours passent à l'endroit touché. Lequel veux-tu voir ?` : items.length ? `${items.length} parcours balisé${items.length > 1 ? 's' : ''} ${rt.fromMap || !me ? 'autour du centre de la carte' : 'autour de toi'}. Touche-en un pour le voir.`
     : `Aucun parcours ${rtBike() ? 'vélo' : 'à pied'} balisé recensé ici. Essaie l'autre mode, ou déplace la carte et choisis « Autour de la carte ».`;
   for (const it of items.slice(0, 80)) {
     const li = document.createElement('li');
@@ -2269,7 +2272,7 @@ async function rtOpen(it) {
     if (!ch || ch.pts.length < 2 || ch.len < 100) { clearInterval(tick); toast('Ce parcours n\'a pas de tracé exploitable dans OpenStreetMap.', 5000); $('routes').hidden = false; return; }
     const partial = it.big || (it.dist && ch.len < it.dist * 0.8);
     // altitudes : on les attend au plus 3 s, sinon le parcours s'affiche tout de suite et le D+ arrive ensuite
-    const flat = rtOrient(ch.pts, rt.at), elevP = rtElevate(flat);
+    const flat = rtOrient(ch.pts, me || rt.at), elevP = rtElevate(flat);
     const pts = await Promise.race([elevP, new Promise(r => setTimeout(() => r(null), 3000))]);
     clearInterval(tick);
     if (pts) { rtShow(it, pts, partial); return; }
@@ -2292,15 +2295,15 @@ function rtShow(it, pts, partial, update) {
   $('rtbTitle').textContent = name;
   $('rtbSub').textContent = `${RT_CAT[it.cat].label} · ${fmtDist(p.total)}${p.hasEle ? ' · D+ ' + fmtM(p.totalUp) : ''} · environ ${fmtDur(est)}` + (partial ? ` · portion autour ${rt.fromMap || !me ? 'du point choisi' : 'de toi'}` : '');
   if (!update) { $('rtbKeep').textContent = 'Garder'; $('rtbKeep').disabled = false; }
-  $('rtBar').hidden = false;
+  $('rtBar').hidden = false; $('rtMapBar').hidden = true;
   if (update) return;
   setTimeout(() => { try { map.fitBounds(boundsOf([pts]), { padding: { top: 80, bottom: $('sheet').offsetHeight + $('rtBar').offsetHeight + 30, left: 30, right: 70 }, bearing: 0, pitch: 0, duration: 600 }); } catch {} }, 350);
 }
 $('destRoutes').onclick = openRoutes; $('libRoutes').onclick = openRoutes;
 $('rtClose').onclick = closeRoutes;
 $('routes').onclick = e => { if (e.target === $('routes')) closeRoutes(); };
-$('rtFoot').onclick = () => { if (!rtBike()) return; setProfile('hiking-mountain', true); rtUI(); rtSearch(); };
-$('rtBike').onclick = () => { if (rtBike()) return; setProfile('trekking', true); rtUI(); rtSearch(); };
+$('rtFoot').onclick = () => { if (!rtBike()) return; setProfile('hiking-mountain', true); rtUI(); rtSearch(); if (rtMapOn) rtOverlay(true); };
+$('rtBike').onclick = () => { if (rtBike()) return; setProfile('trekking', true); rtUI(); rtSearch(); if (rtMapOn) rtOverlay(true); };
 $('rtFromMe').onclick = () => {
   if (!rt.fromMap) return;
   rt.fromMap = false; rtUI();
@@ -2310,9 +2313,62 @@ $('rtFromMe').onclick = () => {
   waitFix(20000).then(pos => { if (pos) rtSearch(); else $('rtStatus').textContent = 'Position GPS introuvable : choisis « Autour de la carte ».'; });
 };
 $('rtFromMap').onclick = () => { if (rt.fromMap) { rtSearch(); return; } rt.fromMap = true; rtUI(); rtSearch(); };
-$('rtbBack').onclick = () => { $('rtBar').hidden = true; openRoutes(); };
+$('rtbBack').onclick = () => { $('rtBar').hidden = true; if (rtMapOn) $('rtMapBar').hidden = false; else openRoutes(); };
 $('rtbKeep').onclick = async () => { if (!rt.res || !track) return; await saveRecent(track, rt.res.text); $('rtbKeep').textContent = 'Gardé ✓'; $('rtbKeep').disabled = true; toast('Parcours gardé dans « Ouvrir un GPX »', 3000); };
 $('rtbGo').onclick = () => { $('rtBar').hidden = true; startNav(); };
+
+// ---------- Parcours balisés dessinés sur la carte (calque Waymarked Trails, données OpenStreetMap) ----------
+// Un calque d'images transparent : aussi rapide que le fond de carte, rien à calculer.
+// Toucher une ligne cherche quels parcours passent là (petite demande) et les propose.
+let rtMapOn = false;
+const WMT_ATTR = 'Parcours <a href="https://waymarkedtrails.org" target="_blank">© waymarkedtrails.org</a> (CC BY-SA)';
+async function rtOverlay(on) {
+  await ready;
+  for (const k of [0, 1]) { if (map.getLayer('wmt-' + k)) map.removeLayer('wmt-' + k); if (map.getSource('wmt-' + k)) map.removeSource('wmt-' + k); }
+  rtMapOn = on;
+  $('rtmMode').textContent = rtBike() ? 'Voir à pied' : 'Voir à vélo';
+  if (!on) return;
+  const kinds = rtBike() ? ['cycling', 'mtb'] : ['hiking'];
+  // juste au-dessus du fond de carte, sous les zones téléchargées et la trace
+  const before = map.getLayer('packs-fill') ? 'packs-fill' : 'track-casing';
+  kinds.forEach((kd, k) => {
+    map.addSource('wmt-' + k, { type: 'raster', tiles: [`https://tile.waymarkedtrails.org/${kd}/{z}/{x}/{y}.png`], tileSize: 256, minzoom: 0, maxzoom: 18, attribution: WMT_ATTR });
+    // le calque VTT passe sous les véloroutes ; tout disparaît en vue très éloignée pour rester lisible
+    map.addLayer({ id: 'wmt-' + k, type: 'raster', source: 'wmt-' + k, minzoom: 8, paint: { 'raster-opacity': .9 } }, k ? 'wmt-0' : before);
+  });
+}
+function rtShowOnMap() {
+  closeRoutes(); $('rtBar').hidden = true;
+  rtOverlay(true);
+  $('rtMapBar').hidden = false;
+  const c = rtHere();
+  map.easeTo({ center: [c.lon, c.lat], zoom: Math.max(Math.min(map.getZoom(), 14), rtBike() ? 11.5 : 12.5), pitch: 0, bearing: 0, duration: 700 });
+}
+function rtHideMap() { rtOverlay(false); $('rtMapBar').hidden = true; }
+async function rtTap(p) {
+  if (rt.busy) return;
+  const sel = rtBike() ? '["route"~"^(bicycle|mtb)$"]' : '["route"~"^(hiking|foot)$"]';
+  // rayon de toucher : environ 25 pixels à l'écran
+  const r = Math.round(clamp(25 * 156543 * Math.cos(rad(p.lat)) / Math.pow(2, map.getZoom()), 15, 400));
+  const q = `[out:json][timeout:25];way(around:${r},${p.lat.toFixed(6)},${p.lon.toFixed(6)})->.w;rel(bw.w)["type"="route"]${sel}->.a;`
+    + `relation.a["network"~"^(icn|ncn|rcn|iwn|nwn|rwn)$"]->.g;(.a; - .g;)->.p;.g out tags;.p out tags bb;`;
+  rt.busy = true; toast('Recherche du parcours touché…', 8000);
+  let json;
+  try { json = await overpassFast(q, secs => toast(`Serveurs OpenStreetMap très demandés : nouvel essai dans ${secs} s`, 4000), true); }
+  catch (e) { toast(navigator.onLine === false ? 'Pas de réseau.' : `Recherche impossible (${e.message}).`, 4000); return; }
+  finally { rt.busy = false; }
+  const items = rtListFrom(json, p);
+  if (!items.length) { toast('Aucun parcours balisé à cet endroit : touche une ligne de couleur.', 3500); return; }
+  rt.at = p;
+  if (items.length === 1) { $('toast').hidden = true; rtOpen(items[0]); return; }
+  $('toast').hidden = true;
+  rt.list = items; rt.tapped = true; rt.key = '';
+  rtUI(); $('rtMapBar').hidden = true; $('routes').hidden = false; rtRender();
+}
+$('rtShowMap').onclick = rtShowOnMap;
+$('rtmList').onclick = () => { $('rtMapBar').hidden = true; openRoutes(); };
+$('rtmHide').onclick = rtHideMap;
+$('rtmMode').onclick = () => { setProfile(rtBike() ? 'hiking-mountain' : 'trekking', true); rtOverlay(true); toast(rtBike() ? 'Parcours vélo et VTT' : 'Parcours à pied', 2000); };
 
 // =====================================================================
 // Tracer un itinéraire point par point : chaque toucher sur la carte ajoute un point,

@@ -8,13 +8,13 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<meta name="balise-version" content="75">
+<meta name="balise-version" content="76">
 <title>Pisteo</title>
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" href="icon.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
 <link rel="stylesheet" href="vendor/maplibre-gl.css">
-<link rel="stylesheet" href="app.css?v=75">
+<link rel="stylesheet" href="app.css?v=76">
 </head>
 <body>
 <div id="map" aria-label="Carte"></div>
@@ -354,9 +354,19 @@
       <div class="seg"><button id="rtFoot">À pied</button><button id="rtBike">À vélo</button></div>
       <div class="seg"><button id="rtFromMe" class="on">Autour de moi</button><button id="rtFromMap">Autour de la carte</button></div>
     </div>
+    <button id="rtShowMap" class="btn go">Voir les parcours sur la carte</button>
     <p id="rtStatus" class="note"></p>
     <ul id="rtList" class="lib-list"></ul>
     <p class="note">Sentiers et véloroutes balisés recensés par OpenStreetMap (GR, PR, EuroVelo, véloroutes, VTT). Pour les grands itinéraires, seule la portion autour du point choisi est chargée. Données © contributeurs OpenStreetMap, altitudes IGN.</p>
+  </div>
+</div>
+
+<div id="rtMapBar" class="loop-bar" hidden>
+  <div class="lb-info"><b id="rtmTitle">Parcours balisés sur la carte</b><span>Touche une ligne de couleur pour ouvrir le parcours.</span></div>
+  <div class="lb-acts">
+    <button id="rtmList" class="btn small">Liste</button>
+    <button id="rtmMode" class="btn small"></button>
+    <button id="rtmHide" class="btn small">Masquer</button>
   </div>
 </div>
 
@@ -508,6 +518,6 @@
 <div id="toast" class="toast" hidden></div>
 
 <script src="vendor/maplibre-gl.js"></script>
-<script src="app.js?v=75"></script>
+<script src="app.js?v=76"></script>
 </body>
 </html>
