@@ -4,7 +4,7 @@
 
 // La page et le code doivent être de la même version. Sinon (page gardée en cache
 // par le téléphone ou par GitHub), on recharge une page fraîche, au plus 3 fois.
-const APP_VERSION = 79;
+const APP_VERSION = 80;
 try {
   const meta = document.querySelector('meta[name="balise-version"]');
   const pageV = meta ? +meta.content : 0;
@@ -1854,11 +1854,12 @@ $('pickCancel').onclick = () => { const cb = picking; picking = false; $('pickBa
 map.on('click', e => {
   if (planning) { planAdd({ lat: e.lngLat.lat, lon: e.lngLat.lng }); return; }
   // parcours balisés affichés : toucher une ligne ouvre le parcours
-  if (!picking && rtMapOn && !nav && $('routes').hidden) {
+  if (!picking && !nav && !$('routes').hidden && !rtSheet.collapsed) { rtSetCollapsed(true); return; }
+  if (!picking && rtMapOn && !nav && ($('routes').hidden || rtSheet.collapsed)) {
     const hits = map.getLayer('rtv') ? map.queryRenderedFeatures([[e.point.x - 14, e.point.y - 14], [e.point.x + 14, e.point.y + 14]], { layers: ['rtv'] }) : [];
     const ids = [...new Set(hits.map(f => f.properties.id))], items = (rt.list || []).filter(it => ids.includes(it.id));
     if (items.length === 1) { rtOpen(items[0]); return; }
-    if (items.length > 1) { rt.tapList = items; rt.tapped = true; rtUI(); rtFiltUI(); $('rtMapBar').hidden = true; $('routes').hidden = false; rtRender(); return; }
+    if (items.length > 1) { rt.tapList = items; rt.tapped = true; rtSheetOpen(false); rtRender(); return; }
     if (!rtFiltOn()) rtTap({ lat: e.lngLat.lat, lon: e.lngLat.lng });
     else toast('Touche une des lignes affichées.', 2500);
     return;
@@ -2217,10 +2218,51 @@ function rtUI() {
   $('rtFoot').classList.toggle('on', !bike); $('rtBike').classList.toggle('on', bike);
   $('rtFromMe').classList.toggle('on', !rt.fromMap); $('rtFromMap').classList.toggle('on', rt.fromMap);
 }
+// ---------- Panneau des parcours : glisser vers le bas pour voir la carte, vers le haut pour la liste ----------
+const rtSheet = { collapsed: false };
+function rtPeek() { const s = $('rtStatus'); return s.offsetTop + s.offsetHeight + 14; }
+function rtSetCollapsed(c) {
+  rtSheet.collapsed = c;
+  requestAnimationFrame(() => {
+    const pnl = $('rtPanel'), peek = rtPeek();
+    document.documentElement.style.setProperty('--rt-peek', peek + 'px');
+    pnl.style.setProperty('--rt-y', (c ? Math.max(0, pnl.offsetHeight - peek) : 0) + 'px');
+    if (!c) pnl.scrollTop = 0;
+  });
+}
+function rtSheetOpen(collapsed) {
+  closeDest(); closeLib(); toggleMore(false); $('loopBar').hidden = true; $('rtBar').hidden = true;
+  $('routes').hidden = false; document.body.classList.add('rtmode');
+  rtUI(); rtFiltUI(); rtSetCollapsed(collapsed);
+}
+(() => {
+  const grab = $('rtGrab'), pnl = $('rtPanel');
+  let y0 = null, t0 = 0, base = 0, last = 0, moved = false;
+  grab.addEventListener('pointerdown', e => {
+    if (e.target.closest('button')) return;
+    y0 = e.clientY; t0 = Date.now(); moved = false;
+    base = rtSheet.collapsed ? Math.max(0, pnl.offsetHeight - rtPeek()) : 0; last = base;
+    $('routes').classList.add('dragging'); grab.setPointerCapture(e.pointerId);
+  });
+  grab.addEventListener('pointermove', e => {
+    if (y0 == null) return;
+    const dy = e.clientY - y0; if (Math.abs(dy) > 6) moved = true;
+    last = clamp(base + dy, 0, Math.max(0, pnl.offsetHeight - rtPeek()));
+    pnl.style.setProperty('--rt-y', last + 'px');
+  });
+  const end = e => {
+    if (y0 == null) return;
+    const dy = e.clientY - y0, v = dy / Math.max(1, Date.now() - t0); y0 = null;
+    $('routes').classList.remove('dragging');
+    if (!moved) { rtSetCollapsed(!rtSheet.collapsed); return; } // simple toucher : ouvre ou réduit
+    const max = Math.max(1, pnl.offsetHeight - rtPeek());
+    rtSetCollapsed(v > 0.4 ? true : v < -0.4 ? false : last > max / 2);
+  };
+  grab.addEventListener('pointerup', end); grab.addEventListener('pointercancel', end);
+})();
 function openRoutes() {
   if (nav) { toast('Quitte d\'abord la navigation.'); return; }
-  closeDest(); closeLib(); toggleMore(false); $('loopBar').hidden = true; $('rtBar').hidden = true; $('rtMapBar').hidden = true;
-  rtUI(); rtFiltUI(); $('routes').hidden = false;
+  rtSheetOpen(false);
   if (!me && !rt.fromMap && startGPS()) {
     // on laisse quelques secondes au GPS ; sans position, on cherche autour du centre de la carte
     $('rtList').innerHTML = ''; $('rtStatus').textContent = 'Recherche de ta position…';
@@ -2230,7 +2272,7 @@ function openRoutes() {
   const at = rtHere(), key = profile + ':' + at.lat.toFixed(2) + ',' + at.lon.toFixed(2);
   if (rt.list && rt.key === key) { rt.tapped = false; rtRender(); } else rtSearch();
 }
-function closeRoutes() { $('routes').hidden = true; }
+function closeRoutes() { $('routes').hidden = true; document.body.classList.remove('rtmode'); }
 function rtListReady() { rtRender(); rtDraw(); rtBarText(); rtEnrich(); }
 async function rtSearch() {
   if (rt.busy) return;
@@ -2255,7 +2297,6 @@ async function rtSearch() {
     rtListReady();
   } catch (e) {
     $('rtStatus').textContent = navigator.onLine === false ? 'Pas de réseau : la recherche de parcours balisés a besoin d\'une connexion.' : `Recherche impossible (${e.message}). Réessaie dans un instant.`;
-    if (!$('rtMapBar').hidden) $('rtmSub').textContent = $('rtStatus').textContent;
   } finally { rt.busy = false; }
 }
 function rtRender() {
@@ -2267,8 +2308,9 @@ function rtRender() {
   if (rt.tapped) st = `${all.length} parcours passent à l'endroit touché. Lequel veux-tu voir ?`;
   else if (!all.length) st = `Aucun parcours ${rtBike() ? 'vélo' : 'à pied'} balisé recensé ici. Essaie l'autre mode, ou déplace la carte et choisis « Autour de la carte ».`;
   else if (rtFiltOn()) st = `${items.length} parcours sur ${all.length} ${where} correspondent au filtre.` + (pr.done < pr.n ? ` Calcul des distances et dénivelés : ${pr.done}/${pr.n}…` : '');
-  else st = `${all.length} parcours balisé${all.length > 1 ? 's' : ''} ${where}. Touche-en un pour le voir.` + (pr.done < pr.n ? ` (calcul ${pr.done}/${pr.n})` : '');
+  else st = `${all.length} parcours balisé${all.length > 1 ? 's' : ''} ${where}. Touche une ligne sur la carte, ou glisse vers le haut pour la liste.` + (pr.done < pr.n ? ` (calcul ${pr.done}/${pr.n})` : '');
   $('rtStatus').textContent = st;
+  if (rtSheet.collapsed && !$('routes').hidden) rtSetCollapsed(true);
   for (const it of items.slice(0, 80)) {
     const li = document.createElement('li');
     const b = document.createElement('button'); b.className = 'lib-item';
@@ -2499,7 +2541,7 @@ async function rtOpen(it) {
   } catch (e) {
     stop();
     if (e.cancel) { if (!rtLoad) toast('Chargement annulé', 2000); return; }
-    it.fail = true;
+    it.fail = true; if (rtMapOn) rtSheetOpen(true);
     toast(navigator.onLine === false ? 'Pas de réseau : impossible de charger le parcours.' : e.message === 'pas de tracé' ? 'Ce parcours n\'a pas de tracé exploitable dans OpenStreetMap.' : `Chargement impossible (${e.message}).`, 5000);
   }
 }
@@ -2514,12 +2556,12 @@ function rtShow(it, pts, partial, update) {
   $('rtbTitle').textContent = name;
   $('rtbSub').textContent = `${RT_CAT[it.cat].label} · ${fmtDist(p.total)}${p.hasEle ? ' · D+ ' + fmtM(p.totalUp) : ''} · environ ${fmtDur(est)}` + (partial ? ` · portion autour ${rt.fromMap || !me ? 'du point choisi' : 'de toi'}` : '');
   if (!update) { $('rtbKeep').textContent = 'Garder'; $('rtbKeep').disabled = false; }
-  $('rtBar').hidden = false; $('rtMapBar').hidden = true;
+  $('rtBar').hidden = false;
   if (update) return;
   setTimeout(() => { try { map.fitBounds(boundsOf([pts]), { padding: { top: 80, bottom: $('sheet').offsetHeight + $('rtBar').offsetHeight + 30, left: 30, right: 70 }, bearing: 0, pitch: 0, duration: 600 }); } catch {} }, 350);
 }
 $('destRoutes').onclick = rtShowOnMap; $('libRoutes').onclick = rtShowOnMap;
-$('rtClose').onclick = closeRoutes;
+$('rtClose').onclick = () => { rtHideMap(); closeRoutes(); };
 $('routes').onclick = e => { if (e.target === $('routes')) closeRoutes(); };
 $('rtFoot').onclick = () => { if (!rtBike()) return; setProfile('hiking-mountain', true); rtUI(); rtSearch(); if (rtMapOn) rtOverlay(true); };
 $('rtBike').onclick = () => { if (rtBike()) return; setProfile('trekking', true); rtUI(); rtSearch(); if (rtMapOn) rtOverlay(true); };
@@ -2532,7 +2574,7 @@ $('rtFromMe').onclick = () => {
   waitFix(20000).then(pos => { if (pos) rtSearch(); else $('rtStatus').textContent = 'Position GPS introuvable : choisis « Autour de la carte ».'; });
 };
 $('rtFromMap').onclick = () => { if (rt.fromMap) { rtSearch(); return; } rt.fromMap = true; rtUI(); rtSearch(); };
-$('rtbBack').onclick = () => { $('rtBar').hidden = true; if (rtMapOn) { $('rtMapBar').hidden = false; rtBarText(); } else openRoutes(); };
+$('rtbBack').onclick = () => { $('rtBar').hidden = true; if (rtMapOn) { rtSheetOpen(true); rtRender(); } else openRoutes(); };
 $('rtbKeep').onclick = async () => { if (!rt.res || !track) return; await saveRecent(track, rt.res.text); $('rtbKeep').textContent = 'Gardé ✓'; $('rtbKeep').disabled = true; toast('Parcours gardé dans « Ouvrir un GPX »', 3000); };
 $('rtbGo').onclick = () => { $('rtBar').hidden = true; startNav(); };
 
@@ -2571,19 +2613,18 @@ async function rtOverlay(on) {
 }
 function rtShowOnMap() {
   if (nav) { toast('Quitte d\'abord la navigation.'); return; }
-  closeDest(); closeLib(); toggleMore(false); closeRoutes(); $('rtBar').hidden = true; $('loopBar').hidden = true;
   rtOverlay(true);
-  $('rtMapBar').hidden = false; rtBarText();
+  rt.tapped = false; rtSheetOpen(true);
   const go = () => {
     const c = rtHere();
     map.easeTo({ center: [c.lon, c.lat], zoom: Math.max(Math.min(map.getZoom(), 14), rtBike() ? 11.5 : 12.5), pitch: 0, bearing: 0, duration: 700 });
     const key = profile + ':' + c.lat.toFixed(2) + ',' + c.lon.toFixed(2);
-    if (rt.list && rt.key === key) { rtDraw(); rtBarText(); } else rtSearch();
+    if (rt.list && rt.key === key) { rtRender(); rtDraw(); } else rtSearch();
   };
-  if (!me && !rt.fromMap && startGPS()) { $('rtmSub').textContent = 'Recherche de ta position…'; waitFix(10000).then(go); }
+  if (!me && !rt.fromMap && startGPS()) { $('rtStatus').textContent = 'Recherche de ta position…'; rtSetCollapsed(true); waitFix(10000).then(go); }
   else go();
 }
-function rtHideMap() { rtOverlay(false); $('rtMapBar').hidden = true; }
+function rtHideMap() { rtOverlay(false); }
 async function rtTap(p) {
   if (rt.busy) return;
   const sel = rtBike() ? '["route"~"^(bicycle|mtb)$"]' : '["route"~"^(hiking|foot)$"]';
@@ -2601,9 +2642,9 @@ async function rtTap(p) {
   if (items.length === 1) { $('toast').hidden = true; rtOpen(items[0]); return; }
   $('toast').hidden = true;
   rt.tapList = items; rt.tapped = true;
-  rtUI(); $('rtMapBar').hidden = true; $('routes').hidden = false; rtRender();
+  rtSheetOpen(false); rtRender();
 }
-$('rtShowMap').onclick = rtShowOnMap;
+$('rtShowMap').onclick = () => { if (!rtMapOn) rtOverlay(true); rt.tapped = false; rtRender(); rtDraw(); rtSetCollapsed(true); };
 $('rtmList').onclick = () => { $('rtMapBar').hidden = true; openRoutes(); };
 $('rtmHide').onclick = rtHideMap;
 $('rtmMode').onclick = () => { setProfile(rtBike() ? 'hiking-mountain' : 'trekking', true); rtUI(); rtOverlay(true); rtSearch(); toast(rtBike() ? 'Parcours vélo et VTT' : 'Parcours à pied', 2000); };

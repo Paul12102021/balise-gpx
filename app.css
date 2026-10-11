@@ -447,3 +447,14 @@ body.plan .hud, body.plan .sheet, body.plan .fab-col, body.plan .loop-bar { disp
 
 /* ---------- nord en haut ---------- */
 #northNeedle { transform-origin: 12px 12px; transition: transform .15s linear; }
+
+/* ---------- Parcours balisés : panneau glissant au-dessus de la carte ---------- */
+#routes.rt-sheet { background: transparent; pointer-events: none; z-index: 25; }
+#routes.rt-sheet .lib-panel { pointer-events: auto; position: relative; height: 82vh; max-height: 82vh; padding-top: 6px;
+  transform: translateY(var(--rt-y, 0px)); transition: transform .25s ease; box-shadow: 0 -6px 24px rgba(0,0,0,.25); }
+#routes.rt-sheet.dragging .lib-panel { transition: none; }
+.rt-grab { display: flex; flex-direction: column; gap: 6px; touch-action: none; cursor: grab; padding-bottom: 2px; }
+.rt-handle { width: 44px; height: 5px; border-radius: 3px; background: var(--line); margin: 2px auto 2px; }
+.rt-grab #rtStatus { font-size: 13px; }
+body.rtmode .sheet { display: none !important; }
+body.rtmode .fab-col { top: auto !important; bottom: calc(var(--rt-peek, 140px) + 12px) !important; }
