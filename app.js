@@ -4,7 +4,7 @@
 
 // La page et le code doivent être de la même version. Sinon (page gardée en cache
 // par le téléphone ou par GitHub), on recharge une page fraîche, au plus 3 fois.
-const APP_VERSION = 63;
+const APP_VERSION = 64;
 try {
   const meta = document.querySelector('meta[name="balise-version"]');
   const pageV = meta ? +meta.content : 0;
@@ -380,7 +380,7 @@ async function showTrack(t, fit = true) {
   track = makePath(t.pts, t.name); progress = null; clearRejoin(); loadDone();
   // le texte et le profil s'affichent tout de suite, la carte suit dès qu'elle est prête
   $('trackName').textContent = `${t.name} · ${fmtDist(track.total)}${track.hasEle ? ' · D+ ' + fmtM(track.totalUp) : ''}`;
-  $('btnClose').hidden = false;
+  $('btnClose').hidden = false; $('btnReverse').hidden = false;
   if (me) progress = project(track, me, true);
   drawProfile(); updateStats();
   const mine = track;
@@ -393,7 +393,7 @@ async function showTrack(t, fit = true) {
   if (fit) { map.setPadding({ top: 0, bottom: 0, left: 0, right: 0 }); fitTo([track.pts]); }
   $('trackName').textContent = `${t.name} · ${fmtDist(track.total)}${track.hasEle ? ' · D+ ' + fmtM(track.totalUp) : ''}`;
   if (me) progress = project(track, me, true);
-  $('btnClose').hidden = false;
+  $('btnClose').hidden = false; $('btnReverse').hidden = false;
   drawProfile(); updateStats(); updateOfflineInfo();
 }
 
@@ -406,11 +406,21 @@ function closeTrack(quiet) {
   setSrc('track', EMPTY); setSrc('turn', EMPTY);
   startMk.remove(); endMk.remove();
   store.set('gpx', '');
-  $('trackName').textContent = 'Aucune trace chargée'; $('btnClose').hidden = true;
+  $('trackName').textContent = 'Aucune trace chargée'; $('btnClose').hidden = true; $('btnReverse').hidden = true;
   drawProfile(); updateStats(); updateOfflineInfo();
   if (!quiet) toast('Trace fermée', 5000, savedText ? { label: 'Annuler', run: () => loadText(savedText) } : null);
 }
 $('btnClose').onclick = () => closeTrack();
+// Inverser le sens : la même trace, parcourue de l'arrivée vers le départ
+$('btnReverse').onclick = () => {
+  if (!track) return;
+  if (nav) { toast('Quitte d\'abord la navigation pour inverser la trace.'); return; }
+  const rev = track.name.endsWith(' (sens inverse)');
+  const name = rev ? track.name.replace(/ \(sens inverse\)$/, '') : track.name + ' (sens inverse)';
+  const text = loopGPX(track.pts.slice().reverse(), name);
+  loadText(text, false); store.set('gpx', text.length < 4.5e6 ? text : '');
+  toast(rev ? 'Trace remise dans son sens d\'origine' : 'Trace inversée : départ et arrivée échangés', 3000);
+};
 function loadText(text, save = true) {
   try {
     const t = parseGPX(text);

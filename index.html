@@ -8,13 +8,13 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<meta name="balise-version" content="63">
+<meta name="balise-version" content="64">
 <title>Pisteo</title>
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" href="icon.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
 <link rel="stylesheet" href="vendor/maplibre-gl.css">
-<link rel="stylesheet" href="app.css?v=63">
+<link rel="stylesheet" href="app.css?v=64">
 </head>
 <body>
 <div id="map" aria-label="Carte"></div>
@@ -125,6 +125,9 @@
   <div class="grip" id="grip" role="button" aria-label="Afficher ou masquer les réglages"></div>
   <div class="trackrow">
     <div class="trackname" id="trackName">Aucune trace chargée</div>
+    <button id="btnReverse" class="closebtn" hidden aria-label="Inverser le sens de la trace" title="Inverser le sens">
+      <svg viewBox="0 0 24 24"><path d="M7 4 3 8l4 4"/><path d="M3 8h13"/><path d="m17 12 4 4-4 4"/><path d="M21 16H8"/></svg>Inverser
+    </button>
     <button id="btnClose" class="closebtn" hidden aria-label="Fermer la trace">
       <svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></svg>Fermer
     </button>
@@ -459,6 +462,6 @@
 <div id="toast" class="toast" hidden></div>
 
 <script src="vendor/maplibre-gl.js"></script>
-<script src="app.js?v=63"></script>
+<script src="app.js?v=64"></script>
 </body>
 </html>
