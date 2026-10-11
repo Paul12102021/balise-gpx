@@ -4,7 +4,7 @@
 
 // La page et le code doivent être de la même version. Sinon (page gardée en cache
 // par le téléphone ou par GitHub), on recharge une page fraîche, au plus 3 fois.
-const APP_VERSION = 84;
+const APP_VERSION = 85;
 try {
   const meta = document.querySelector('meta[name="balise-version"]');
   const pageV = meta ? +meta.content : 0;
@@ -2399,11 +2399,19 @@ function rtGeom(it) {
         const fin = s => { if (done) return; if (s) { done = true; resolve(s); } else if (--left === 0) { done = true; resolve(null); } };
         const osm = () => {
           if (osmGo || done) return; osmGo = true; left++;
-          const cut = it.big ? `(${rtBox(at, rtCut())})` : '';
-          overpassFast(`[out:json][timeout:25];relation(${it.id});out geom${cut};`, null, true)
-            .then(json => { const rel = ((json && json.elements) || []).find(e => e.type === 'relation'); fin(rel ? rtSegments(rel) : null); }, () => fin(null));
+          // grand itinéraire : on ne demande que ses chemins situés dans la zone (index spatial du serveur,
+          // très rapide), au lieu de reconstituer tout l'itinéraire puis de le découper
+          const b = rtBox(at, rtCut());
+          const q = it.big
+            ? `[out:json][timeout:25];rel(${it.id})->.r;(way(r.r:"")(${b});way(r.r:"main")(${b});way(r.r:"forward")(${b});way(r.r:"route")(${b}););out geom;`
+            : `[out:json][timeout:25];relation(${it.id});out geom;`;
+          overpassFast(q, null, true).then(json => {
+            const els = (json && json.elements) || [];
+            if (it.big) { const segs = els.filter(e => e.type === 'way' && e.geometry).map(e => e.geometry.filter(Boolean).map(g => ({ lat: g.lat, lon: g.lon }))).filter(s => s.length > 1); fin(segs.length ? segs : null); }
+            else { const rel = els.find(e => e.type === 'relation'); fin(rel ? rtSegments(rel) : null); }
+          }, () => fin(null));
         };
-        if (rtWmtOk(it) && !rt.wmtDown) {
+        if (!it.big && rtWmtOk(it) && !rt.wmtDown) {
           left++; const t0 = Date.now(), timer = setTimeout(osm, rt.wmtGood ? 6000 : 2500);
           rtFromWmt(it).then(s => {
             if (s) { rt.wmtFails = 0; if (Date.now() - t0 < 3000) rt.wmtGood = true; clearTimeout(timer); }
@@ -4175,7 +4183,7 @@ if (saved) { try { showTrack(parseGPX(saved)); } catch { drawProfile(); } } else
 checkShared();
 stvReturn(); setTimeout(stvRetry, 8000);
 stvUI();
-const VERSION = APP_VERSION + ' · 11 oct. 2026';
+const VERSION = APP_VERSION + ' · 12 oct. 2026';
 $('note').textContent = (window.isSecureContext ? '' : 'Attention : le GPS ne fonctionne qu\'en HTTPS. ') + 'Version ' + VERSION;
 // Mises à jour : on vérifie à chaque ouverture et on recharge dès qu'une nouvelle version est prête
 // (jamais pendant une navigation ou un enregistrement : on attend la fin)
