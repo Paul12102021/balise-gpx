@@ -4,7 +4,7 @@
 
 // La page et le code doivent être de la même version. Sinon (page gardée en cache
 // par le téléphone ou par GitHub), on recharge une page fraîche, au plus 3 fois.
-const APP_VERSION = 76;
+const APP_VERSION = 77;
 try {
   const meta = document.querySelector('meta[name="balise-version"]');
   const pageV = meta ? +meta.content : 0;
@@ -2168,20 +2168,28 @@ async function rtElevate(pts) {
 // Le serveur principal d'OpenStreetMap fait souvent patienter : pour ces petites demandes,
 // on essaie d'abord un serveur libre tout de suite, sinon des serveurs miroirs, et en dernier recours on patiente.
 const OVERPASS_MIRRORS = ['https://overpass.private.coffee/api/interpreter', 'https://overpass.kumi.systems/api/interpreter'];
-async function overpassFast(q, onWait, mirrorFirst) {
-  const post = async (url, ms) => {
-    const ctrl = new AbortController(), timer = setTimeout(() => ctrl.abort(), ms);
-    try {
-      const r = await fetch(url, { method: 'POST', body: 'data=' + encodeURIComponent(q), headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, signal: ctrl.signal });
-      return r.ok ? await r.json() : null;
-    } catch { return null; } finally { clearTimeout(timer); }
-  };
-  if (mirrorFirst) { const j = await post(OVERPASS_MIRRORS[0], 45000); if (j) return j; }
-  let free = false;
-  try { free = /\d+ slots? available now/.test(await (await fetch('https://overpass-api.de/api/status', { cache: 'no-store' })).text()); } catch {}
-  if (free) { const j = await post(OVERPASS, 60000); if (j) return j; }
-  for (const m of OVERPASS_MIRRORS.slice(mirrorFirst ? 1 : 0)) { const j = await post(m, 45000); if (j) return j; }
-  return overpass(q, 2, onWait);
+async function overpassFast(q, onWait, mirrorFirst, signal) {
+  // demandes « en relais » : un miroir d'abord, puis, s'il tarde, le serveur principal et un autre miroir
+  // partent aussi ; la première réponse gagne et les autres sont annulées
+  const servers = mirrorFirst ? [OVERPASS_MIRRORS[0], OVERPASS, OVERPASS_MIRRORS[1]] : [OVERPASS, OVERPASS_MIRRORS[0], OVERPASS_MIRRORS[1]];
+  const ctrls = [];
+  const j = await new Promise(resolve => {
+    let left = servers.length, done = false;
+    const finish = v => { if (done) return; if (v || --left === 0) { done = true; resolve(v); } };
+    if (signal) signal.addEventListener('abort', () => { done = true; resolve(null); });
+    servers.forEach((url, k) => setTimeout(async () => {
+      if (done) return finish(null);
+      const ctrl = new AbortController(); ctrls.push(ctrl);
+      const timer = setTimeout(() => ctrl.abort(), 60000);
+      try {
+        const r = await fetch(url, { method: 'POST', body: 'data=' + encodeURIComponent(q), headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, signal: ctrl.signal });
+        finish(r.ok ? await r.json() : null);
+      } catch { finish(null); } finally { clearTimeout(timer); }
+    }, k * 5000));
+  });
+  ctrls.forEach(c => c.abort());
+  if (signal && signal.aborted) { const err = new Error('annulé'); err.cancel = true; throw err; }
+  return j || overpass(q, 2, onWait);
 }
 const rtCache = new Map(); // recherches déjà faites (mode + lieu) : pas de nouvelle demande en changeant de mode
 const rt = { at: null, fromMap: false, list: null, key: '', res: null, busy: false };
@@ -2259,32 +2267,46 @@ function rtRender() {
     li.appendChild(b); list.appendChild(li);
   }
 }
+let rtLoad = null; // chargement en cours : un nouveau choix l'annule
 async function rtOpen(it) {
-  if (rt.busy) return;
-  rt.busy = true; closeRoutes();
-  const t0 = Date.now(), tick = setInterval(() => toast(`Chargement du parcours… ${Math.round((Date.now() - t0) / 1000)} s`, 3000), 1000);
-  toast('Chargement du parcours…', 3000);
+  if (rtLoad) rtLoad.abort();
+  const ctrl = new AbortController(); rtLoad = ctrl;
+  closeRoutes();
+  const t0 = Date.now(), cancel = { label: 'Annuler', run: () => ctrl.abort() };
+  const msg = () => { const s = Math.round((Date.now() - t0) / 1000); return `Chargement de « ${it.name} »… ${s} s${s >= 20 ? ' · serveur lent' : ''}`; };
+  toast(msg(), 3000, cancel);
+  // on ne change que le texte, pour que le bouton « Annuler » reste touchable
+  const tick = setInterval(() => {
+    if (ctrl.signal.aborted) return;
+    const t = $('toast'), txt = t.firstChild;
+    if (!t.hidden && txt && txt.nodeType === 3 && t.querySelector('.toast-btn')) { txt.textContent = msg(); t.hidden = false; clearTimeout(toastT); toastT = setTimeout(() => t.hidden = true, 3000); }
+    else toast(msg(), 3000, cancel);
+  }, 1000);
+  const stop = () => { clearInterval(tick); if (rtLoad === ctrl) rtLoad = null; };
   try {
     const cut = it.big ? `(${rtBox(rt.at, rtCut())})` : '';
-    const json = await overpassFast(`[out:json][timeout:90];relation(${it.id});out geom${cut};`, secs => toast(`Serveurs OpenStreetMap très demandés : nouvel essai dans ${secs} s`, 4000), true);
+    const json = await overpassFast(`[out:json][timeout:90];relation(${it.id});out geom${cut};`, secs => toast(`Serveurs OpenStreetMap très demandés : nouvel essai dans ${secs} s`, 4000), true, ctrl.signal);
+    if (ctrl.signal.aborted) throw Object.assign(new Error('annulé'), { cancel: true });
     const rel = ((json && json.elements) || []).find(e => e.type === 'relation');
     const ch = rel && rtChain(rtSegments(rel));
-    if (!ch || ch.pts.length < 2 || ch.len < 100) { clearInterval(tick); toast('Ce parcours n\'a pas de tracé exploitable dans OpenStreetMap.', 5000); $('routes').hidden = false; return; }
+    if (!ch || ch.pts.length < 2 || ch.len < 100) { stop(); toast('Ce parcours n\'a pas de tracé exploitable dans OpenStreetMap.', 5000); return; }
     const partial = it.big || (it.dist && ch.len < it.dist * 0.8);
     // altitudes : on les attend au plus 3 s, sinon le parcours s'affiche tout de suite et le D+ arrive ensuite
     const flat = rtOrient(ch.pts, me || rt.at), elevP = rtElevate(flat);
     const pts = await Promise.race([elevP, new Promise(r => setTimeout(() => r(null), 3000))]);
-    clearInterval(tick);
+    if (ctrl.signal.aborted) throw Object.assign(new Error('annulé'), { cancel: true });
+    stop(); $('toast').hidden = true;
     if (pts) { rtShow(it, pts, partial); return; }
     rtShow(it, flat, partial);
     const shown = rt.res;
     elevP.then(e => { if (e !== flat && rt.res === shown && !nav) rtShow(it, e, partial, true); });
   } catch (e) {
-    clearInterval(tick);
+    stop();
+    if (e.cancel) { if (!rtLoad) toast('Chargement annulé', 2000); return; }
     toast(navigator.onLine === false ? 'Pas de réseau : impossible de charger le parcours.' : `Chargement impossible (${e.message}).`, 5000);
-    $('routes').hidden = false;
-  } finally { rt.busy = false; }
+  }
 }
+
 function rtShow(it, pts, partial, update) {
   const name = it.name + (partial ? ' (portion)' : '');
   const text = loopGPX(pts, name);
