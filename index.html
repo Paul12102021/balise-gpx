@@ -8,13 +8,13 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<meta name="balise-version" content="78">
+<meta name="balise-version" content="79">
 <title>Pisteo</title>
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" href="icon.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
 <link rel="stylesheet" href="vendor/maplibre-gl.css">
-<link rel="stylesheet" href="app.css?v=78">
+<link rel="stylesheet" href="app.css?v=79">
 </head>
 <body>
 <div id="map" aria-label="Carte"></div>
@@ -43,6 +43,9 @@
   </button>
   <button id="btnEcoFab" class="fab nav-only" title="Économie de batterie" aria-label="Économie de batterie (écran noir entre les virages)">
     <svg viewBox="0 0 24 24"><rect x="3" y="7" width="16" height="10" rx="2"/><path d="M21 10.5v3"/><path class="bolt" d="m11.5 8.5-2.5 4h3l-1.5 3"/></svg>
+  </button>
+  <button id="btnNorth" class="fab" hidden title="Nord en haut" aria-label="Remettre le nord en haut de la carte">
+    <svg viewBox="0 0 24 24"><g id="northNeedle"><path d="M12 2.5 15.6 12H8.4Z" fill="#e5484d" stroke="none"/><path d="M12 21.5 8.4 12h7.2Z" fill="currentColor" stroke="none" opacity=".45"/></g></svg>
   </button>
   <button id="btnLayer" class="fab" title="Fond de carte" aria-label="Changer de fond de carte">
     <svg viewBox="0 0 24 24"><path d="M12 3 2 8l10 5 10-5-10-5Z"/><path d="m2 13 10 5 10-5"/></svg>
@@ -355,6 +358,12 @@
       <div class="seg"><button id="rtFromMe" class="on">Autour de moi</button><button id="rtFromMap">Autour de la carte</button></div>
     </div>
     <button id="rtShowMap" class="btn go">Voir les parcours sur la carte</button>
+    <div class="lp-block">
+      <span class="lp-l">Distance</span>
+      <div id="rtFiltD" class="lp-quick"></div>
+      <span class="lp-l">Dénivelé positif</span>
+      <div id="rtFiltU" class="lp-quick"></div>
+    </div>
     <p id="rtStatus" class="note"></p>
     <ul id="rtList" class="lib-list"></ul>
     <p class="note">Sentiers et véloroutes balisés recensés par OpenStreetMap (GR, PR, EuroVelo, véloroutes, VTT). Pour les grands itinéraires, seule la portion autour du point choisi est chargée. Données © contributeurs OpenStreetMap, altitudes IGN.</p>
@@ -362,9 +371,9 @@
 </div>
 
 <div id="rtMapBar" class="loop-bar" hidden>
-  <div class="lb-info"><b id="rtmTitle">Parcours balisés sur la carte</b><span>Touche une ligne de couleur pour ouvrir le parcours.</span></div>
+  <div class="lb-info"><b id="rtmTitle">Parcours balisés</b><span id="rtmSub">Touche une ligne de couleur pour ouvrir le parcours.</span></div>
   <div class="lb-acts">
-    <button id="rtmList" class="btn small">Liste</button>
+    <button id="rtmList" class="btn small">Liste et filtres</button>
     <button id="rtmMode" class="btn small"></button>
     <button id="rtmHide" class="btn small">Masquer</button>
   </div>
@@ -518,6 +527,6 @@
 <div id="toast" class="toast" hidden></div>
 
 <script src="vendor/maplibre-gl.js"></script>
-<script src="app.js?v=78"></script>
+<script src="app.js?v=79"></script>
 </body>
 </html>

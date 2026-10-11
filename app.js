@@ -4,7 +4,7 @@
 
 // La page et le code doivent être de la même version. Sinon (page gardée en cache
 // par le téléphone ou par GitHub), on recharge une page fraîche, au plus 3 fois.
-const APP_VERSION = 78;
+const APP_VERSION = 79;
 try {
   const meta = document.querySelector('meta[name="balise-version"]');
   const pageV = meta ? +meta.content : 0;
@@ -1854,7 +1854,15 @@ $('pickCancel').onclick = () => { const cb = picking; picking = false; $('pickBa
 map.on('click', e => {
   if (planning) { planAdd({ lat: e.lngLat.lat, lon: e.lngLat.lng }); return; }
   // parcours balisés affichés : toucher une ligne ouvre le parcours
-  if (!picking && rtMapOn && !nav && $('routes').hidden) { rtTap({ lat: e.lngLat.lat, lon: e.lngLat.lng }); return; }
+  if (!picking && rtMapOn && !nav && $('routes').hidden) {
+    const hits = map.getLayer('rtv') ? map.queryRenderedFeatures([[e.point.x - 14, e.point.y - 14], [e.point.x + 14, e.point.y + 14]], { layers: ['rtv'] }) : [];
+    const ids = [...new Set(hits.map(f => f.properties.id))], items = (rt.list || []).filter(it => ids.includes(it.id));
+    if (items.length === 1) { rtOpen(items[0]); return; }
+    if (items.length > 1) { rt.tapList = items; rt.tapped = true; rtUI(); rtFiltUI(); $('rtMapBar').hidden = true; $('routes').hidden = false; rtRender(); return; }
+    if (!rtFiltOn()) rtTap({ lat: e.lngLat.lat, lon: e.lngLat.lng });
+    else toast('Touche une des lignes affichées.', 2500);
+    return;
+  }
   if (!picking) return;
   const cb = picking; picking = false; $('pickBanner').hidden = true;
   cb({ lat: e.lngLat.lat, lon: e.lngLat.lng });
@@ -2066,7 +2074,7 @@ function rtListFrom(json, at) {
       const inside = at.lat >= b.minlat && at.lat <= b.maxlat && at.lon >= b.minlon && at.lon <= b.maxlon;
       near = big || inside ? 0 : hav(at, { lat: (b.minlat + b.maxlat) / 2, lon: (b.minlon + b.maxlon) / 2 });
     }
-    out.push({ id: e.id, tags: t, cat, name: rtName(t), dist: rtTagDist(t), near, big, bounds: b });
+    out.push({ id: e.id, tags: t, cat, name: rtName(t), dist: rtTagDist(t), near, big, bounds: b, at });
   }
   out.sort((a, b) => RT_CAT[a.cat].rank - RT_CAT[b.cat].rank || (a.near ?? 1e9) - (b.near ?? 1e9) || a.name.localeCompare(b.name, 'fr'));
   return out;
@@ -2212,7 +2220,7 @@ function rtUI() {
 function openRoutes() {
   if (nav) { toast('Quitte d\'abord la navigation.'); return; }
   closeDest(); closeLib(); toggleMore(false); $('loopBar').hidden = true; $('rtBar').hidden = true; $('rtMapBar').hidden = true;
-  rtUI(); $('routes').hidden = false;
+  rtUI(); rtFiltUI(); $('routes').hidden = false;
   if (!me && !rt.fromMap && startGPS()) {
     // on laisse quelques secondes au GPS ; sans position, on cherche autour du centre de la carte
     $('rtList').innerHTML = ''; $('rtStatus').textContent = 'Recherche de ta position…';
@@ -2220,15 +2228,16 @@ function openRoutes() {
     return;
   }
   const at = rtHere(), key = profile + ':' + at.lat.toFixed(2) + ',' + at.lon.toFixed(2);
-  if (rt.list && rt.key === key && !rt.tapped) rtRender(); else rtSearch();
+  if (rt.list && rt.key === key) { rt.tapped = false; rtRender(); } else rtSearch();
 }
 function closeRoutes() { $('routes').hidden = true; }
+function rtListReady() { rtRender(); rtDraw(); rtBarText(); rtEnrich(); }
 async function rtSearch() {
   if (rt.busy) return;
   rt.tapped = false;
   const at = rtHere(), bike = rtBike();
-  rt.at = at; rt.key = profile + ':' + at.lat.toFixed(2) + ',' + at.lon.toFixed(2); rt.list = null;
-  $('rtList').innerHTML = '';
+  rt.at = at; rt.key = profile + ':' + at.lat.toFixed(2) + ',' + at.lon.toFixed(2); rt.list = null; rt.gen++;
+  $('rtList').innerHTML = ''; rtDraw(); rtBarText();
   $('rtStatus').textContent = `Recherche des parcours ${bike ? 'vélo' : 'à pied'} dans un rayon de ${rtRadius() / 1000} km${rt.fromMap || !me ? ' autour du centre de la carte' : ' autour de toi'}…`;
   const sel = bike ? '["route"~"^(bicycle|mtb)$"]' : '["route"~"^(hiking|foot)$"]';
   // l'emprise (bb) n'est demandée que pour les petits parcours : pour une EuroVelo ou un GR,
@@ -2237,31 +2246,39 @@ async function rtSearch() {
     + `relation.a["network"~"^(icn|ncn|rcn|iwn|nwn|rwn)$"]->.g;(.a; - .g;)->.p;.g out tags;.p out tags bb;`;
   rt.busy = true;
   try {
-    if (rtCache.has(rt.key)) { rt.list = rtCache.get(rt.key); rtRender(); return; }
+    if (rtCache.has(rt.key)) { rt.list = rtCache.get(rt.key); rtListReady(); return; }
     // recherche déjà faite ici il y a moins d'une semaine : affichage immédiat
-    try { const s = JSON.parse(store.get('rt:' + rt.key) || 'null'); if (s && Date.now() - s.t < 7 * 864e5) { rt.list = rtListFrom(s.j, at); rtCache.set(rt.key, rt.list); rtRender(); return; } } catch {}
+    try { const s = JSON.parse(store.get('rt:' + rt.key) || 'null'); if (s && Date.now() - s.t < 7 * 864e5) { rt.list = rtListFrom(s.j, at); rtCache.set(rt.key, rt.list); rtListReady(); return; } } catch {}
     const json = await overpassFast(q, secs => { $('rtStatus').textContent = `Serveurs OpenStreetMap très demandés : nouvel essai dans ${secs} s…`; }, true);
     rt.list = rtListFrom(json, at); rtCache.set(rt.key, rt.list);
     store.set('rt:' + rt.key, JSON.stringify({ t: Date.now(), j: { elements: (json.elements || []).map(e => ({ type: e.type, id: e.id, tags: e.tags, bounds: e.bounds })) } }));
-    rtRender();
+    rtListReady();
   } catch (e) {
     $('rtStatus').textContent = navigator.onLine === false ? 'Pas de réseau : la recherche de parcours balisés a besoin d\'une connexion.' : `Recherche impossible (${e.message}). Réessaie dans un instant.`;
+    if (!$('rtMapBar').hidden) $('rtmSub').textContent = $('rtStatus').textContent;
   } finally { rt.busy = false; }
 }
 function rtRender() {
-  const list = $('rtList'), items = rt.list || [];
+  const list = $('rtList'), all = (rt.tapped ? rt.tapList : rt.list) || [];
   list.innerHTML = '';
-  $('rtStatus').textContent = rt.tapped ? `${items.length} parcours passent à l'endroit touché. Lequel veux-tu voir ?` : items.length ? `${items.length} parcours balisé${items.length > 1 ? 's' : ''} ${rt.fromMap || !me ? 'autour du centre de la carte' : 'autour de toi'}. Touche-en un pour le voir.`
-    : `Aucun parcours ${rtBike() ? 'vélo' : 'à pied'} balisé recensé ici. Essaie l'autre mode, ou déplace la carte et choisis « Autour de la carte ».`;
+  const items = rt.tapped ? all : all.filter(it => rtPass(it) === true), pr = rtProgress();
+  const where = rt.fromMap || !me ? 'autour du centre de la carte' : 'autour de toi';
+  let st;
+  if (rt.tapped) st = `${all.length} parcours passent à l'endroit touché. Lequel veux-tu voir ?`;
+  else if (!all.length) st = `Aucun parcours ${rtBike() ? 'vélo' : 'à pied'} balisé recensé ici. Essaie l'autre mode, ou déplace la carte et choisis « Autour de la carte ».`;
+  else if (rtFiltOn()) st = `${items.length} parcours sur ${all.length} ${where} correspondent au filtre.` + (pr.done < pr.n ? ` Calcul des distances et dénivelés : ${pr.done}/${pr.n}…` : '');
+  else st = `${all.length} parcours balisé${all.length > 1 ? 's' : ''} ${where}. Touche-en un pour le voir.` + (pr.done < pr.n ? ` (calcul ${pr.done}/${pr.n})` : '');
+  $('rtStatus').textContent = st;
   for (const it of items.slice(0, 80)) {
     const li = document.createElement('li');
     const b = document.createElement('button'); b.className = 'lib-item';
     b.innerHTML = '<b></b><span></span>';
-    const c = RT_CAT[it.cat];
+    const c = RT_CAT[it.cat], g = rt.geo.get(rtKey(it));
     b.querySelector('b').textContent = it.name;
     const bits = [c.badge === 'Véloroute' || c.badge === 'Boucle vélo' ? c.label : `${c.badge} · ${c.label}`];
-    if (it.dist) bits.push(fmtDist(it.dist));
-    bits.push(it.big ? 'portion autour de toi' : it.near ? 'à ' + fmtDist(it.near) : 'passe tout près');
+    if (g) { bits.push(fmtDist(g.len) + (g.partial ? ' (portion)' : '')); if (g.hasEle) bits.push('D+ ' + fmtM(g.up)); }
+    else if (it.dist) bits.push(fmtDist(it.dist));
+    if (!g || !g.partial) bits.push(it.big ? 'portion autour de toi' : it.near ? 'à ' + fmtDist(it.near) : 'passe tout près');
     b.querySelector('span').textContent = bits.join(' · ');
     b.onclick = () => rtOpen(it);
     li.appendChild(b); list.appendChild(li);
@@ -2298,49 +2315,192 @@ function rtClip(pts, at, r) {
   for (const run of runs) { if (run.length < 2) continue; for (const q of run) { const d = hav(q, at); if (d < bd) { bd = d; best = run; } } }
   return best || pts;
 }
+// ---------- Tracés des parcours : chargés une fois, gardés sur le téléphone ----------
+// Chaque parcours de la liste est chargé en arrière-plan (tracé, longueur, D+) : on peut ainsi
+// filtrer par distance et dénivelé, les dessiner sur la carte et les ouvrir instantanément.
+rt.geo = new Map(); rt.inflight = new Map(); rt.gen = 0; rt.wmtDown = false;
+const rtKey = it => it.big ? `${it.id}@${it.at.lat.toFixed(2)},${it.at.lon.toFixed(2)}:${rtBike() ? 'b' : 'f'}` : String(it.id);
+async function rtGeoCache() { try { return await caches.open('rt-geo'); } catch { return null; } }
+async function rtSaveGeo(g) {
+  const c = await rtGeoCache(); if (!c) return;
+  const pts = g.pts.map(p => [+p.lat.toFixed(5), +p.lon.toFixed(5), p.ele != null ? Math.round(p.ele * 10) / 10 : null]);
+  try { await c.put(new Request('https://rt.geo/' + encodeURIComponent(g.key)), new Response(JSON.stringify({ t: Date.now(), pts, len: g.len, partial: g.partial, up: g.up, hasEle: g.hasEle }))); } catch {}
+}
+async function rtLoadGeo(key) {
+  const c = await rtGeoCache(); if (!c) return null;
+  try {
+    const r = await c.match('https://rt.geo/' + encodeURIComponent(key)); if (!r) return null;
+    const j = await r.json(); if (Date.now() - j.t > 30 * 864e5) return null;
+    const g = { key, pts: j.pts.map(a => ({ lat: a[0], lon: a[1], ele: a[2] })), len: j.len, partial: j.partial, up: j.up, hasEle: j.hasEle };
+    if (g.hasEle) g.elevP = Promise.resolve(g);
+    return g;
+  } catch { return null; }
+}
+// tracé (sans altitude) : mémoire → téléphone → Waymarked Trails → OpenStreetMap
+function rtGeom(it) {
+  const key = rtKey(it);
+  if (rt.geo.has(key)) return Promise.resolve(rt.geo.get(key));
+  if (rt.inflight.has(key)) return rt.inflight.get(key);
+  const at = it.at;
+  const p = (async () => {
+    let g = await rtLoadGeo(key);
+    if (!g) {
+      let segs = null;
+      if (rtWmtOk(it) && !rt.wmtDown) { segs = await rtFromWmt(it); if (!segs) rt.wmtFails = (rt.wmtFails || 0) + 1; else rt.wmtFails = 0; if (rt.wmtFails >= 2) rt.wmtDown = true; }
+      if (!segs) {
+        const cut = it.big ? `(${rtBox(at, rtCut())})` : '';
+        const json = await overpassFast(`[out:json][timeout:25];relation(${it.id});out geom${cut};`, null, true);
+        const rel = ((json && json.elements) || []).find(e => e.type === 'relation');
+        segs = rel ? rtSegments(rel) : null;
+      }
+      const ch = segs && rtChain(segs);
+      if (ch && it.big) { ch.pts = rtClip(ch.pts, at, rtCut()); ch.len = rtLen(ch.pts); }
+      if (!ch || ch.pts.length < 2 || ch.len < 100) throw new Error('pas de tracé');
+      g = { key, pts: ch.pts, len: ch.len, partial: !!(it.big || (it.dist && ch.len < it.dist * 0.8)), up: null, hasEle: false };
+    }
+    rt.geo.set(key, g);
+    return g;
+  })();
+  rt.inflight.set(key, p);
+  p.finally(() => rt.inflight.delete(key)).catch(() => {});
+  return p;
+}
+// altitudes du tracé (D+), une seule fois par parcours
+function rtElev(g) {
+  if (!g.elevP) g.elevP = rtElevate(g.pts).then(e => {
+    if (e !== g.pts) { g.pts = e; g.hasEle = true; g.up = makePath(e, '').totalUp; }
+    rtSaveGeo(g); return g;
+  });
+  return g.elevP;
+}
+// chargement en arrière-plan de toute la liste : petits parcours proches d'abord, 3 à la fois
+async function rtEnrich() {
+  const gen = ++rt.gen, items = (rt.list || []).slice();
+  items.sort((a, b) => (a.big - b.big) || ((a.near ?? 1e9) - (b.near ?? 1e9)));
+  let i = 0;
+  const worker = async () => {
+    while (gen === rt.gen && i < items.length) {
+      const it = items[i++];
+      try { const g = await rtGeom(it); if (gen !== rt.gen) return; rtChanged(); await rtElev(g); } catch { it.fail = true; }
+      if (gen === rt.gen) rtChanged();
+    }
+  };
+  await Promise.all([worker(), worker(), worker()]);
+}
+let rtChT = 0;
+function rtChanged() {
+  if (rtChT) return;
+  rtChT = setTimeout(() => { rtChT = 0; if (!$('routes').hidden) rtRender(); rtDraw(); rtBarText(); }, 400);
+}
+
+// ---------- Filtres : distance et dénivelé positif ----------
+const RT_DF = [['', 'Toutes'], ['0-10', '< 10 km'], ['10-30', '10–30 km'], ['30-60', '30–60 km'], ['60-', '> 60 km']];
+const RT_UF = [['', 'Tout'], ['0-200', '< 200 m'], ['200-500', '200–500 m'], ['500-', '> 500 m']];
+rt.filt = (() => { try { return JSON.parse(store.get('rtFilt') || '') || { d: '', u: '' }; } catch { return { d: '', u: '' }; } })();
+const rtFiltOn = () => !!(rt.filt.d || rt.filt.u);
+const rtIn = (v, spec) => { const [a, b] = spec.split('-'); return v >= +a && (b === '' || v < +b); };
+// true : correspond, false : écarté, null : pas encore calculé
+function rtPass(it) {
+  if (!rtFiltOn()) return true;
+  const g = rt.geo.get(rtKey(it));
+  if (!g) return it.fail ? false : null;
+  if (rt.filt.d && !rtIn(g.len / 1000, rt.filt.d)) return false;
+  if (rt.filt.u) { if (!g.hasEle) return g.elevP ? null : null; if (!rtIn(g.up, rt.filt.u)) return false; }
+  return true;
+}
+function rtFiltLabel() {
+  const d = RT_DF.find(x => x[0] === rt.filt.d), u = RT_UF.find(x => x[0] === rt.filt.u);
+  return [rt.filt.d ? d[1] : '', rt.filt.u ? 'D+ ' + u[1] : ''].filter(Boolean).join(' · ');
+}
+function rtFiltUI() {
+  const row = (el, opts, k) => {
+    el.innerHTML = '';
+    for (const [v, l] of opts) {
+      const b = document.createElement('button'); b.textContent = l; b.classList.toggle('on', rt.filt[k] === v);
+      b.onclick = () => { rt.filt[k] = v; store.set('rtFilt', JSON.stringify(rt.filt)); rtFiltUI(); rtRender(); rtOverlayMode(); rtDraw(); rtBarText(); };
+      el.appendChild(b);
+    }
+  };
+  row($('rtFiltD'), RT_DF, 'd'); row($('rtFiltU'), RT_UF, 'u');
+}
+function rtProgress() {
+  const items = rt.list || [], done = items.filter(it => it.fail || (rt.geo.get(rtKey(it)) || {}).hasEle).length;
+  return { done, n: items.length };
+}
+
+// ---------- Parcours dessinés par Pisteo (instantanés au toucher, filtrables) ----------
+const RT_COL = { gr: '#d7263d', grp: '#e8890c', pr: '#e4b800', ev: '#1f5fd6', vn: '#2f7de1', vr: '#7b3fe4', vl: '#a46be8', vtt: '#7a5230' };
+async function rtDraw() {
+  await ready;
+  const feats = [];
+  if (rtMapOn) for (const it of rt.list || []) {
+    if (rtPass(it) !== true) continue;
+    const g = rt.geo.get(rtKey(it)); if (!g) continue;
+    feats.push({ type: 'Feature', properties: { id: it.id, cat: it.cat }, geometry: { type: 'LineString', coordinates: g.pts.map(p => [p.lon, p.lat]) } });
+  }
+  const data = { type: 'FeatureCollection', features: feats };
+  if (!map.getSource('rtv')) {
+    map.addSource('rtv', { type: 'geojson', data });
+    const col = ['match', ['get', 'cat'], ...Object.entries(RT_COL).flat(), '#7b3fe4'];
+    const w = (a, b) => ['interpolate', ['linear'], ['zoom'], 9, a, 16, b];
+    map.addLayer({ id: 'rtv-casing', type: 'line', source: 'rtv', layout: { 'line-join': 'round', 'line-cap': 'round' }, paint: { 'line-color': '#fff', 'line-width': w(3, 9), 'line-opacity': .8 } }, 'track-casing');
+    map.addLayer({ id: 'rtv', type: 'line', source: 'rtv', layout: { 'line-join': 'round', 'line-cap': 'round' }, paint: { 'line-color': col, 'line-width': w(2, 6) } }, 'track-casing');
+  } else map.getSource('rtv').setData(data);
+}
+// calque Waymarked Trails : complet, mais pas filtrable → affiché seulement sans filtre
+function rtOverlayMode() { if (rtMapOn) rtOverlay(true); }
+function rtBarText() {
+  if ($('rtMapBar').hidden) return;
+  const items = rt.list, pr = rtProgress();
+  let s;
+  if (!items) s = 'Recherche des parcours autour…';
+  else if (!items.length) s = `Aucun parcours ${rtBike() ? 'vélo' : 'à pied'} balisé ici.`;
+  else {
+    const ok = items.filter(it => rtPass(it) === true).length;
+    s = rtFiltOn() ? `${ok} parcours sur ${items.length} · ${rtFiltLabel()}` : `${items.length} parcours · touche une ligne pour l'ouvrir`;
+    if (pr.done < pr.n) s += ` · calcul ${pr.done}/${pr.n}`;
+  }
+  $('rtmSub').textContent = s;
+}
+
+// ---------- Ouvrir un parcours ----------
 let rtLoad = null; // chargement en cours : un nouveau choix l'annule
 async function rtOpen(it) {
   if (rtLoad) rtLoad.abort();
   const ctrl = new AbortController(); rtLoad = ctrl;
   closeRoutes();
-  const t0 = Date.now(), cancel = { label: 'Annuler', run: () => ctrl.abort() };
-  const msg = () => { const s = Math.round((Date.now() - t0) / 1000); return `Chargement de « ${it.name} »… ${s} s${s >= 20 ? ' · serveur lent' : ''}`; };
-  toast(msg(), 3000, cancel);
-  // on ne change que le texte, pour que le bouton « Annuler » reste touchable
-  const tick = setInterval(() => {
-    if (ctrl.signal.aborted) return;
-    const t = $('toast'), txt = t.firstChild;
-    if (!t.hidden && txt && txt.nodeType === 3 && t.querySelector('.toast-btn')) { txt.textContent = msg(); t.hidden = false; clearTimeout(toastT); toastT = setTimeout(() => t.hidden = true, 3000); }
-    else toast(msg(), 3000, cancel);
-  }, 1000);
+  const cached = rt.geo.get(rtKey(it));
+  let tick = 0;
   const stop = () => { clearInterval(tick); if (rtLoad === ctrl) rtLoad = null; };
+  if (!cached) {
+    const t0 = Date.now(), cancel = { label: 'Annuler', run: () => ctrl.abort() };
+    const msg = () => { const s = Math.round((Date.now() - t0) / 1000); return `Chargement de « ${it.name} »… ${s} s${s >= 20 ? ' · serveur lent' : ''}`; };
+    toast(msg(), 3000, cancel);
+    // on ne change que le texte, pour que le bouton « Annuler » reste touchable
+    tick = setInterval(() => {
+      if (ctrl.signal.aborted) return;
+      const t = $('toast'), txt = t.firstChild;
+      if (!t.hidden && txt && txt.nodeType === 3 && t.querySelector('.toast-btn')) { txt.textContent = msg(); clearTimeout(toastT); toastT = setTimeout(() => t.hidden = true, 3000); }
+      else toast(msg(), 3000, cancel);
+    }, 1000);
+  }
+  const aborted = new Promise(r => ctrl.signal.addEventListener('abort', () => r('abort')));
   try {
-    let segs = rtWmtOk(it) ? await rtFromWmt(it, ctrl.signal) : null;
-    if (ctrl.signal.aborted) throw Object.assign(new Error('annulé'), { cancel: true });
-    if (!segs) {
-      const cut = it.big ? `(${rtBox(rt.at, rtCut())})` : '';
-      const json = await overpassFast(`[out:json][timeout:25];relation(${it.id});out geom${cut};`, secs => toast(`Serveurs OpenStreetMap très demandés : nouvel essai dans ${secs} s`, 4000), true, ctrl.signal);
-      if (ctrl.signal.aborted) throw Object.assign(new Error('annulé'), { cancel: true });
-      const rel = ((json && json.elements) || []).find(e => e.type === 'relation');
-      segs = rel ? rtSegments(rel) : null;
-    }
-    const ch = segs && rtChain(segs);
-    if (ch && it.big) { ch.pts = rtClip(ch.pts, rt.at, rtCut()); ch.len = rtLen(ch.pts); }
-    if (!ch || ch.pts.length < 2 || ch.len < 100) { stop(); toast('Ce parcours n\'a pas de tracé exploitable dans OpenStreetMap.', 5000); return; }
-    const partial = it.big || (it.dist && ch.len < it.dist * 0.8);
+    const g = await Promise.race([rtGeom(it), aborted]);
+    if (g === 'abort') throw Object.assign(new Error('annulé'), { cancel: true });
     // altitudes : on les attend au plus 3 s, sinon le parcours s'affiche tout de suite et le D+ arrive ensuite
-    const flat = rtOrient(ch.pts, me || rt.at), elevP = rtElevate(flat);
-    const pts = await Promise.race([elevP, new Promise(r => setTimeout(() => r(null), 3000))]);
-    if (ctrl.signal.aborted) throw Object.assign(new Error('annulé'), { cancel: true });
-    stop(); $('toast').hidden = true;
-    if (pts) { rtShow(it, pts, partial); return; }
-    rtShow(it, flat, partial);
-    const shown = rt.res;
-    elevP.then(e => { if (e !== flat && rt.res === shown && !nav) rtShow(it, e, partial, true); });
+    const elevP = rtElev(g);
+    const r = g.hasEle ? g : await Promise.race([elevP, aborted, new Promise(res => setTimeout(() => res(null), 3000))]);
+    if (r === 'abort') throw Object.assign(new Error('annulé'), { cancel: true });
+    stop(); if (!cached) $('toast').hidden = true;
+    const show = (pts, upd) => rtShow(it, rtOrient(pts, me || it.at), g.partial, upd);
+    show(g.pts);
+    if (!g.hasEle) { const shown = rt.res; elevP.then(e => { if (e.hasEle && rt.res === shown && !nav) show(e.pts, true); }); }
   } catch (e) {
     stop();
     if (e.cancel) { if (!rtLoad) toast('Chargement annulé', 2000); return; }
-    toast(navigator.onLine === false ? 'Pas de réseau : impossible de charger le parcours.' : `Chargement impossible (${e.message}).`, 5000);
+    it.fail = true;
+    toast(navigator.onLine === false ? 'Pas de réseau : impossible de charger le parcours.' : e.message === 'pas de tracé' ? 'Ce parcours n\'a pas de tracé exploitable dans OpenStreetMap.' : `Chargement impossible (${e.message}).`, 5000);
   }
 }
 
@@ -2358,7 +2518,7 @@ function rtShow(it, pts, partial, update) {
   if (update) return;
   setTimeout(() => { try { map.fitBounds(boundsOf([pts]), { padding: { top: 80, bottom: $('sheet').offsetHeight + $('rtBar').offsetHeight + 30, left: 30, right: 70 }, bearing: 0, pitch: 0, duration: 600 }); } catch {} }, 350);
 }
-$('destRoutes').onclick = openRoutes; $('libRoutes').onclick = openRoutes;
+$('destRoutes').onclick = rtShowOnMap; $('libRoutes').onclick = rtShowOnMap;
 $('rtClose').onclick = closeRoutes;
 $('routes').onclick = e => { if (e.target === $('routes')) closeRoutes(); };
 $('rtFoot').onclick = () => { if (!rtBike()) return; setProfile('hiking-mountain', true); rtUI(); rtSearch(); if (rtMapOn) rtOverlay(true); };
@@ -2372,9 +2532,21 @@ $('rtFromMe').onclick = () => {
   waitFix(20000).then(pos => { if (pos) rtSearch(); else $('rtStatus').textContent = 'Position GPS introuvable : choisis « Autour de la carte ».'; });
 };
 $('rtFromMap').onclick = () => { if (rt.fromMap) { rtSearch(); return; } rt.fromMap = true; rtUI(); rtSearch(); };
-$('rtbBack').onclick = () => { $('rtBar').hidden = true; if (rtMapOn) $('rtMapBar').hidden = false; else openRoutes(); };
+$('rtbBack').onclick = () => { $('rtBar').hidden = true; if (rtMapOn) { $('rtMapBar').hidden = false; rtBarText(); } else openRoutes(); };
 $('rtbKeep').onclick = async () => { if (!rt.res || !track) return; await saveRecent(track, rt.res.text); $('rtbKeep').textContent = 'Gardé ✓'; $('rtbKeep').disabled = true; toast('Parcours gardé dans « Ouvrir un GPX »', 3000); };
 $('rtbGo').onclick = () => { $('rtBar').hidden = true; startNav(); };
+
+// ---------- Nord en haut : la boussole apparaît dès que la carte est tournée ou inclinée ----------
+function northUI() {
+  const b = map.getBearing(), tilt = map.getPitch();
+  $('btnNorth').hidden = Math.abs(b) < 1 && tilt < 1;
+  $('northNeedle').style.transform = `rotate(${-b}deg)`;
+}
+map.on('rotate', northUI); map.on('pitch', northUI);
+$('btnNorth').onclick = () => {
+  if (nav) setFollow(false); // en navigation, la carte arrête de tourner avec toi
+  map.easeTo({ bearing: 0, pitch: 0, duration: 400 });
+};
 
 // ---------- Parcours balisés dessinés sur la carte (calque Waymarked Trails, données OpenStreetMap) ----------
 // Un calque d'images transparent : aussi rapide que le fond de carte, rien à calculer.
@@ -2386,7 +2558,8 @@ async function rtOverlay(on) {
   for (const k of [0, 1]) { if (map.getLayer('wmt-' + k)) map.removeLayer('wmt-' + k); if (map.getSource('wmt-' + k)) map.removeSource('wmt-' + k); }
   rtMapOn = on;
   $('rtmMode').textContent = rtBike() ? 'Voir à pied' : 'Voir à vélo';
-  if (!on) return;
+  rtDraw();
+  if (!on || rtFiltOn()) return;
   const kinds = rtBike() ? ['cycling', 'mtb'] : ['hiking'];
   // juste au-dessus du fond de carte, sous les zones téléchargées et la trace
   const before = map.getLayer('packs-fill') ? 'packs-fill' : 'track-casing';
@@ -2397,11 +2570,18 @@ async function rtOverlay(on) {
   });
 }
 function rtShowOnMap() {
-  closeRoutes(); $('rtBar').hidden = true;
+  if (nav) { toast('Quitte d\'abord la navigation.'); return; }
+  closeDest(); closeLib(); toggleMore(false); closeRoutes(); $('rtBar').hidden = true; $('loopBar').hidden = true;
   rtOverlay(true);
-  $('rtMapBar').hidden = false;
-  const c = rtHere();
-  map.easeTo({ center: [c.lon, c.lat], zoom: Math.max(Math.min(map.getZoom(), 14), rtBike() ? 11.5 : 12.5), pitch: 0, bearing: 0, duration: 700 });
+  $('rtMapBar').hidden = false; rtBarText();
+  const go = () => {
+    const c = rtHere();
+    map.easeTo({ center: [c.lon, c.lat], zoom: Math.max(Math.min(map.getZoom(), 14), rtBike() ? 11.5 : 12.5), pitch: 0, bearing: 0, duration: 700 });
+    const key = profile + ':' + c.lat.toFixed(2) + ',' + c.lon.toFixed(2);
+    if (rt.list && rt.key === key) { rtDraw(); rtBarText(); } else rtSearch();
+  };
+  if (!me && !rt.fromMap && startGPS()) { $('rtmSub').textContent = 'Recherche de ta position…'; waitFix(10000).then(go); }
+  else go();
 }
 function rtHideMap() { rtOverlay(false); $('rtMapBar').hidden = true; }
 async function rtTap(p) {
@@ -2418,16 +2598,15 @@ async function rtTap(p) {
   finally { rt.busy = false; }
   const items = rtListFrom(json, p);
   if (!items.length) { toast('Aucun parcours balisé à cet endroit : touche une ligne de couleur.', 3500); return; }
-  rt.at = p;
   if (items.length === 1) { $('toast').hidden = true; rtOpen(items[0]); return; }
   $('toast').hidden = true;
-  rt.list = items; rt.tapped = true; rt.key = '';
+  rt.tapList = items; rt.tapped = true;
   rtUI(); $('rtMapBar').hidden = true; $('routes').hidden = false; rtRender();
 }
 $('rtShowMap').onclick = rtShowOnMap;
 $('rtmList').onclick = () => { $('rtMapBar').hidden = true; openRoutes(); };
 $('rtmHide').onclick = rtHideMap;
-$('rtmMode').onclick = () => { setProfile(rtBike() ? 'hiking-mountain' : 'trekking', true); rtOverlay(true); toast(rtBike() ? 'Parcours vélo et VTT' : 'Parcours à pied', 2000); };
+$('rtmMode').onclick = () => { setProfile(rtBike() ? 'hiking-mountain' : 'trekking', true); rtUI(); rtOverlay(true); rtSearch(); toast(rtBike() ? 'Parcours vélo et VTT' : 'Parcours à pied', 2000); };
 
 // =====================================================================
 // Tracer un itinéraire point par point : chaque toucher sur la carte ajoute un point,

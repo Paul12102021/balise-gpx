@@ -1,6 +1,6 @@
 /* Service worker : appli disponible hors ligne + tuiles de carte en cache */
-const APP = 'app-v78', TILES = 'tiles-v2';
-const SHELL = ['./', 'index.html', 'app.css?v=78', 'app.js?v=78', 'vendor/maplibre-gl.js', 'vendor/maplibre-gl.css',
+const APP = 'app-v79', TILES = 'tiles-v2';
+const SHELL = ['./', 'index.html', 'app.css?v=79', 'app.js?v=79', 'vendor/maplibre-gl.js', 'vendor/maplibre-gl.css',
   'departements.json', 'manifest.webmanifest', 'icon.svg', 'icon-192.png', 'icon-512.png', 'icon-maskable-512.png', 'apple-touch-icon.png'];
 
 // Clé de cache commune avec la page : https://tiles.balise/<fond>/<z>/<x>/<y>
@@ -24,7 +24,7 @@ self.addEventListener('install', e => {
   e.waitUntil(caches.open(APP).then(c => c.addAll(SHELL.map(u => new Request(u, { cache: 'reload' })))).then(() => self.skipWaiting()));
 });
 self.addEventListener('activate', e => {
-  e.waitUntil(caches.keys().then(ks => Promise.all(ks.filter(k => k !== APP && k !== TILES && k !== 'shared' && k !== 'ofm-assets').map(k => caches.delete(k))))
+  e.waitUntil(caches.keys().then(ks => Promise.all(ks.filter(k => k !== APP && k !== TILES && k !== 'shared' && k !== 'ofm-assets' && k !== 'rt-geo').map(k => caches.delete(k))))
     .then(() => self.clients.claim()));
 });
 
