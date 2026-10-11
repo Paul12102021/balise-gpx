@@ -424,3 +424,17 @@ body.nav .loop-bar { display: none; }
 body:not(.free) .nav-more.prof-only > :not(#navProfile):not(.np-proftools) { display: none !important; }
 body.free .np-proftools { display: none; }
 .nav-more.prof-only { gap: 6px; padding-top: 8px; }
+/* ---------- tracé d'itinéraire point par point ---------- */
+.plan-bar, .plan-tools { display: none; }
+body.plan .plan-bar { display: flex; position: fixed; z-index: 15; left: 0; right: 0; top: 0; gap: 10px; align-items: center; justify-content: space-between;
+  padding: calc(env(safe-area-inset-top, 0px) + 10px) 12px 10px; background: var(--hud); color: var(--hud-ink); }
+.pb-info { display: flex; flex-direction: column; min-width: 0; }
+.pb-info b { font-size: 16px; font-variant-numeric: tabular-nums; }
+.pb-info span { font-size: 12.5px; opacity: .8; }
+body.plan .plan-tools { display: grid; grid-template-columns: repeat(5, 1fr); gap: 4px; position: fixed; z-index: 15; left: 8px; right: 8px;
+  bottom: calc(env(safe-area-inset-bottom, 0px) + 10px); padding: 6px; border-radius: 16px; background: var(--panel); box-shadow: 0 6px 24px rgba(0,0,0,.25); }
+.pt { display: flex; flex-direction: column; align-items: center; gap: 3px; min-height: 54px; justify-content: center; border: 0; border-radius: 12px; background: none; color: var(--ink); font: 600 12px var(--font); cursor: pointer; }
+.pt svg { width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-width: 2.1; stroke-linecap: round; stroke-linejoin: round; }
+.pt.go { background: var(--go); color: #fff; }
+.pt:disabled { opacity: .35; }
+body.plan .hud, body.plan .sheet, body.plan .fab-col, body.plan .loop-bar { display: none !important; }

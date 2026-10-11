@@ -8,13 +8,13 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<meta name="balise-version" content="69">
+<meta name="balise-version" content="70">
 <title>Pisteo</title>
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" href="icon.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
 <link rel="stylesheet" href="vendor/maplibre-gl.css">
-<link rel="stylesheet" href="app.css?v=69">
+<link rel="stylesheet" href="app.css?v=70">
 </head>
 <body>
 <div id="map" aria-label="Carte"></div>
@@ -213,6 +213,7 @@
     </div>
     <button id="libBrowse" class="btn go">Chercher un fichier GPX…</button>
     <button id="libLoop" class="btn">⟳ Proposer une boucle</button>
+    <button id="libPlan" class="btn">✎ Tracer un itinéraire</button>
     <ul id="libList" class="lib-list"></ul>
     <p id="libEmpty" class="note" hidden>Les traces que tu ouvres apparaîtront ici.</p>
     <p id="libTip" class="note">Astuce : dans ton gestionnaire de fichiers ou un mail, fais « Partager » sur un GPX puis choisis Pisteo.</p>
@@ -438,6 +439,7 @@
       <button id="destPick" class="btn">Choisir sur la carte</button>
       <button id="destFree" class="btn">Balade libre</button>
       <button id="destLoop" class="btn go wide2">⟳ Proposer une boucle</button>
+      <button id="destPlan" class="btn wide2">✎ Tracer un itinéraire point par point</button>
     </div>
     <div class="row">
       <label for="destProf">Je me déplace</label>
@@ -453,6 +455,18 @@
 </div>
 
 <div id="zoneFrame" class="zone-frame" aria-hidden="true"></div>
+<div id="planBar" class="plan-bar">
+  <div class="pb-info"><b id="pbStats">Touche la carte pour placer le départ</b><span id="pbHint">Chaque toucher ajoute un point · l'itinéraire suit les chemins</span></div>
+  <button id="pbClose" class="btn small">Quitter</button>
+</div>
+<div id="planTools" class="plan-tools">
+  <button id="ptUndo" class="pt"><svg viewBox="0 0 24 24"><path d="M9 14 4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11"/></svg>Annuler</button>
+  <button id="ptMode" class="pt"><svg viewBox="0 0 24 24"><path d="M4 19c4-1 3-7 8-8s4-6 8-7"/></svg><span id="ptModeL">Chemins</span></button>
+  <button id="ptLoop" class="pt"><svg viewBox="0 0 24 24"><path d="M20 12a8 8 0 1 1-3-6.2"/><path d="M17 2v4h4"/></svg>Boucler</button>
+  <button id="ptClear" class="pt"><svg viewBox="0 0 24 24"><path d="M5 7h14M10 7V4h4v3M7 7l1 13h8l1-13"/></svg>Effacer</button>
+  <button id="ptDone" class="pt go"><svg viewBox="0 0 24 24"><path d="m5 12 5 5 9-10"/></svg>Terminer</button>
+</div>
+
 <div id="zoneBar" class="zone-bar">
   <div><b>Zone à télécharger</b><span id="zoneInfo">…</span></div>
   <div class="zone-btns"><button id="zoneCancel" class="btn small">Annuler</button><button id="zoneGo" class="btn small go">Télécharger</button></div>
@@ -466,6 +480,6 @@
 <div id="toast" class="toast" hidden></div>
 
 <script src="vendor/maplibre-gl.js"></script>
-<script src="app.js?v=69"></script>
+<script src="app.js?v=70"></script>
 </body>
 </html>

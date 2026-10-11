@@ -4,7 +4,7 @@
 
 // La page et le code doivent être de la même version. Sinon (page gardée en cache
 // par le téléphone ou par GitHub), on recharge une page fraîche, au plus 3 fois.
-const APP_VERSION = 69;
+const APP_VERSION = 70;
 try {
   const meta = document.querySelector('meta[name="balise-version"]');
   const pageV = meta ? +meta.content : 0;
@@ -285,6 +285,12 @@ map.on('load', () => {
   map.addLayer({ id: 'rejoin-casing', type: 'line', source: 'rejoin', layout: round, paint: { 'line-color': '#fff', 'line-width': w(5, 13) } });
   map.addLayer({ id: 'rejoin', type: 'line', source: 'rejoin', layout: round, paint: { 'line-color': COL.me, 'line-width': w(3, 8), 'line-dasharray': [1.2, 1] } });
   map.addLayer({ id: 'turn', type: 'circle', source: 'turn', paint: { 'circle-radius': 7, 'circle-color': '#fff', 'circle-stroke-color': '#17201c', 'circle-stroke-width': 3, 'circle-pitch-alignment': 'map' } });
+  map.addSource('plan', { type: 'geojson', data: EMPTY });
+  map.addLayer({ id: 'plan-casing', type: 'line', source: 'plan', filter: ['==', ['geometry-type'], 'LineString'], layout: round, paint: { 'line-color': '#fff', 'line-width': w(6, 13) } });
+  map.addLayer({ id: 'plan-line', type: 'line', source: 'plan', filter: ['all', ['==', ['geometry-type'], 'LineString'], ['!', ['get', 'pending']]], layout: round, paint: { 'line-color': '#7B3FE4', 'line-width': w(3, 8) } });
+  map.addLayer({ id: 'plan-pending', type: 'line', source: 'plan', filter: ['all', ['==', ['geometry-type'], 'LineString'], ['get', 'pending']], layout: round, paint: { 'line-color': '#7B3FE4', 'line-width': w(3, 8), 'line-dasharray': [1, 1.5] } });
+  map.addLayer({ id: 'plan-pts', type: 'circle', source: 'plan', filter: ['==', ['geometry-type'], 'Point'],
+    paint: { 'circle-radius': ['case', ['get', 'end'], 8, 6], 'circle-color': ['case', ['get', 'start'], '#2F5E45', ['get', 'end'], '#C62828', '#fff'], 'circle-stroke-color': '#7B3FE4', 'circle-stroke-width': 3 } });
   if (LAYERS[layerIdx].vector) setLayer(layerIdx, false);
 });
 async function setSrc(id, data) { await ready; const s = map.getSource(id); if (s) s.setData(data); }
@@ -1846,6 +1852,7 @@ function startPick(txt, cb) { picking = cb; $('pickTxt').textContent = txt; $('p
 $('destPick').onclick = () => { closeDest(); startPick('Touche la carte à l\'endroit où tu veux aller', p => goTo(Object.assign(p, { label: 'le point choisi' }))); };
 $('pickCancel').onclick = () => { const cb = picking; picking = false; $('pickBanner').hidden = true; if (cb && cb.cancel) cb.cancel(); };
 map.on('click', e => {
+  if (planning) { planAdd({ lat: e.lngLat.lat, lon: e.lngLat.lng }); return; }
   if (!picking) return;
   const cb = picking; picking = false; $('pickBanner').hidden = true;
   cb({ lat: e.lngLat.lat, lon: e.lngLat.lng });
@@ -2005,8 +2012,80 @@ $('lbAgain').onclick = () => { $('loopBar').hidden = true; makeLoop(); };
 $('lbEdit').onclick = () => { $('loopBar').hidden = true; openLoop(); };
 $('lbKeep').onclick = async () => { if (!loopRes || !track) return; await saveRecent(track, loopRes.text); $('lbKeep').textContent = 'Gardée ✓'; $('lbKeep').disabled = true; toast('Boucle gardée dans « Ouvrir un GPX »', 3000); };
 $('lbGo').onclick = () => { $('loopBar').hidden = true; startNav(); };
+
+// =====================================================================
+// Tracer un itinéraire point par point : chaque toucher sur la carte ajoute un point,
+// relié au précédent par les chemins (BRouter, ou chemins téléchargés), ou en ligne droite
+// =====================================================================
+var planning = false;
+const plan = { wps: [], segs: [], straight: false, queue: Promise.resolve(), busy: 0 };
+function openPlan() {
+  if (nav) { toast('Quitte d\'abord la navigation.'); return; }
+  closeDest(); closeLib(); toggleMore(false, true); $('loopBar').hidden = true;
+  planning = true; document.body.classList.add('plan');
+  plan.wps = []; plan.segs = []; planDraw();
+  if (me) map.easeTo({ center: [me.lon, me.lat], zoom: Math.max(map.getZoom(), 14), pitch: 0, bearing: 0, duration: 600 });
+}
+function closePlan() { planning = false; document.body.classList.remove('plan'); plan.wps = []; plan.segs = []; setSrc('plan', EMPTY); }
+$('destPlan').onclick = openPlan; $('libPlan').onclick = openPlan;
+$('pbClose').onclick = () => {
+  if (plan.wps.length > 1 && !$('pbClose').dataset.armed) { $('pbClose').dataset.armed = '1'; $('pbClose').textContent = 'Sûr ?'; setTimeout(() => { delete $('pbClose').dataset.armed; $('pbClose').textContent = 'Quitter'; }, 2500); return; }
+  delete $('pbClose').dataset.armed; $('pbClose').textContent = 'Quitter'; closePlan();
+};
+async function planSegment(a, b) {
+  if (plan.straight) return [a, b];
+  try { return await routeVia([a, b], 25000); }
+  catch { toast('Pas de chemin trouvé ici : segment en ligne droite', 2500); return [a, b]; }
+}
+function planAdd(p) {
+  const prev = plan.wps[plan.wps.length - 1];
+  plan.wps.push(p);
+  if (!prev) { planDraw(); return; }
+  const seg = { pts: [prev, p], pending: true };
+  plan.segs.push(seg);
+  planDraw();
+  plan.busy++;
+  plan.queue = plan.queue.then(async () => {
+    // segment annulé entre-temps : on ne calcule rien
+    if (plan.segs.includes(seg)) { const pts = await planSegment(prev, p); seg.pts = pts; seg.pending = false; }
+    plan.busy--; if (planning) planDraw();
+  });
+}
+function planAll() { const out = []; plan.segs.forEach((sg, k) => out.push(...(k ? sg.pts.slice(1) : sg.pts))); return out; }
+function planDraw() {
+  const feats = plan.segs.map(sg => ({ type: 'Feature', properties: { pending: !!sg.pending }, geometry: { type: 'LineString', coordinates: sg.pts.map(q => [q.lon, q.lat]) } }));
+  plan.wps.forEach((w, k) => feats.push({ type: 'Feature', properties: { start: k === 0, end: k > 0 && k === plan.wps.length - 1 }, geometry: { type: 'Point', coordinates: [w.lon, w.lat] } }));
+  setSrc('plan', { type: 'FeatureCollection', features: feats });
+  const n = plan.wps.length, all = planAll();
+  if (!n) { $('pbStats').textContent = 'Touche la carte pour placer le départ'; }
+  else if (n === 1) { $('pbStats').textContent = 'Départ placé · touche le point suivant'; }
+  else {
+    const pth = makePath(all, '');
+    $('pbStats').textContent = `${fmtDist(pth.total)}${pth.hasEle ? ' · D+ ' + fmtM(pth.totalUp) : ''} · ${n} points` + (plan.busy ? ' · calcul…' : '');
+  }
+  $('pbHint').textContent = plan.straight ? 'Mode ligne droite : les points sont reliés directement' : 'Chaque toucher ajoute un point · l\'itinéraire suit les chemins';
+  $('ptUndo').disabled = !n; $('ptClear').disabled = !n; $('ptLoop').disabled = n < 2; $('ptDone').disabled = n < 2;
+  $('ptModeL').textContent = plan.straight ? 'Ligne droite' : 'Chemins';
+}
+$('ptUndo').onclick = () => { plan.wps.pop(); plan.segs.length = Math.max(0, plan.wps.length - 1); planDraw(); };
+$('ptClear').onclick = () => { plan.wps = []; plan.segs = []; planDraw(); };
+$('ptMode').onclick = () => { plan.straight = !plan.straight; planDraw(); toast(plan.straight ? 'Les prochains points seront reliés en ligne droite' : 'Les prochains points suivront les chemins', 2500); };
+$('ptLoop').onclick = () => { if (plan.wps.length > 1) planAdd(Object.assign({}, plan.wps[0])); };
+$('ptDone').onclick = async () => {
+  if (plan.wps.length < 2) return;
+  $('ptDone').disabled = true;
+  await plan.queue;
+  const pts = removeSpurs(planAll()), pth = makePath(pts, '');
+  const def = `Itinéraire ${profile === 'trekking' ? 'à vélo' : 'à pied'} de ${fmtDist(pth.total)}`;
+  const name = (prompt('Nom de l\'itinéraire', def) || def).trim();
+  const text = loopGPX(pts, name);
+  closePlan();
+  loadText(text); // affiché, et gardé dans « Ouvrir un GPX »
+  toast(`${name} · gardé dans « Ouvrir un GPX ». Touche Naviguer pour partir.`, 4500);
+};
 // appui long sur la carte : y aller
 map.on('contextmenu', e => {
+  if (planning) return;
   const d = { lat: e.lngLat.lat, lon: e.lngLat.lng, label: 'le point choisi' };
   toast(me ? `À ${fmtDist(hav(me, d))} à vol d'oiseau` : 'Point choisi', 6000, { label: 'Y aller', run: () => goTo(d) });
 });
