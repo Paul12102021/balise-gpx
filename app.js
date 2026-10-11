@@ -4,7 +4,7 @@
 
 // La page et le code doivent être de la même version. Sinon (page gardée en cache
 // par le téléphone ou par GitHub), on recharge une page fraîche, au plus 3 fois.
-const APP_VERSION = 68;
+const APP_VERSION = 69;
 try {
   const meta = document.querySelector('meta[name="balise-version"]');
   const pageV = meta ? +meta.content : 0;
@@ -2202,6 +2202,7 @@ function updateNavMore() {
   $('npDone').textContent = fmtDist(di.along);
   $('npLeft').textContent = fmtDist(di.remain);
   $('npPct').textContent = Math.floor(di.along / track.total * 100) + ' %';
+  $('npProfInfo').textContent = `${fmtDist(di.remain)} restants${track.hasEle ? ' · D+ ' + fmtM(di.upLeft) + ' · D− ' + fmtM(di.downLeft) : ''}`;
   // retour à la trace : par le chemin si un itinéraire est calculé, sinon l'écart à vol d'oiseau
   const off = pr && (rejoin || pr.dist > onTrackTol(me));
   $('npBack').hidden = !off;
@@ -2221,6 +2222,15 @@ function updateNavMore() {
   if (Date.now() - navMoreT > 2000) { navMoreT = Date.now(); drawProfileOn($('navProfile')); }
 }
 $('nbGrip').onclick = () => toggleNavMore();
+// « Profil seul » : le panneau ne montre que la topographie (choix gardé en mémoire)
+function setProfOnly(v) {
+  store.set('npProfOnly', v ? '1' : '0');
+  $('navMore').classList.toggle('prof-only', v);
+  $('npProfOnly').textContent = v ? 'Afficher les détails' : 'Profil seul';
+  navMoreT = 0; updateNavMore();
+}
+$('npProfOnly').onclick = () => setProfOnly(!$('navMore').classList.contains('prof-only'));
+setProfOnly(store.get('npProfOnly') === '1');
 (() => {
   attachSwipe($('navBottom'), navMotion());
 })();

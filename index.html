@@ -8,13 +8,13 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<meta name="balise-version" content="68">
+<meta name="balise-version" content="69">
 <title>Pisteo</title>
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" href="icon.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
 <link rel="stylesheet" href="vendor/maplibre-gl.css">
-<link rel="stylesheet" href="app.css?v=68">
+<link rel="stylesheet" href="app.css?v=69">
 </head>
 <body>
 <div id="map" aria-label="Carte"></div>
@@ -90,6 +90,10 @@
   </div>
   <div id="navMore" class="nav-more" hidden>
     <canvas id="navProfile" aria-label="Profil altimétrique et position"></canvas>
+    <div class="np-proftools">
+      <span id="npProfInfo"></span>
+      <button id="npProfOnly" class="linkbtn">Profil seul</button>
+    </div>
     <div class="np-acts">
       <button id="npRec" class="btn"></button>
       <button id="npEnd" class="btn ghost" hidden>Terminer</button>
@@ -462,6 +466,6 @@
 <div id="toast" class="toast" hidden></div>
 
 <script src="vendor/maplibre-gl.js"></script>
-<script src="app.js?v=68"></script>
+<script src="app.js?v=69"></script>
 </body>
 </html>
