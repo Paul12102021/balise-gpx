@@ -4,7 +4,7 @@
 
 // La page et le code doivent être de la même version. Sinon (page gardée en cache
 // par le téléphone ou par GitHub), on recharge une page fraîche, au plus 3 fois.
-const APP_VERSION = 85;
+const APP_VERSION = 86;
 try {
   const meta = document.querySelector('meta[name="balise-version"]');
   const pageV = meta ? +meta.content : 0;
@@ -2269,7 +2269,7 @@ function openRoutes() {
   if (nav) { toast('Quitte d\'abord la navigation.'); return; }
   rtSheetOpen(false);
   if (!me && !rt.fromMap && startGPS()) {
-    // on laisse quelques secondes au GPS ; sans position, on cherche autour du centre de la carte
+    // on laisse quelques secondes au GPS ; sans position, on cherche dans la zone affichée
     $('rtList').innerHTML = ''; $('rtStatus').textContent = 'Recherche de ta position…';
     waitFix(10000).then(() => { if (!$('routes').hidden) rtSearch(); });
     return;
@@ -2285,7 +2285,7 @@ async function rtSearch() {
   const at = rtHere(), bike = rtBike();
   rt.at = at; rt.key = profile + ':' + at.lat.toFixed(2) + ',' + at.lon.toFixed(2); rt.list = null; rt.gen++; $('rtHere').hidden = true;
   $('rtList').innerHTML = ''; rtDraw(); rtBarText();
-  $('rtStatus').textContent = `Recherche des parcours ${bike ? 'vélo' : 'à pied'} dans un rayon de ${rtRadius() / 1000} km${rt.fromMap || !me ? ' autour du centre de la carte' : ' autour de toi'}…`;
+  $('rtStatus').textContent = `Recherche des parcours ${bike ? 'vélo' : 'à pied'} dans un rayon de ${rtRadius() / 1000} km${rt.fromMap || !me ? ' dans la zone affichée' : ' autour de toi'}…`;
   const sel = bike ? '["route"~"^(bicycle|mtb)$"]' : '["route"~"^(hiking|foot)$"]';
   // l'emprise (bb) n'est demandée que pour les petits parcours : pour une EuroVelo ou un GR,
   // le serveur devrait reconstituer tout l'itinéraire à travers l'Europe, ce qui prend très longtemps
@@ -2308,10 +2308,10 @@ function rtRender() {
   const list = $('rtList'), all = (rt.tapped ? rt.tapList : rt.list) || [];
   list.innerHTML = '';
   const items = rt.tapped ? all : all.filter(it => rtPass(it) === true), pr = rtProgress();
-  const where = rt.fromMap || !me ? 'autour du centre de la carte' : 'autour de toi';
+  const where = rt.fromMap || !me ? 'dans la zone affichée' : 'autour de toi';
   let st;
   if (rt.tapped) st = `${all.length} parcours passent à l'endroit touché. Lequel veux-tu voir ?`;
-  else if (!all.length) st = `Aucun parcours ${rtBike() ? 'vélo' : 'à pied'} balisé recensé ici. Essaie l'autre mode, ou déplace la carte et choisis « Autour de la carte ».`;
+  else if (!all.length) st = `Aucun parcours ${rtBike() ? 'vélo' : 'à pied'} balisé recensé ici. Essaie l'autre mode, ou déplace la carte et choisis « Zone affichée ».`;
   else if (rtFiltOn()) st = `${items.length} parcours sur ${all.length} ${where} correspondent au filtre.` + (pr.done < pr.n ? ` Calcul des distances et dénivelés : ${pr.done}/${pr.n}…` : '');
   else st = `${all.length} parcours balisé${all.length > 1 ? 's' : ''} ${where}. Touche une ligne sur la carte, ou glisse vers le haut pour la liste.` + (pr.done < pr.n ? ` (calcul ${pr.done}/${pr.n})` : '');
   $('rtStatus').textContent = st;
@@ -2592,18 +2592,27 @@ $('routes').onclick = e => { if (e.target === $('routes')) closeRoutes(); };
 $('rtFoot').onclick = () => { if (!rtBike()) return; setProfile('hiking-mountain', true); rtUI(); rtSearch(); if (rtMapOn) rtOverlay(true); };
 $('rtBike').onclick = () => { if (rtBike()) return; setProfile('trekking', true); rtUI(); rtSearch(); if (rtMapOn) rtOverlay(true); };
 $('rtFromMe').onclick = () => {
-  if (!rt.fromMap && me && rt.at && hav(me, rt.at) < 1000) return;
   rt.fromMap = false; rtUI();
-  if (me) { map.easeTo({ center: [me.lon, me.lat], duration: 600 }); rtSearch(); return; }
+  if (me) {
+    // la carte revient toujours sur ta position ; la liste n'est refaite que si elle était ailleurs
+    map.easeTo({ center: [me.lon, me.lat], zoom: Math.max(map.getZoom(), rtBike() ? 11.5 : 12.5), duration: 600 });
+    if (!(rt.at && hav(me, rt.at) < 1000 && rt.list)) rtSearch(); else { rtRender(); setTimeout(rtCheckMoved, 700); }
+    return;
+  }
   if (!startGPS()) return;
   $('rtStatus').textContent = 'Recherche de ta position…';
-  waitFix(20000).then(pos => { if (pos) rtSearch(); else $('rtStatus').textContent = 'Position GPS introuvable : choisis « Autour de la carte ».'; });
+  waitFix(20000).then(pos => { if (pos) rtSearch(); else $('rtStatus').textContent = 'Position GPS introuvable : choisis « Zone affichée ».'; });
 };
-$('rtFromMap').onclick = () => { if (rt.fromMap) { rtSearch(); return; } rt.fromMap = true; rtUI(); rtSearch(); };
+$('rtFromMap').onclick = () => {
+  rt.fromMap = true; rtUI();
+  const c = map.getCenter();
+  if (rt.at && hav({ lat: c.lat, lon: c.lng }, rt.at) < 1000 && rt.list) { rtRender(); return; } // déjà la zone affichée
+  rtSearch();
+};
 
 // ---------- « Chercher dans cette zone » : la liste ne suit pas chaque petit mouvement de la carte ----------
 // Le bouton n'apparaît que si la carte s'est éloignée de plus de la moitié du rayon de recherche
-// (6 km à pied, 10 km à vélo) ; un toucher relance la recherche autour du centre de la carte.
+// (6 km à pied, 10 km à vélo) ; un toucher relance la recherche dans la zone affichée.
 function rtCheckMoved() {
   const show = !$('routes').hidden && !nav && rt.at && !rt.busy && map.getZoom() >= 8.5
     && (() => { const c = map.getCenter(); return hav({ lat: c.lat, lon: c.lng }, rt.at) > rtRadius() * 0.5; })();
