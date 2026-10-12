@@ -494,3 +494,4 @@ body.nav .rt-here { display: none; }
 .pb-seg { background: rgba(255,255,255,.14); }
 .pb-seg button { white-space: nowrap; min-height: 30px; padding: 0 10px; font-size: 13px; color: var(--hud-ink); opacity: .8; }
 .pb-seg button.on { background: var(--hud-ink); color: var(--hud); opacity: 1; }
+#routes.rt-sheet .lib-panel { overscroll-behavior: contain; -webkit-overflow-scrolling: touch; }

@@ -4,7 +4,7 @@
 
 // La page et le code doivent être de la même version. Sinon (page gardée en cache
 // par le téléphone ou par GitHub), on recharge une page fraîche, au plus 3 fois.
-const APP_VERSION = 95;
+const APP_VERSION = 96;
 try {
   const meta = document.querySelector('meta[name="balise-version"]');
   const pageV = meta ? +meta.content : 0;
@@ -2467,9 +2467,13 @@ async function rtSearch() {
     $('rtStatus').textContent = navigator.onLine === false ? 'Pas de réseau : la recherche de parcours balisés a besoin d\'une connexion.' : `Recherche impossible (${e.message}). Réessaie dans un instant.`;
   } finally { rt.busy = false; if (rt.again) { rt.again = false; rtSearch(); } }
 }
+// La liste est mise à jour sur place (les lignes déjà affichées sont gardées) : pendant le chargement
+// en arrière-plan, le défilement n'est plus interrompu ni ramené en haut.
 function rtRender() {
   const list = $('rtList'), all = (rt.tapped ? rt.tapList : rt.list) || [];
-  list.innerHTML = '';
+  const pnl = $('rtPanel'), keepTop = pnl.scrollTop;
+  const old = new Map(); for (const li of [...list.children]) old.set(li.dataset.k, li);
+  const order = [];
   const items = rt.tapped ? all : all.filter(it => rtPass(it) === true), pr = rtProgress();
   const where = rt.fromMap ? 'dans la zone affichée' : me ? 'autour de toi' : rt.prov ? 'autour de ta dernière position connue' : 'dans la zone affichée';
   let st;
@@ -2480,19 +2484,30 @@ function rtRender() {
   $('rtStatus').textContent = st;
   if (rtSheet.collapsed && !$('routes').hidden) rtSetCollapsed(true);
   for (const it of items.slice(0, 80)) {
-    const li = document.createElement('li');
-    const b = document.createElement('button'); b.className = 'lib-item';
-    b.innerHTML = '<b></b><span></span>';
-    const c = RT_CAT[it.cat], g = rt.geo.get(rtKey(it));
-    b.querySelector('b').textContent = it.name;
+    const k = rtKey(it);
+    let li = old.get(k), b;
+    if (li) { old.delete(k); b = li.firstChild; }
+    else {
+      li = document.createElement('li'); li.dataset.k = k;
+      b = document.createElement('button'); b.className = 'lib-item';
+      b.innerHTML = '<b></b><span></span>'; li.appendChild(b);
+    }
+    order.push(li);
+    const c = RT_CAT[it.cat], g = rt.geo.get(k);
+    if (b.querySelector('b').textContent !== it.name) b.querySelector('b').textContent = it.name;
     const bits = [c.badge === 'Véloroute' || c.badge === 'Boucle vélo' ? c.label : `${c.badge} · ${c.label}`];
     if (g) { bits.push(fmtDist(g.len) + (g.partial ? ' (portion)' : '')); if (g.hasEle) bits.push('D+ ' + fmtM(g.up)); }
     else if (it.dist) bits.push(fmtDist(it.dist));
     if (!g || !g.partial) bits.push(it.big ? 'portion autour de toi' : it.near ? 'à ' + fmtDist(it.near) : 'passe tout près');
-    b.querySelector('span').textContent = bits.join(' · ');
+    const txt = bits.join(' · ');
+    if (b.querySelector('span').textContent !== txt) b.querySelector('span').textContent = txt;
     b.onclick = () => rtSelect(it);
-    li.appendChild(b); list.appendChild(li);
   }
+  for (const li of old.values()) li.remove();
+  // on ne déplace les lignes que si l'ordre a vraiment changé
+  const cur = [...list.children];
+  if (cur.length !== order.length || order.some((li, i) => cur[i] !== li)) order.forEach(li => list.appendChild(li));
+  if (!rtSheet.collapsed && pnl.scrollTop !== keepTop) pnl.scrollTop = keepTop;
 }
 // Tracé déjà mis en ordre par Waymarked Trails (le site qui dessine le calque) : une simple
 // demande de fichier, rapide, sans passer par les serveurs OpenStreetMap souvent saturés.
@@ -2634,10 +2649,19 @@ async function rtEnrich() {
   };
   await Promise.all([worker()]);
 }
-let rtChT = 0;
+let rtChT = 0, rtTouchT = 0, rtTouching = false;
+// doigt posé sur le panneau ou défilement en cours : la mise à jour attend un peu
+$('rtPanel').addEventListener('touchstart', () => { rtTouching = true; }, { passive: true });
+$('rtPanel').addEventListener('touchend', () => { rtTouching = false; rtTouchT = Date.now(); }, { passive: true });
+$('rtPanel').addEventListener('touchcancel', () => { rtTouching = false; rtTouchT = Date.now(); }, { passive: true });
+$('rtPanel').addEventListener('scroll', () => { rtTouchT = Date.now(); }, { passive: true });
 function rtChanged() {
   if (rtChT) return;
-  rtChT = setTimeout(() => { rtChT = 0; if (!$('routes').hidden) rtRender(); rtDraw(); rtBarText(); }, 400);
+  const run = () => {
+    if (rtTouching || Date.now() - rtTouchT < 700) { rtChT = setTimeout(run, 400); return; }
+    rtChT = 0; if (!$('routes').hidden) rtRender(); rtDraw(); rtBarText();
+  };
+  rtChT = setTimeout(run, 400);
 }
 
 // ---------- Filtres : distance et dénivelé positif ----------
