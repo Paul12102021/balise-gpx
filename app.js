@@ -4,7 +4,7 @@
 
 // La page et le code doivent être de la même version. Sinon (page gardée en cache
 // par le téléphone ou par GitHub), on recharge une page fraîche, au plus 3 fois.
-const APP_VERSION = 87;
+const APP_VERSION = 88;
 try {
   const meta = document.querySelector('meta[name="balise-version"]');
   const pageV = meta ? +meta.content : 0;
@@ -1023,6 +1023,7 @@ function onPos(pos) {
     meMk.setLngLat([pos.lon, pos.lat]); onActFix(pos); return;
   }
   fullT = pos.t;
+  if (!pos.sim && (!onPos.saved || pos.t - onPos.saved > 60000)) { onPos.saved = pos.t; store.set('lastPos', JSON.stringify({ lat: pos.lat, lon: pos.lon, t: Date.now() })); }
   // vitesse et direction de déplacement
   if (prevFix && (pos.speed == null || isNaN(pos.speed))) {
     const dt = (pos.t - prevFix.t) / 1000;
@@ -1860,6 +1861,7 @@ map.on('click', e => {
   // parcours balisés affichés : toucher une ligne ouvre le parcours
   if (!picking && !nav && !$('routes').hidden && !rtSheet.collapsed) { rtSetCollapsed(true); return; }
   if (!picking && rtMapOn && !nav && ($('routes').hidden || rtSheet.collapsed)) {
+    if (!rt.list) { toast('Recherche des parcours en cours…', 2000); return; }
     const hits = map.getLayer('rtv') ? map.queryRenderedFeatures([[e.point.x - 14, e.point.y - 14], [e.point.x + 14, e.point.y + 14]], { layers: ['rtv'] }) : [];
     const ids = [...new Set(hits.map(f => f.properties.id))], items = (rt.list || []).filter(it => ids.includes(it.id));
     if (items.length === 1) { rtOpen(items[0]); return; }
@@ -2213,8 +2215,10 @@ function rtBox(c, r) {
   const dLat = r / 111320, dLon = r / (111320 * Math.cos(rad(c.lat)));
   return [c.lat - dLat, c.lon - dLon, c.lat + dLat, c.lon + dLon].map(v => v.toFixed(5)).join(',');
 }
+function rtLastPos() { try { const p = JSON.parse(store.get('lastPos') || 'null'); return p && Date.now() - p.t < 30 * 864e5 ? p : null; } catch { return null; } }
 function rtHere() {
   if (!rt.fromMap && me) return { lat: me.lat, lon: me.lon };
+  if (!rt.fromMap && rt.prov) return { lat: rt.prov.lat, lon: rt.prov.lon };
   const c = map.getCenter(); return { lat: c.lat, lon: c.lng };
 }
 function rtUI() {
@@ -2280,7 +2284,7 @@ function openRoutes() {
 function closeRoutes() { $('routes').hidden = true; $('rtHere').hidden = true; document.body.classList.remove('rtmode'); }
 function rtListReady() { rtRender(); rtDraw(); rtBarText(); rtEnrich(); }
 async function rtSearch() {
-  if (rt.busy) return;
+  if (rt.busy) { rt.again = true; return; }
   rt.tapped = false;
   const at = rtHere(), bike = rtBike();
   rt.at = at; rt.key = profile + ':' + at.lat.toFixed(2) + ',' + at.lon.toFixed(2); rt.list = null; rt.gen++; $('rtHere').hidden = true;
@@ -2302,13 +2306,13 @@ async function rtSearch() {
     rtListReady();
   } catch (e) {
     $('rtStatus').textContent = navigator.onLine === false ? 'Pas de réseau : la recherche de parcours balisés a besoin d\'une connexion.' : `Recherche impossible (${e.message}). Réessaie dans un instant.`;
-  } finally { rt.busy = false; }
+  } finally { rt.busy = false; if (rt.again) { rt.again = false; rtSearch(); } }
 }
 function rtRender() {
   const list = $('rtList'), all = (rt.tapped ? rt.tapList : rt.list) || [];
   list.innerHTML = '';
   const items = rt.tapped ? all : all.filter(it => rtPass(it) === true), pr = rtProgress();
-  const where = rt.fromMap || !me ? 'dans la zone affichée' : 'autour de toi';
+  const where = rt.fromMap ? 'dans la zone affichée' : me ? 'autour de toi' : rt.prov ? 'autour de ta dernière position connue' : 'dans la zone affichée';
   let st;
   if (rt.tapped) st = `${all.length} parcours passent à l'endroit touché. Lequel veux-tu voir ?`;
   else if (!all.length) st = `Aucun parcours ${rtBike() ? 'vélo' : 'à pied'} balisé recensé ici. Essaie l'autre mode, ou déplace la carte et choisis « Zone affichée ».`;
@@ -2666,28 +2670,38 @@ function rtShowOnMap() {
   if (nav) { toast('Quitte d\'abord la navigation.'); return; }
   rtOverlay(true);
   rt.tapped = false; rtSheetOpen(true);
-  const go = () => {
+  const go = (moveMap = true) => {
     const c = rtHere();
-    map.easeTo({ center: [c.lon, c.lat], zoom: Math.max(Math.min(map.getZoom(), 14), rtBike() ? 11.5 : 12.5), pitch: 0, bearing: 0, duration: 700 });
+    if (moveMap) map.easeTo({ center: [c.lon, c.lat], zoom: Math.max(Math.min(map.getZoom(), 14), rtBike() ? 11.5 : 12.5), pitch: 0, bearing: 0, duration: 700 });
     const key = profile + ':' + c.lat.toFixed(2) + ',' + c.lon.toFixed(2);
     if (rt.list && rt.key === key) { rtRender(); rtDraw(); } else rtSearch();
   };
-  if (!me && !rt.fromMap && startGPS()) { $('rtStatus').textContent = 'Recherche de ta position…'; rtSetCollapsed(true); waitFix(10000).then(go); }
-  else go();
+  if (!me && !rt.fromMap && startGPS()) {
+    // GPS pas encore prêt : on part tout de suite de ta dernière position connue, puis on corrige si besoin
+    rt.prov = rtLastPos();
+    if (rt.prov) go(); else { $('rtStatus').textContent = 'Recherche de ta position…'; rtSetCollapsed(true); }
+    const prov = rt.prov;
+    waitFix(20000).then(pos => {
+      rt.prov = null;
+      if ($('routes').hidden || rt.fromMap) return;
+      if (!pos) { if (!prov) { $('rtStatus').textContent = 'Position GPS introuvable : choisis « Zone affichée ».'; } return; }
+      if (!prov || hav(pos, prov) > 1500) go();
+    });
+  } else go();
 }
 function rtHideMap() { rtOverlay(false); }
 async function rtTap(p) {
-  if (rt.busy) return;
+  if (rt.tapBusy) return;
   const sel = rtBike() ? '["route"~"^(bicycle|mtb)$"]' : '["route"~"^(hiking|foot)$"]';
   // rayon de toucher : environ 25 pixels à l'écran
   const r = Math.round(clamp(25 * 156543 * Math.cos(rad(p.lat)) / Math.pow(2, map.getZoom()), 15, 400));
   const q = `[out:json][timeout:25];way(around:${r},${p.lat.toFixed(6)},${p.lon.toFixed(6)})->.w;rel(bw.w)["type"="route"]${sel}->.a;`
     + `relation.a["network"~"^(icn|ncn|rcn|iwn|nwn|rwn)$"]->.g;(.a; - .g;)->.p;.g out tags;.p out tags bb;`;
-  rt.busy = true; toast('Recherche du parcours touché…', 8000);
+  rt.tapBusy = true; toast('Recherche du parcours touché…', 8000);
   let json;
   try { json = await overpassFast(q, secs => toast(`Serveurs OpenStreetMap très demandés : nouvel essai dans ${secs} s`, 4000), true); }
   catch (e) { toast(navigator.onLine === false ? 'Pas de réseau.' : `Recherche impossible (${e.message}).`, 4000); return; }
-  finally { rt.busy = false; }
+  finally { rt.tapBusy = false; }
   const items = rtListFrom(json, p);
   if (!items.length) { toast('Aucun parcours balisé à cet endroit : touche une ligne de couleur.', 3500); return; }
   if (items.length === 1) { $('toast').hidden = true; rtOpen(items[0]); return; }
