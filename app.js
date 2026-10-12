@@ -4,7 +4,7 @@
 
 // La page et le code doivent être de la même version. Sinon (page gardée en cache
 // par le téléphone ou par GitHub), on recharge une page fraîche, au plus 3 fois.
-const APP_VERSION = 90;
+const APP_VERSION = 91;
 try {
   const meta = document.querySelector('meta[name="balise-version"]');
   const pageV = meta ? +meta.content : 0;
@@ -1452,8 +1452,22 @@ function pickVoice() {
   const vs = frVoices();
   return vs.find(v => /fr[-_]FR/i.test(v.lang) && v.localService) || vs.find(v => /fr[-_]FR/i.test(v.lang)) || vs[0] || null;
 }
+// Plusieurs Pisteo ouverts (onglet Chrome + appli installée) : seul celui qu'on regarde a le droit de parler.
+// Une copie oubliée en navigation dans un autre onglet se tait, et sa navigation est arrêtée.
+let otherActive = false;
+try {
+  const bc = new BroadcastChannel('pisteo');
+  const hello = () => { if (document.visibilityState === 'visible') { otherActive = false; bc.postMessage('active'); } };
+  bc.onmessage = e => {
+    if (e.data !== 'active' || document.visibilityState === 'visible') return;
+    otherActive = true;
+    try { speechSynthesis.cancel(); } catch {}
+    if (nav && actState !== 'on' && actState !== 'paused') stopNav(); // pas de sortie enregistrée en cours : on arrête tout
+  };
+  document.addEventListener('visibilitychange', hello); window.addEventListener('focus', hello); hello();
+} catch { /* navigateur sans BroadcastChannel */ }
 function say(text) {
-  if (!voiceOn || !('speechSynthesis' in window)) return;
+  if (!voiceOn || otherActive || !('speechSynthesis' in window)) return;
   try {
     const u = new SpeechSynthesisUtterance(text);
     u.lang = 'fr-FR'; u.rate = voiceRate;
@@ -1465,7 +1479,7 @@ function say(text) {
 let audioCtx;
 function unlockAudio() { try { audioCtx = audioCtx || new (window.AudioContext || window.webkitAudioContext)(); audioCtx.resume(); } catch {} }
 function beep() {
-  if (!voiceOn || !audioCtx) return;
+  if (!voiceOn || otherActive || !audioCtx) return;
   try {
     const t0 = audioCtx.currentTime;
     [0, .25].forEach(dt => {
