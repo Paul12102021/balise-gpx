@@ -4,7 +4,7 @@
 
 // La page et le code doivent être de la même version. Sinon (page gardée en cache
 // par le téléphone ou par GitHub), on recharge une page fraîche, au plus 3 fois.
-const APP_VERSION = 88;
+const APP_VERSION = 89;
 try {
   const meta = document.querySelector('meta[name="balise-version"]');
   const pageV = meta ? +meta.content : 0;
@@ -2183,28 +2183,33 @@ async function rtElevate(pts) {
 // Le serveur principal d'OpenStreetMap fait souvent patienter : pour ces petites demandes,
 // on essaie d'abord un serveur libre tout de suite, sinon des serveurs miroirs, et en dernier recours on patiente.
 const OVERPASS_MIRRORS = ['https://overpass.private.coffee/api/interpreter', 'https://overpass.kumi.systems/api/interpreter'];
-async function overpassFast(q, onWait, mirrorFirst, signal) {
-  // demandes « en relais » : un miroir d'abord, puis, s'il tarde, le serveur principal et un autre miroir
-  // partent aussi ; la première réponse gagne et les autres sont annulées
+async function overpassFast(q, onWait, mirrorFirst, signal, fast) {
+  // demandes « en relais » : un serveur, puis le suivant s'il échoue ou tarde 3 s ; la première réponse
+  // gagne et les autres sont annulées. fast : pas d'attente longue, échec franc au bout de ~20 s
   const servers = mirrorFirst ? [OVERPASS_MIRRORS[0], OVERPASS, OVERPASS_MIRRORS[1]] : [OVERPASS, OVERPASS_MIRRORS[0], OVERPASS_MIRRORS[1]];
   const ctrls = [];
   const j = await new Promise(resolve => {
-    let left = servers.length, done = false;
-    const finish = v => { if (done) return; if (v || --left === 0) { done = true; resolve(v); } };
-    if (signal) signal.addEventListener('abort', () => { done = true; resolve(null); });
-    servers.forEach((url, k) => setTimeout(async () => {
-      if (done) return finish(null);
+    let next = 0, running = 0, done = false, relay = 0;
+    const end = v => { if (done) return; done = true; clearTimeout(relay); clearTimeout(deadline); resolve(v); };
+    const deadline = fast ? setTimeout(() => end(null), 20000) : 0;
+    if (signal) signal.addEventListener('abort', () => end(null));
+    const start = () => {
+      if (done || next >= servers.length) { if (!running) end(null); return; }
+      const url = servers[next++]; running++;
+      clearTimeout(relay); relay = setTimeout(start, 3000);
       const ctrl = new AbortController(); ctrls.push(ctrl);
-      const timer = setTimeout(() => ctrl.abort(), 60000);
-      try {
-        const r = await fetch(url, { method: 'POST', body: 'data=' + encodeURIComponent(q), headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, signal: ctrl.signal });
-        finish(r.ok ? await r.json() : null);
-      } catch { finish(null); } finally { clearTimeout(timer); }
-    }, k * 3000));
+      const timer = setTimeout(() => ctrl.abort(), fast ? 20000 : 60000);
+      fetch(url, { method: 'POST', body: 'data=' + encodeURIComponent(q), headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, signal: ctrl.signal })
+        .then(r => r.ok ? r.json() : null).catch(() => null)
+        .then(v => { clearTimeout(timer); running--; if (v) end(v); else start(); }); // échec : serveur suivant tout de suite
+    };
+    start();
   });
   ctrls.forEach(c => c.abort());
   if (signal && signal.aborted) { const err = new Error('annulé'); err.cancel = true; throw err; }
-  return j || overpass(q, 2, onWait);
+  if (j) return j;
+  if (fast) throw new Error('serveurs OpenStreetMap saturés, réessaie dans un moment');
+  return overpass(q, 2, onWait);
 }
 const rtCache = new Map(); // recherches déjà faites (mode + lieu) : pas de nouvelle demande en changeant de mode
 const rt = { at: null, fromMap: false, list: null, key: '', res: null, busy: false };
@@ -2281,7 +2286,10 @@ function openRoutes() {
   const at = rtHere(), key = profile + ':' + at.lat.toFixed(2) + ',' + at.lon.toFixed(2);
   if (rt.list && rt.key === key) { rt.tapped = false; rtRender(); } else rtSearch();
 }
-function closeRoutes() { $('routes').hidden = true; $('rtHere').hidden = true; document.body.classList.remove('rtmode'); }
+function closeRoutes(keepMap) {
+  $('routes').hidden = true; $('rtHere').hidden = true; document.body.classList.remove('rtmode');
+  if (!keepMap && rtMapOn) rtHideMap();
+}
 function rtListReady() { rtRender(); rtDraw(); rtBarText(); rtEnrich(); }
 async function rtSearch() {
   if (rt.busy) { rt.again = true; return; }
@@ -2300,7 +2308,7 @@ async function rtSearch() {
     if (rtCache.has(rt.key)) { rt.list = rtCache.get(rt.key); rtListReady(); return; }
     // recherche déjà faite ici il y a moins d'une semaine : affichage immédiat
     try { const s = JSON.parse(store.get('rt:' + rt.key) || 'null'); if (s && Date.now() - s.t < 7 * 864e5) { rt.list = rtListFrom(s.j, at); rtCache.set(rt.key, rt.list); rtListReady(); return; } } catch {}
-    const json = await overpassFast(q, secs => { $('rtStatus').textContent = `Serveurs OpenStreetMap très demandés : nouvel essai dans ${secs} s…`; }, true);
+    const json = await overpassFast(q, null, true, null, true);
     rt.list = rtListFrom(json, at); rtCache.set(rt.key, rt.list);
     store.set('rt:' + rt.key, JSON.stringify({ t: Date.now(), j: { elements: (json.elements || []).map(e => ({ type: e.type, id: e.id, tags: e.tags, bounds: e.bounds })) } }));
     rtListReady();
@@ -2395,9 +2403,21 @@ function rtGeom(it) {
   const at = it.at;
   const p = (async () => {
     let g = await rtLoadGeo(key);
+    if (!g) g = await Promise.race([rtFetchGeo(it, key, at), new Promise((_, rej) => setTimeout(() => rej(new Error('serveurs OpenStreetMap saturés, réessaie dans un moment')), 30000))]);
+    rt.geo.set(key, g);
+    return g;
+  })();
+  rt.inflight.set(key, p);
+  p.finally(() => rt.inflight.delete(key)).catch(() => {});
+  return p;
+}
+async function rtFetchGeo(it, key, at) {
+  {
+    let g = null;
     if (!g) {
       // Waymarked Trails et OpenStreetMap en course : OSM part si Waymarked échoue ou tarde
       // (2,5 s, ou 6 s quand Waymarked a déjà répondu vite ce jour-là) ; la première réponse gagne
+      let netFail = false; // OpenStreetMap n'a pas répondu (≠ réponse sans tracé)
       const segs = await new Promise(resolve => {
         let left = 0, done = false, osmGo = false;
         const fin = s => { if (done) return; if (s) { done = true; resolve(s); } else if (--left === 0) { done = true; resolve(null); } };
@@ -2409,11 +2429,11 @@ function rtGeom(it) {
           const q = it.big
             ? `[out:json][timeout:25];rel(${it.id})->.r;(way(r.r:"")(${b});way(r.r:"main")(${b});way(r.r:"forward")(${b});way(r.r:"route")(${b}););out geom;`
             : `[out:json][timeout:25];relation(${it.id});out geom;`;
-          overpassFast(q, null, true).then(json => {
+          overpassFast(q, null, true, null, true).then(json => {
             const els = (json && json.elements) || [];
             if (it.big) { const segs = els.filter(e => e.type === 'way' && e.geometry).map(e => e.geometry.filter(Boolean).map(g => ({ lat: g.lat, lon: g.lon }))).filter(s => s.length > 1); fin(segs.length ? segs : null); }
             else { const rel = els.find(e => e.type === 'relation'); fin(rel ? rtSegments(rel) : null); }
-          }, () => fin(null));
+          }, () => { netFail = true; fin(null); });
         };
         if (!it.big && rtWmtOk(it) && !rt.wmtDown) {
           left++; const t0 = Date.now(), timer = setTimeout(osm, rt.wmtGood ? 6000 : 2500);
@@ -2426,15 +2446,12 @@ function rtGeom(it) {
       });
       const ch = segs && rtChain(segs);
       if (ch && it.big) { ch.pts = rtClip(ch.pts, at, rtCut()); ch.len = rtLen(ch.pts); }
+      if (!segs && netFail) throw new Error('serveurs OpenStreetMap saturés, réessaie dans un moment');
       if (!ch || ch.pts.length < 2 || ch.len < 100) throw new Error('pas de tracé');
       g = { key, pts: ch.pts, len: ch.len, partial: !!(it.big || (it.dist && ch.len < it.dist * 0.8)), up: null, hasEle: false };
     }
-    rt.geo.set(key, g);
     return g;
-  })();
-  rt.inflight.set(key, p);
-  p.finally(() => rt.inflight.delete(key)).catch(() => {});
-  return p;
+  }
 }
 // altitudes du tracé (D+), une seule fois par parcours
 function rtElev(g) {
@@ -2457,7 +2474,7 @@ async function rtEnrich() {
       if (gen === rt.gen) rtChanged();
     }
   };
-  await Promise.all([worker(), worker()]);
+  await Promise.all([worker()]);
 }
 let rtChT = 0;
 function rtChanged() {
@@ -2540,7 +2557,7 @@ let rtLoad = null; // chargement en cours : un nouveau choix l'annule
 async function rtOpen(it) {
   if (rtLoad) rtLoad.abort();
   const ctrl = new AbortController(); rtLoad = ctrl;
-  closeRoutes();
+  closeRoutes(true);
   const cached = rt.geo.get(rtKey(it));
   let tick = 0;
   const stop = () => { clearInterval(tick); if (rtLoad === ctrl) rtLoad = null; };
@@ -2570,7 +2587,7 @@ async function rtOpen(it) {
     if (!g.hasEle) { const shown = rt.res; elevP.then(e => { if (e.hasEle && rt.res === shown && !nav) show(e.pts, true); }); }
   } catch (e) {
     stop();
-    if (e.cancel) { if (!rtLoad) toast('Chargement annulé', 2000); return; }
+    if (e.cancel) { if (!rtLoad) { toast('Chargement annulé', 2000); if (rtMapOn) rtSheetOpen(true); } return; }
     it.fail = true; if (rtMapOn) rtSheetOpen(true);
     toast(navigator.onLine === false ? 'Pas de réseau : impossible de charger le parcours.' : e.message === 'pas de tracé' ? 'Ce parcours n\'a pas de tracé exploitable dans OpenStreetMap.' : `Chargement impossible (${e.message}).`, 5000);
   }
@@ -2593,6 +2610,8 @@ function rtShow(it, pts, partial, update) {
 $('destRoutes').onclick = rtShowOnMap; $('libRoutes').onclick = rtShowOnMap;
 $('rtClose').onclick = () => { rtHideMap(); closeRoutes(); };
 $('routes').onclick = e => { if (e.target === $('routes')) closeRoutes(); };
+// sécurité : menu principal ouvert (Réglages, Ouvrir un GPX…) sans parcours affiché → on quitte les parcours balisés
+setInterval(() => { if (rtMapOn && $('routes').hidden && $('rtBar').hidden && !rtLoad && !rt.tapBusy) rtHideMap(); }, 1000);
 $('rtFoot').onclick = () => { if (!rtBike()) return; setProfile('hiking-mountain', true); rtUI(); rtSearch(); if (rtMapOn) rtOverlay(true); };
 $('rtBike').onclick = () => { if (rtBike()) return; setProfile('trekking', true); rtUI(); rtSearch(); if (rtMapOn) rtOverlay(true); };
 $('rtFromMe').onclick = () => {
@@ -2699,7 +2718,7 @@ async function rtTap(p) {
     + `relation.a["network"~"^(icn|ncn|rcn|iwn|nwn|rwn)$"]->.g;(.a; - .g;)->.p;.g out tags;.p out tags bb;`;
   rt.tapBusy = true; toast('Recherche du parcours touché…', 8000);
   let json;
-  try { json = await overpassFast(q, secs => toast(`Serveurs OpenStreetMap très demandés : nouvel essai dans ${secs} s`, 4000), true); }
+  try { json = await overpassFast(q, null, true, null, true); }
   catch (e) { toast(navigator.onLine === false ? 'Pas de réseau.' : `Recherche impossible (${e.message}).`, 4000); return; }
   finally { rt.tapBusy = false; }
   const items = rtListFrom(json, p);
