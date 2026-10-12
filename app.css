@@ -495,3 +495,7 @@ body.nav .rt-here { display: none; }
 .pb-seg button { white-space: nowrap; min-height: 30px; padding: 0 10px; font-size: 13px; color: var(--hud-ink); opacity: .8; }
 .pb-seg button.on { background: var(--hud-ink); color: var(--hud); opacity: 1; }
 #routes.rt-sheet .lib-panel { overscroll-behavior: contain; -webkit-overflow-scrolling: touch; }
+/* en-tête des parcours bien distinct de la partie qui défile : on glisse l'en-tête, on fait défiler le reste */
+#routes.rt-sheet:not(.collapsed) .rt-grab { border-bottom: 1px solid var(--line); box-shadow: 0 10px 14px -12px rgba(0,0,0,.55); padding-bottom: 12px; border-radius: 16px 16px 0 0; }
+#routes.rt-sheet:not(.collapsed) .rt-grab ~ * { margin-left: 2px; margin-right: 2px; }
+#routes.rt-sheet .rt-handle { width: 52px; height: 6px; background: var(--muted); opacity: .55; }
