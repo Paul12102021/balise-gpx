@@ -4,7 +4,7 @@
 
 // La page et le code doivent être de la même version. Sinon (page gardée en cache
 // par le téléphone ou par GitHub), on recharge une page fraîche, au plus 3 fois.
-const APP_VERSION = 97;
+const APP_VERSION = 98;
 try {
   const meta = document.querySelector('meta[name="balise-version"]');
   const pageV = meta ? +meta.content : 0;
@@ -2397,17 +2397,23 @@ function rtSheetOpen(collapsed) {
   rtUI(); rtFiltUI(); rtSetCollapsed(collapsed);
 }
 (() => {
+  // le geste peut partir de n'importe où dans l'en-tête, boutons compris :
+  // un toucher reste un clic, un glissement vertical déplace le panneau (et le clic est alors annulé)
   const grab = $('rtGrab'), pnl = $('rtPanel');
-  let y0 = null, t0 = 0, base = 0, last = 0, moved = false;
+  let y0 = null, x0 = 0, t0 = 0, base = 0, last = 0, drag = false, onBtn = false, pid = null;
   grab.addEventListener('pointerdown', e => {
-    if (e.target.closest('button')) return;
-    y0 = e.clientY; t0 = Date.now(); moved = false;
+    y0 = e.clientY; x0 = e.clientX; t0 = Date.now(); drag = false; pid = e.pointerId;
+    onBtn = !!e.target.closest('button');
     base = rtSheet.collapsed ? Math.max(0, pnl.offsetHeight - rtPeek()) : 0; last = base;
-    $('routes').classList.add('dragging'); grab.setPointerCapture(e.pointerId);
   });
   grab.addEventListener('pointermove', e => {
-    if (y0 == null) return;
-    const dy = e.clientY - y0; if (Math.abs(dy) > 6) moved = true;
+    if (y0 == null || e.pointerId !== pid) return;
+    const dy = e.clientY - y0, dx = e.clientX - x0;
+    if (!drag) {
+      if (Math.abs(dy) < 8 || Math.abs(dy) < Math.abs(dx)) return;
+      drag = true; $('routes').classList.add('dragging');
+      try { grab.setPointerCapture(pid); } catch {}
+    }
     last = clamp(base + dy, 0, Math.max(0, pnl.offsetHeight - rtPeek()));
     pnl.style.setProperty('--rt-y', last + 'px');
   });
@@ -2415,7 +2421,9 @@ function rtSheetOpen(collapsed) {
     if (y0 == null) return;
     const dy = e.clientY - y0, v = dy / Math.max(1, Date.now() - t0); y0 = null;
     $('routes').classList.remove('dragging');
-    if (!moved) { rtSetCollapsed(!rtSheet.collapsed); return; } // simple toucher : ouvre ou réduit
+    if (!drag) { if (!onBtn && e.type === 'pointerup') rtSetCollapsed(!rtSheet.collapsed); return; } // simple toucher hors bouton : ouvre ou réduit
+    const block = ev => { ev.stopPropagation(); ev.preventDefault(); };
+    grab.addEventListener('click', block, true); setTimeout(() => grab.removeEventListener('click', block, true), 350);
     const max = Math.max(1, pnl.offsetHeight - rtPeek());
     rtSetCollapsed(v > 0.4 ? true : v < -0.4 ? false : last > max / 2);
   };
