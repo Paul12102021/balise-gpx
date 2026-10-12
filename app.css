@@ -485,3 +485,5 @@ body.nav .rt-here { display: none; }
 .rt-pick-list button span.t { display: flex; flex-direction: column; min-width: 0; }
 .rt-pick-list button b { font-size: 15px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .rt-pick-list button small { color: var(--muted); font-size: 13px; }
+.closebtn.icon { padding: 0; width: 34px; justify-content: center; }
+.closebtn.icon svg { width: 17px; height: 17px; }

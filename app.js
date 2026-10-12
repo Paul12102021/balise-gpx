@@ -4,7 +4,7 @@
 
 // La page et le code doivent être de la même version. Sinon (page gardée en cache
 // par le téléphone ou par GitHub), on recharge une page fraîche, au plus 3 fois.
-const APP_VERSION = 92;
+const APP_VERSION = 93;
 try {
   const meta = document.querySelector('meta[name="balise-version"]');
   const pageV = meta ? +meta.content : 0;
@@ -399,7 +399,7 @@ async function showTrack(t, fit = true) {
   track = makePath(t.pts, t.name); progress = null; clearRejoin(); loadDone();
   // le texte et le profil s'affichent tout de suite, la carte suit dès qu'elle est prête
   $('trackName').textContent = `${t.name} · ${fmtDist(track.total)}${track.hasEle ? ' · D+ ' + fmtM(track.totalUp) : ''}`;
-  $('btnClose').hidden = false; $('btnReverse').hidden = false;
+  $('btnClose').hidden = false; $('btnReverse').hidden = false; $('btnExportTr').hidden = false;
   if (me) progress = project(track, me, true);
   drawProfile(); updateStats();
   const mine = track;
@@ -412,7 +412,7 @@ async function showTrack(t, fit = true) {
   if (fit) { map.setPadding({ top: 0, bottom: 0, left: 0, right: 0 }); fitTo([track.pts]); }
   $('trackName').textContent = `${t.name} · ${fmtDist(track.total)}${track.hasEle ? ' · D+ ' + fmtM(track.totalUp) : ''}`;
   if (me) progress = project(track, me, true);
-  $('btnClose').hidden = false; $('btnReverse').hidden = false;
+  $('btnClose').hidden = false; $('btnReverse').hidden = false; $('btnExportTr').hidden = false;
   drawProfile(); updateStats(); updateOfflineInfo();
 }
 
@@ -427,11 +427,19 @@ function closeTrack(quiet) {
   setSrc('track', EMPTY); setSrc('turn', EMPTY);
   startMk.remove(); endMk.remove();
   store.set('gpx', '');
-  $('trackName').textContent = 'Aucune trace chargée'; $('btnClose').hidden = true; $('btnReverse').hidden = true;
+  $('trackName').textContent = 'Aucune trace chargée'; $('btnClose').hidden = true; $('btnReverse').hidden = true; $('btnExportTr').hidden = true;
   drawProfile(); updateStats(); updateOfflineInfo();
   if (!quiet) toast('Trace fermée', 5000, savedText ? { label: 'Annuler', run: () => loadText(savedText) } : null);
 }
 $('btnClose').onclick = () => closeTrack();
+// Exporter la trace ouverte en fichier GPX (à garder, envoyer, mettre sur un GPS…)
+function exportTrack() {
+  if (!track) return;
+  const name = track.name || 'Trace';
+  const saved = store.get('gpx');
+  shareGPX(saved && saved.includes('<trkpt') ? saved : loopGPX(track.pts, name), name);
+}
+$('btnExportTr').onclick = exportTrack;
 // Inverser le sens : la même trace, parcourue de l'arrivée vers le départ
 $('btnReverse').onclick = () => {
   if (!track) return;
@@ -3096,7 +3104,7 @@ $('ptDone').onclick = async () => {
   const text = loopGPX(pts, name);
   closePlan();
   loadText(text); // affiché, et gardé dans « Ouvrir un GPX »
-  toast(`${name} · gardé dans « Ouvrir un GPX ». Touche Naviguer pour partir.`, 4500);
+  toast(`${name} · gardé dans « Ouvrir un GPX »`, 6000, { label: 'Exporter le GPX', run: exportTrack });
 };
 // appui long sur la carte : y aller
 map.on('contextmenu', e => {
