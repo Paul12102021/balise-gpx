@@ -465,3 +465,23 @@ body.rtmode .fab-col { top: auto !important; bottom: calc(var(--rt-peek, 140px) 
   background: var(--panel); color: var(--ink); border: 1px solid var(--line); border-radius: 20px; padding: 10px 16px;
   font: 600 14px var(--font); box-shadow: 0 4px 16px rgba(0,0,0,.25); cursor: pointer; white-space: nowrap; }
 body.nav .rt-here { display: none; }
+
+/* ---------- parcours balisés : bouton liste/carte, aperçu, choix ---------- */
+.rt-toggle { margin-left: auto; margin-right: 6px; min-height: 36px; padding: 0 12px; border-radius: 18px; border: 1px solid var(--line); background: var(--paper); color: var(--ink); font: 600 14px var(--font); cursor: pointer; }
+#routes.has-card .rt-where, #routes.has-card #rtStatus { display: none; }
+.rt-card-h { display: flex; align-items: center; gap: 10px; }
+.rt-card-h b { font-size: 15px; }
+.rt-x { margin-left: auto; flex: none; width: 34px; height: 34px; border-radius: 50%; border: 1px solid var(--line); background: var(--paper); color: var(--ink); font-size: 15px; cursor: pointer; }
+.rt-dot { flex: none; width: 14px; height: 14px; border-radius: 50%; border: 2px solid #fff; box-shadow: 0 0 0 1px var(--line); }
+.rt-prev, .rt-pick { display: flex; flex-direction: column; gap: 8px; }
+.rt-prev-t { display: flex; flex-direction: column; min-width: 0; }
+.rt-prev-t b { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.rt-prev-t span { font-size: 13px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.rt-prof { width: 100%; height: 74px; display: block; }
+.rt-prev-acts { display: flex; gap: 8px; }
+.rt-prev-acts .btn { flex: 1; min-height: 42px; font-size: 15px; }
+.rt-pick-list { display: flex; flex-direction: column; gap: 6px; max-height: 40vh; overflow-y: auto; }
+.rt-pick-list button { display: flex; align-items: center; gap: 10px; text-align: left; padding: 10px 12px; border-radius: 12px; border: 1px solid var(--line); background: var(--paper); color: var(--ink); font: inherit; cursor: pointer; }
+.rt-pick-list button span.t { display: flex; flex-direction: column; min-width: 0; }
+.rt-pick-list button b { font-size: 15px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.rt-pick-list button small { color: var(--muted); font-size: 13px; }

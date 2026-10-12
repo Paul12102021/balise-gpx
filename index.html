@@ -8,13 +8,13 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<meta name="balise-version" content="91">
+<meta name="balise-version" content="92">
 <title>Pisteo</title>
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" href="icon.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
 <link rel="stylesheet" href="vendor/maplibre-gl.css">
-<link rel="stylesheet" href="app.css?v=91">
+<link rel="stylesheet" href="app.css?v=92">
 </head>
 <body>
 <div id="map" aria-label="Carte"></div>
@@ -352,10 +352,20 @@
       <div class="rt-handle"></div>
       <div class="lib-head">
         <b>Parcours balisés</b>
+        <button id="rtToggle" class="rt-toggle">Liste ▴</button>
         <button id="rtClose" class="closebtn" aria-label="Fermer"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></svg>Fermer</button>
       </div>
-      <div class="seg"><button id="rtFromMe" class="on">Autour de moi</button><button id="rtFromMap">Zone affichée</button></div>
+      <div class="seg rt-where"><button id="rtFromMe" class="on">Autour de moi</button><button id="rtFromMap">Zone affichée</button></div>
       <p id="rtStatus" class="note"></p>
+      <div id="rtPick" class="rt-pick" hidden>
+        <div class="rt-card-h"><b>Plusieurs parcours passent ici : lequel ?</b><button id="rtPickClose" class="rt-x" aria-label="Fermer">✕</button></div>
+        <div id="rtPickList" class="rt-pick-list"></div>
+      </div>
+      <div id="rtPrev" class="rt-prev" hidden>
+        <div class="rt-card-h"><span id="rtpDot" class="rt-dot"></span><div class="rt-prev-t"><b id="rtpTitle"></b><span id="rtpSub"></span></div><button id="rtpClose" class="rt-x" aria-label="Fermer l'aperçu">✕</button></div>
+        <canvas id="rtpProf" class="rt-prof"></canvas>
+        <div class="rt-prev-acts"><button id="rtpKeep" class="btn small">Garder</button><button id="rtpGo" class="btn small go">Naviguer</button></div>
+      </div>
     </div>
     <div class="lp-block">
       <span class="lp-l">Je me déplace</span>
@@ -532,6 +542,6 @@
 <div id="toast" class="toast" hidden></div>
 
 <script src="vendor/maplibre-gl.js"></script>
-<script src="app.js?v=91"></script>
+<script src="app.js?v=92"></script>
 </body>
 </html>

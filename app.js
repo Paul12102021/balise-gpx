@@ -4,7 +4,7 @@
 
 // La page et le code doivent être de la même version. Sinon (page gardée en cache
 // par le téléphone ou par GitHub), on recharge une page fraîche, au plus 3 fois.
-const APP_VERSION = 91;
+const APP_VERSION = 92;
 try {
   const meta = document.querySelector('meta[name="balise-version"]');
   const pageV = meta ? +meta.content : 0;
@@ -1878,8 +1878,9 @@ map.on('click', e => {
     if (!rt.list) { toast('Recherche des parcours en cours…', 2000); return; }
     const hits = map.getLayer('rtv') ? map.queryRenderedFeatures([[e.point.x - 14, e.point.y - 14], [e.point.x + 14, e.point.y + 14]], { layers: ['rtv'] }) : [];
     const ids = [...new Set(hits.map(f => f.properties.id))], items = (rt.list || []).filter(it => ids.includes(it.id));
-    if (items.length === 1) { rtOpen(items[0]); return; }
-    if (items.length > 1) { rt.tapList = items; rt.tapped = true; rtSheetOpen(false); rtRender(); return; }
+    if (items.length === 1) { rtSelect(items[0]); return; }
+    if (items.length > 1) { rtChoose(items); return; }
+    if (rt.sel || !$('rtPick').hidden) { rtUnselect(); return; } // toucher à côté : on ferme l'aperçu
     if (!rtFiltOn()) rtTap({ lat: e.lngLat.lat, lon: e.lngLat.lng });
     else toast('Touche une des lignes affichées.', 2500);
     return;
@@ -2353,10 +2354,11 @@ function rtUI() {
 }
 // ---------- Panneau des parcours : glisser vers le bas pour voir la carte, vers le haut pour la liste ----------
 const rtSheet = { collapsed: false };
-function rtPeek() { const s = $('rtStatus'); return s.offsetTop + s.offsetHeight + 14; }
+function rtPeek() { const g = $('rtGrab'); return g.offsetTop + g.offsetHeight + 12; }
 function rtSetCollapsed(c) {
   rtSheet.collapsed = c;
   $('routes').classList.toggle('collapsed', c);
+  $('rtToggle').textContent = c ? 'Liste ▴' : 'Carte ▾';
   if (c) $('rtPanel').scrollTop = 0; // réduit : on montre toujours le titre, jamais le milieu de la liste
   requestAnimationFrame(() => {
     const pnl = $('rtPanel'), peek = rtPeek();
@@ -2407,6 +2409,7 @@ function openRoutes() {
   if (rt.list && rt.key === key) { rt.tapped = false; rtRender(); } else rtSearch();
 }
 function closeRoutes(keepMap) {
+  if (rt.sel || !$('rtPick').hidden) { rt.sel = null; rtSelDraw([]); rtCardMode(null); }
   $('routes').hidden = true; $('rtHere').hidden = true; document.body.classList.remove('rtmode');
   if (!keepMap && rtMapOn) rtHideMap();
 }
@@ -2462,7 +2465,7 @@ function rtRender() {
     else if (it.dist) bits.push(fmtDist(it.dist));
     if (!g || !g.partial) bits.push(it.big ? 'portion autour de toi' : it.near ? 'à ' + fmtDist(it.near) : 'passe tout près');
     b.querySelector('span').textContent = bits.join(' · ');
-    b.onclick = () => rtOpen(it);
+    b.onclick = () => rtSelect(it);
     li.appendChild(b); list.appendChild(li);
   }
 }
@@ -2782,6 +2785,119 @@ $('rtbBack').onclick = () => {
 $('rtbKeep').onclick = async () => { if (!rt.res || !track) return; await saveRecent(track, rt.res.text); $('rtbKeep').textContent = 'Gardé ✓'; $('rtbKeep').disabled = true; toast('Parcours gardé dans « Ouvrir un GPX »', 3000); };
 $('rtbGo').onclick = () => { $('rtBar').hidden = true; startNav(); };
 
+// ---------- Aperçu d'un parcours sans quitter la recherche ----------
+// Toucher un parcours (sur la carte ou dans la liste) le met en évidence et affiche, en bas,
+// son nom, sa longueur, son D+ et son profil. Toucher une autre ligne change d'aperçu directement.
+rt.sel = null;
+const rtColor = it => RT_COL[it.cat] || '#7b3fe4';
+async function rtSelDraw(feats) {
+  await ready;
+  const data = { type: 'FeatureCollection', features: feats || [] };
+  if (!map.getSource('rtsel')) {
+    map.addSource('rtsel', { type: 'geojson', data });
+    const w = (a, b) => ['interpolate', ['linear'], ['zoom'], 9, a, 16, b];
+    map.addLayer({ id: 'rtsel-casing', type: 'line', source: 'rtsel', layout: { 'line-join': 'round', 'line-cap': 'round' }, paint: { 'line-color': '#fff', 'line-width': w(7, 16) } }, 'track-casing');
+    map.addLayer({ id: 'rtsel', type: 'line', source: 'rtsel', layout: { 'line-join': 'round', 'line-cap': 'round' }, paint: { 'line-color': ['get', 'col'], 'line-width': w(4, 10) } }, 'track-casing');
+  } else map.getSource('rtsel').setData(data);
+}
+const rtFeat = (it, pts) => ({ type: 'Feature', properties: { col: rtColor(it) }, geometry: { type: 'LineString', coordinates: pts.map(p => [p.lon, p.lat]) } });
+function rtCardMode(mode) { // null | 'pick' | 'prev'
+  $('rtPick').hidden = mode !== 'pick'; $('rtPrev').hidden = mode !== 'prev';
+  $('routes').classList.toggle('has-card', !!mode);
+  if (!$('routes').hidden) rtSetCollapsed(true);
+}
+function rtUnselect() { rt.sel = null; rt.selPts = null; rtSelDraw([]); rtCardMode(null); rtRender(); }
+function rtMiniProfile(cv, p) {
+  const dpr = window.devicePixelRatio || 1, W = cv.clientWidth, H = cv.clientHeight;
+  if (!W) return;
+  cv.width = W * dpr; cv.height = H * dpr;
+  const ctx = cv.getContext('2d'); ctx.setTransform(dpr, 0, 0, dpr, 0, 0); ctx.clearRect(0, 0, W, H);
+  ctx.font = '11px system-ui, sans-serif'; ctx.fillStyle = cssVar('--muted'); ctx.textBaseline = 'middle';
+  if (!p || !p.hasEle) { ctx.fillText(p ? 'Calcul du profil…' : '', 0, H / 2); return; }
+  const E = p.ele, C = p.cum, n = E.length;
+  let lo = Infinity, hi = -Infinity; E.forEach(e => { if (e != null) { lo = Math.min(lo, e); hi = Math.max(hi, e); } });
+  const pad = Math.max(10, (hi - lo) * .1, (40 - (hi - lo)) / 2); const lo2 = lo - pad, hi2 = hi + pad; // au moins 40 m d'échelle
+  const L0 = 34, B = 14, w = W - L0 - 2, h = H - B - 2;
+  const X = d => L0 + d / p.total * w, Y = e => 2 + (1 - (e - lo2) / (hi2 - lo2)) * h;
+  ctx.textAlign = 'right'; ctx.fillText(Math.round(hi) + ' m', L0 - 4, Y(hi)); if (Y(lo) - Y(hi) > 14) ctx.fillText(Math.round(lo) + ' m', L0 - 4, Y(lo));
+  ctx.textBaseline = 'bottom'; ctx.textAlign = 'left'; ctx.fillText('0', L0, H); ctx.textAlign = 'right'; ctx.fillText(fmtDist(p.total), W, H);
+  const col = cssVar('--go') || '#2f6b4f', path = new Path2D(); let first = true;
+  const stride = Math.max(1, Math.floor(n / (w * 2)));
+  for (let i = 0; i < n; i += stride) { if (E[i] == null) continue; first ? path.moveTo(X(C[i]), Y(E[i])) : path.lineTo(X(C[i]), Y(E[i])); first = false; }
+  const area = new Path2D(path); area.lineTo(X(p.total), 2 + h); area.lineTo(L0, 2 + h); area.closePath();
+  ctx.fillStyle = col; ctx.globalAlpha = .18; ctx.fill(area); ctx.globalAlpha = 1; ctx.strokeStyle = col; ctx.lineWidth = 2; ctx.stroke(path);
+}
+function rtPrevFill(it, pts, partial) {
+  const p = makePath(pts, it.name);
+  rt.selPts = pts; rt.selPartial = partial;
+  $('rtpDot').style.background = rtColor(it);
+  $('rtpTitle').textContent = it.name + (partial ? ' (portion)' : '');
+  $('rtpSub').textContent = `${RT_CAT[it.cat].label} · ${fmtDist(p.total)}${p.hasEle ? ' · D+ ' + fmtM(p.totalUp) : ''} · ${fmtDur(loopEst(p))}`;
+  rtMiniProfile($('rtpProf'), p);
+}
+async function rtSelect(it) {
+  rt.sel = it; rt.selPts = null;
+  if ($('routes').hidden) rtSheetOpen(true);
+  $('rtpDot').style.background = rtColor(it); $('rtpTitle').textContent = it.name;
+  $('rtpSub').textContent = 'Chargement du tracé…'; rtMiniProfile($('rtpProf'), null);
+  $('rtpGo').disabled = $('rtpKeep').disabled = true; $('rtpKeep').textContent = 'Garder';
+  rtCardMode('prev');
+  let g;
+  try { g = await rtGeom(it); }
+  catch (e) {
+    if (rt.sel !== it) return;
+    $('rtpSub').textContent = e.message === 'pas de tracé' ? 'Pas de tracé exploitable pour ce parcours.' : navigator.onLine === false ? 'Pas de réseau.' : `Chargement impossible (${e.message}).`;
+    return;
+  }
+  if (rt.sel !== it) return; // un autre parcours a été choisi entre-temps
+  const pts = rtOrient(g.pts, me || it.at);
+  rtSelDraw([rtFeat(it, pts)]);
+  rtPrevFill(it, pts, g.partial);
+  $('rtpGo').disabled = $('rtpKeep').disabled = false;
+  // toute la ligne visible au-dessus du panneau
+  setTimeout(() => { try { map.fitBounds(boundsOf([pts]), { padding: { top: 90, bottom: rtPeek() + 30, left: 30, right: 70 }, bearing: 0, pitch: 0, duration: 600, maxZoom: 15 }); } catch {} }, 80);
+  rtRender();
+  if (!g.hasEle) rtElev(g).then(e => { if (rt.sel === it && e.hasEle) rtPrevFill(it, rtOrient(e.pts, me || it.at), g.partial); });
+}
+// plusieurs parcours au même endroit : petite liste claire, chaque parcours mis en évidence sur la carte
+function rtChoose(items) {
+  rt.sel = null; rt.selPts = null;
+  if ($('routes').hidden) rtSheetOpen(true);
+  const list = $('rtPickList'); list.innerHTML = '';
+  const feats = [];
+  for (const it of items) {
+    const g = rt.geo.get(rtKey(it));
+    if (g) feats.push(rtFeat(it, g.pts));
+    const b = document.createElement('button');
+    b.innerHTML = '<span class="rt-dot"></span><span class="t"><b></b><small></small></span>';
+    b.querySelector('.rt-dot').style.background = rtColor(it);
+    b.querySelector('b').textContent = it.name;
+    b.querySelector('small').textContent = [RT_CAT[it.cat].label, g ? fmtDist(g.len) + (g.partial ? ' (portion)' : '') : it.dist ? fmtDist(it.dist) : '', g && g.hasEle ? 'D+ ' + fmtM(g.up) : ''].filter(Boolean).join(' · ');
+    b.onclick = () => rtSelect(it);
+    list.appendChild(b);
+  }
+  rtSelDraw(feats);
+  rtCardMode('pick');
+}
+$('rtpClose').onclick = rtUnselect;
+$('rtPickClose').onclick = rtUnselect;
+$('rtpGo').onclick = () => {
+  if (!rt.sel || !rt.selPts) return;
+  const it = rt.sel, name = it.name + (rt.selPartial ? ' (portion)' : ''), text = loopGPX(rt.selPts, name);
+  rt.res = { text, name };
+  rtUnselect(); closeRoutes();
+  loadText(text, false); store.set('gpx', text);
+  startNav();
+};
+$('rtpKeep').onclick = async () => {
+  if (!rt.sel || !rt.selPts) return;
+  const name = rt.sel.name + (rt.selPartial ? ' (portion)' : ''), text = loopGPX(rt.selPts, name);
+  await saveRecent(makePath(rt.selPts, name), text);
+  $('rtpKeep').textContent = 'Gardé ✓'; $('rtpKeep').disabled = true;
+  toast('Parcours gardé dans « Ouvrir un GPX »', 3000);
+};
+$('rtToggle').onclick = () => rtSetCollapsed(!rtSheet.collapsed);
+
 // ---------- Nord en haut : la boussole apparaît dès que la carte est tournée ou inclinée ----------
 function northUI() {
   const b = map.getBearing(), tilt = map.getPitch();
@@ -2853,10 +2969,9 @@ async function rtTap(p) {
   finally { rt.tapBusy = false; }
   const items = rtListFrom(json, p);
   if (!items.length) { toast('Aucun parcours balisé à cet endroit : touche une ligne de couleur.', 3500); return; }
-  if (items.length === 1) { $('toast').hidden = true; rtOpen(items[0]); return; }
+  if (items.length === 1) { $('toast').hidden = true; rtSelect(items[0]); return; }
   $('toast').hidden = true;
-  rt.tapList = items; rt.tapped = true;
-  rtSheetOpen(false); rtRender();
+  rtChoose(items);
 }
 $('rtShowMap').onclick = () => { if (!rtMapOn) rtOverlay(true); rt.tapped = false; rtRender(); rtDraw(); rtSetCollapsed(true); };
 $('rtmList').onclick = () => { $('rtMapBar').hidden = true; openRoutes(); };
