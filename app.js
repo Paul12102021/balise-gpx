@@ -4,7 +4,7 @@
 
 // La page et le code doivent être de la même version. Sinon (page gardée en cache
 // par le téléphone ou par GitHub), on recharge une page fraîche, au plus 3 fois.
-const APP_VERSION = 93;
+const APP_VERSION = 94;
 try {
   const meta = document.querySelector('meta[name="balise-version"]');
   const pageV = meta ? +meta.content : 0;
@@ -399,7 +399,7 @@ async function showTrack(t, fit = true) {
   track = makePath(t.pts, t.name); progress = null; clearRejoin(); loadDone();
   // le texte et le profil s'affichent tout de suite, la carte suit dès qu'elle est prête
   $('trackName').textContent = `${t.name} · ${fmtDist(track.total)}${track.hasEle ? ' · D+ ' + fmtM(track.totalUp) : ''}`;
-  $('btnClose').hidden = false; $('btnReverse').hidden = false; $('btnExportTr').hidden = false;
+  $('btnClose').hidden = false; $('btnReverse').hidden = false; $('btnSaveTr').hidden = false; refreshSaveBtn();
   if (me) progress = project(track, me, true);
   drawProfile(); updateStats();
   const mine = track;
@@ -412,7 +412,7 @@ async function showTrack(t, fit = true) {
   if (fit) { map.setPadding({ top: 0, bottom: 0, left: 0, right: 0 }); fitTo([track.pts]); }
   $('trackName').textContent = `${t.name} · ${fmtDist(track.total)}${track.hasEle ? ' · D+ ' + fmtM(track.totalUp) : ''}`;
   if (me) progress = project(track, me, true);
-  $('btnClose').hidden = false; $('btnReverse').hidden = false; $('btnExportTr').hidden = false;
+  $('btnClose').hidden = false; $('btnReverse').hidden = false; $('btnSaveTr').hidden = false; refreshSaveBtn();
   drawProfile(); updateStats(); updateOfflineInfo();
 }
 
@@ -427,7 +427,7 @@ function closeTrack(quiet) {
   setSrc('track', EMPTY); setSrc('turn', EMPTY);
   startMk.remove(); endMk.remove();
   store.set('gpx', '');
-  $('trackName').textContent = 'Aucune trace chargée'; $('btnClose').hidden = true; $('btnReverse').hidden = true; $('btnExportTr').hidden = true;
+  $('trackName').textContent = 'Aucune trace chargée'; $('btnClose').hidden = true; $('btnReverse').hidden = true; $('btnSaveTr').hidden = true;
   drawProfile(); updateStats(); updateOfflineInfo();
   if (!quiet) toast('Trace fermée', 5000, savedText ? { label: 'Annuler', run: () => loadText(savedText) } : null);
 }
@@ -439,7 +439,26 @@ function exportTrack() {
   const saved = store.get('gpx');
   shareGPX(saved && saved.includes('<trkpt') ? saved : loopGPX(track.pts, name), name);
 }
-$('btnExportTr').onclick = exportTrack;
+// Enregistrer la trace affichée dans « Mes traces » (boucle, tracé, parcours balisé, trace inversée…)
+const ICON_SAVE = '<svg viewBox="0 0 24 24"><path d="M6 3h12v18l-6-4-6 4Z"/></svg>';
+const ICON_OK = '<svg viewBox="0 0 24 24"><path d="m5 12 5 5 9-10"/></svg>';
+async function refreshSaveBtn() {
+  const b = $('btnSaveTr'); if (!track) return;
+  const id = track.name + '|' + Math.round(track.total), mine = track;
+  const saved = (await listRecent()).some(it => it.id === id);
+  if (track !== mine) return;
+  b.classList.toggle('done', saved);
+  b.innerHTML = saved ? ICON_OK + 'Enregistrée' : ICON_SAVE + 'Enregistrer';
+  b.setAttribute('aria-label', saved ? 'Trace enregistrée dans Mes traces' : 'Enregistrer la trace dans Mes traces');
+}
+$('btnSaveTr').onclick = async () => {
+  if (!track) return;
+  if ($('btnSaveTr').classList.contains('done')) { toast('Déjà dans « Mes traces »', 3000, { label: 'Voir', run: openLib }); return; }
+  const saved = store.get('gpx'), text = saved && saved.includes('<trkpt') ? saved : loopGPX(track.pts, track.name);
+  await saveRecent(track, text);
+  refreshSaveBtn();
+  toast('Enregistrée dans « Mes traces »', 3500, { label: 'Voir', run: openLib });
+};
 // Inverser le sens : la même trace, parcourue de l'arrivée vers le départ
 $('btnReverse').onclick = () => {
   if (!track) return;
@@ -540,8 +559,6 @@ async function renderLib() {
   }
 }
 async function openLib() {
-  const items = (await listRecent()).filter(it => !isRec(it));
-  if (!items.length) { $('fileIn').click(); return; } // rien en mémoire : on va directement aux fichiers
   await renderLib(); $('lib').hidden = false;
 }
 
@@ -2050,7 +2067,7 @@ function showLoop(pts) {
 }
 $('lbAgain').onclick = () => { $('loopBar').hidden = true; makeLoop(); };
 $('lbEdit').onclick = () => { $('loopBar').hidden = true; openLoop(); };
-$('lbKeep').onclick = async () => { if (!loopRes || !track) return; await saveRecent(track, loopRes.text); $('lbKeep').textContent = 'Gardée ✓'; $('lbKeep').disabled = true; toast('Boucle gardée dans « Ouvrir un GPX »', 3000); };
+$('lbKeep').onclick = async () => { if (!loopRes || !track) return; await saveRecent(track, loopRes.text); $('lbKeep').textContent = 'Gardée ✓'; $('lbKeep').disabled = true; refreshSaveBtn(); toast('Boucle gardée dans « Mes traces »', 3000); };
 $('lbGo').onclick = () => { $('loopBar').hidden = true; startNav(); };
 
 // =====================================================================
@@ -2784,13 +2801,13 @@ function rtCheckMoved() {
 }
 map.on('moveend', rtCheckMoved);
 $('rtHere').onclick = () => { $('rtHere').hidden = true; rt.fromMap = true; rtUI(); rtSearch(); };
-// « Autres parcours » : le parcours regardé est retiré de la carte (il reste dans « Ouvrir un GPX » s'il a été gardé)
+// « Autres parcours » : le parcours regardé est retiré de la carte (il reste dans « Mes traces » s'il a été gardé)
 $('rtbBack').onclick = () => {
   $('rtBar').hidden = true;
   if (rtMapOn) { rtSheetOpen(true); rtRender(); } else openRoutes();
   if (track && rt.res && track.name.startsWith(rt.res.name)) closeTrack(true);
 };
-$('rtbKeep').onclick = async () => { if (!rt.res || !track) return; await saveRecent(track, rt.res.text); $('rtbKeep').textContent = 'Gardé ✓'; $('rtbKeep').disabled = true; toast('Parcours gardé dans « Ouvrir un GPX »', 3000); };
+$('rtbKeep').onclick = async () => { if (!rt.res || !track) return; await saveRecent(track, rt.res.text); $('rtbKeep').textContent = 'Gardé ✓'; $('rtbKeep').disabled = true; refreshSaveBtn(); toast('Parcours gardé dans « Mes traces »', 3000); };
 $('rtbGo').onclick = () => { $('rtBar').hidden = true; startNav(); };
 
 // ---------- Aperçu d'un parcours sans quitter la recherche ----------
@@ -2902,7 +2919,7 @@ $('rtpKeep').onclick = async () => {
   const name = rt.sel.name + (rt.selPartial ? ' (portion)' : ''), text = loopGPX(rt.selPts, name);
   await saveRecent(makePath(rt.selPts, name), text);
   $('rtpKeep').textContent = 'Gardé ✓'; $('rtpKeep').disabled = true;
-  toast('Parcours gardé dans « Ouvrir un GPX »', 3000);
+  toast('Parcours gardé dans « Mes traces »', 3000);
 };
 $('rtToggle').onclick = () => rtSetCollapsed(!rtSheet.collapsed);
 
@@ -3103,8 +3120,8 @@ $('ptDone').onclick = async () => {
   const name = (prompt('Nom de l\'itinéraire', def) || def).trim();
   const text = loopGPX(pts, name);
   closePlan();
-  loadText(text); // affiché, et gardé dans « Ouvrir un GPX »
-  toast(`${name} · gardé dans « Ouvrir un GPX »`, 6000, { label: 'Exporter le GPX', run: exportTrack });
+  loadText(text); // affiché, et gardé dans « Mes traces »
+  toast(`Itinéraire enregistré dans « Mes traces »`, 4000, { label: 'Voir', run: openLib });
 };
 // appui long sur la carte : y aller
 map.on('contextmenu', e => {
