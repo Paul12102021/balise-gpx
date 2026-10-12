@@ -4,7 +4,7 @@
 
 // La page et le code doivent être de la même version. Sinon (page gardée en cache
 // par le téléphone ou par GitHub), on recharge une page fraîche, au plus 3 fois.
-const APP_VERSION = 98;
+const APP_VERSION = 99;
 try {
   const meta = document.querySelector('meta[name="balise-version"]');
   const pageV = meta ? +meta.content : 0;
@@ -399,7 +399,7 @@ async function showTrack(t, fit = true) {
   track = makePath(t.pts, t.name); progress = null; clearRejoin(); loadDone();
   // le texte et le profil s'affichent tout de suite, la carte suit dès qu'elle est prête
   $('trackName').textContent = `${t.name} · ${fmtDist(track.total)}${track.hasEle ? ' · D+ ' + fmtM(track.totalUp) : ''}`;
-  $('btnClose').hidden = false; $('btnReverse').hidden = false; $('btnSaveTr').hidden = false; refreshSaveBtn();
+  $('btnClose').hidden = false; $('btnReverse').hidden = false; $('btnSaveTr').hidden = false; refreshSaveBtn(); $('btnNew').hidden = false; $('btnNew').parentElement.classList.add('has-new');
   if (me) progress = project(track, me, true);
   drawProfile(); updateStats();
   const mine = track;
@@ -412,7 +412,7 @@ async function showTrack(t, fit = true) {
   if (fit) { map.setPadding({ top: 0, bottom: 0, left: 0, right: 0 }); fitTo([track.pts]); }
   $('trackName').textContent = `${t.name} · ${fmtDist(track.total)}${track.hasEle ? ' · D+ ' + fmtM(track.totalUp) : ''}`;
   if (me) progress = project(track, me, true);
-  $('btnClose').hidden = false; $('btnReverse').hidden = false; $('btnSaveTr').hidden = false; refreshSaveBtn();
+  $('btnClose').hidden = false; $('btnReverse').hidden = false; $('btnSaveTr').hidden = false; refreshSaveBtn(); $('btnNew').hidden = false; $('btnNew').parentElement.classList.add('has-new');
   drawProfile(); updateStats(); updateOfflineInfo();
 }
 
@@ -427,7 +427,7 @@ function closeTrack(quiet) {
   setSrc('track', EMPTY); setSrc('turn', EMPTY);
   startMk.remove(); endMk.remove();
   store.set('gpx', '');
-  $('trackName').textContent = 'Aucune trace chargée'; $('btnClose').hidden = true; $('btnReverse').hidden = true; $('btnSaveTr').hidden = true;
+  $('trackName').textContent = 'Aucune trace chargée'; $('btnClose').hidden = true; $('btnReverse').hidden = true; $('btnSaveTr').hidden = true; $('btnNew').hidden = true; $('btnNew').parentElement.classList.remove('has-new');
   drawProfile(); updateStats(); updateOfflineInfo();
   if (!quiet) toast('Trace fermée', 5000, savedText ? { label: 'Annuler', run: () => loadText(savedText) } : null);
 }
@@ -1155,6 +1155,8 @@ function stopNav() {
   setFollow(false);
 }
 $('btnNav').onclick = () => track ? startNav() : openDest();
+// trace ouverte : accès aux autres façons de partir (lieu, boucle, tracé, parcours balisés)
+$('btnNew').onclick = openDest;
 $('btnExit').onclick = () => {
   if (actState === 'waiting') { cancelWaiting(); stopNav(); return; }
   if (actState === 'on' || actState === 'paused') { finishThenExit = true; openFinish(); return; }
@@ -1935,7 +1937,7 @@ function lpUI() {
   for (const [v, l] of q) { const b = document.createElement('button'); b.textContent = l; b.onclick = () => { $('lpVal').value = v; loopCfg.val = v; }; $('lpQuick').appendChild(b); }
 }
 function openLoop() { closeDest(); closeLib(); toggleMore(false); $('loopBar').hidden = true; lpUI(); $('loop').hidden = false; }
-$('destLoop').onclick = openLoop; $('libLoop').onclick = openLoop;
+$('destLoop').onclick = openLoop;
 $('loopClose').onclick = () => { $('loop').hidden = true; };
 $('loop').onclick = e => { if (e.target === $('loop')) $('loop').hidden = true; };
 $('lpFoot').onclick = () => { setProfile('hiking-mountain', true); loopCfg.val = null; lpUI(); };
@@ -2797,7 +2799,7 @@ function rtShow(it, pts, partial, update) {
   if (update) return;
   setTimeout(() => { try { map.fitBounds(boundsOf([pts]), { padding: { top: 80, bottom: $('sheet').offsetHeight + $('rtBar').offsetHeight + 30, left: 30, right: 70 }, bearing: 0, pitch: 0, duration: 600 }); } catch {} }, 350);
 }
-$('destRoutes').onclick = rtShowOnMap; $('libRoutes').onclick = rtShowOnMap;
+$('destRoutes').onclick = rtShowOnMap;
 $('rtClose').onclick = () => { rtHideMap(); closeRoutes(); };
 $('routes').onclick = e => { if (e.target === $('routes')) closeRoutes(); };
 // sécurité : menu principal ouvert (Réglages, Ouvrir un GPX…) sans parcours affiché → on quitte les parcours balisés
@@ -3100,7 +3102,7 @@ function openPlan() {
   if (me) map.easeTo({ center: [me.lon, me.lat], zoom: Math.max(map.getZoom(), 14), pitch: 0, bearing: 0, duration: 600 });
 }
 function closePlan() { planning = false; document.body.classList.remove('plan'); plan.wps = []; plan.segs = []; planMarkers(); setSrc('plan', EMPTY); }
-$('destPlan').onclick = openPlan; $('libPlan').onclick = openPlan;
+$('destPlan').onclick = openPlan;
 $('pbClose').onclick = () => {
   if (plan.wps.length > 1 && !$('pbClose').dataset.armed) { $('pbClose').dataset.armed = '1'; $('pbClose').textContent = 'Sûr ?'; setTimeout(() => { delete $('pbClose').dataset.armed; $('pbClose').textContent = 'Quitter'; }, 2500); return; }
   delete $('pbClose').dataset.armed; $('pbClose').textContent = 'Quitter'; closePlan();

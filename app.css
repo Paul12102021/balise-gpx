@@ -499,3 +499,6 @@ body.nav .rt-here { display: none; }
 #routes.rt-sheet:not(.collapsed) .rt-grab { border-bottom: 1px solid var(--line); box-shadow: 0 10px 14px -12px rgba(0,0,0,.55); padding-bottom: 12px; border-radius: 16px 16px 0 0; }
 #routes.rt-sheet:not(.collapsed) .rt-grab ~ * { margin-left: 2px; margin-right: 2px; }
 #routes.rt-sheet .rt-handle { width: 52px; height: 6px; background: var(--muted); opacity: .55; }
+/* trace ouverte : « Naviguer » sur 2 colonnes, « Autre trajet » à côté */
+.actions.has-new .wide { grid-column: 1 / 3; }
+#btnNew { padding-left: 4px; padding-right: 4px; white-space: nowrap; font-size: 14px; }
