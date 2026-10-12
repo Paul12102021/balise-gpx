@@ -4,7 +4,7 @@
 
 // La page et le code doivent être de la même version. Sinon (page gardée en cache
 // par le téléphone ou par GitHub), on recharge une page fraîche, au plus 3 fois.
-const APP_VERSION = 89;
+const APP_VERSION = 90;
 try {
   const meta = document.querySelector('meta[name="balise-version"]');
   const pageV = meta ? +meta.content : 0;
@@ -2211,6 +2211,112 @@ async function overpassFast(q, onWait, mirrorFirst, signal, fast) {
   if (fast) throw new Error('serveurs OpenStreetMap saturés, réessaie dans un moment');
   return overpass(q, 2, onWait);
 }
+// ---------- Parcours balisés préparés à l'avance (dépôt pisteo-data, mis à jour chaque mois) ----------
+// Tuiles de 0,25° publiées sur GitHub Pages : en France, la recherche et les tracés ne passent plus
+// par les serveurs OpenStreetMap. Les tuiles lues sont gardées sur le téléphone (hors ligne ensuite).
+const RT_DATA = 'https://paul12102021.github.io/pisteo-data/';
+const rtd = { man: null, manP: null, deps: null, tiles: new Map() };
+async function rtdCache() { try { return await caches.open('rt-tiles'); } catch { return null; } }
+async function rtdGet(path, maxAge) {
+  const c = await rtdCache(), key = 'https://rt.tiles/' + path;
+  const old = c && await c.match(key).catch(() => null);
+  if (old && (!maxAge || Date.now() - (+old.headers.get('x-t') || 0) < maxAge)) return old.json();
+  try {
+    const ctrl = new AbortController(), timer = setTimeout(() => ctrl.abort(), 15000);
+    const r = await fetch(RT_DATA + path, { cache: 'no-cache', signal: ctrl.signal }).finally(() => clearTimeout(timer));
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    const txt = await r.text();
+    if (c) c.put(key, new Response(txt, { headers: { 'content-type': 'application/json', 'x-t': String(Date.now()) } })).catch(() => {});
+    return JSON.parse(txt);
+  } catch (e) { if (old) return old.json(); throw e; }
+}
+// le manifeste (liste des tuiles et date des données) est relu au plus une fois par jour
+function rtdManifest() {
+  if (!rtd.manP) rtd.manP = rtdGet('manifest.json', 864e5).then(m => {
+    if (!m || m.v !== 1) throw new Error('format');
+    rtd.man = Object.assign(m, { set: new Set(m.tiles) });
+    return rtd.man;
+  }).catch(() => { rtd.manP = null; return null; });
+  return rtd.manP;
+}
+async function rtdInFrance(p) {
+  if (!rtd.deps) { try { rtd.deps = await (await fetch('departements.json')).json(); } catch { return false; } }
+  return rtd.deps.some(d => inPolys(p.lon, p.lat, d.polys));
+}
+const rtdTileName = (lat, lon, g) => `${Math.floor((lon + 180) / g)}_${Math.floor((lat + 90) / g)}`;
+function rtdTilesIn(box) { // box = [sud, ouest, nord, est]
+  const g = rtd.man.grid, out = [];
+  for (let x = Math.floor((box[1] + 180) / g); x <= Math.floor((box[3] + 180) / g); x++)
+    for (let y = Math.floor((box[0] + 90) / g); y <= Math.floor((box[2] + 90) / g); y++)
+      if (rtd.man.set.has(`${x}_${y}`)) out.push(`${x}_${y}`);
+  return out;
+}
+function rtdBoxAround(c, r) { const dLat = r / 111320, dLon = r / (111320 * Math.cos(rad(c.lat))); return [c.lat - dLat, c.lon - dLon, c.lat + dLat, c.lon + dLon]; }
+function rtdTile(name) {
+  const k = rtd.man.date + '/' + name;
+  if (!rtd.tiles.has(k)) {
+    const p = rtdGet(`t/${name}.json?d=${rtd.man.date}`, 0);
+    p.catch(() => rtd.tiles.delete(k));
+    rtd.tiles.set(k, p);
+  }
+  return rtd.tiles.get(k);
+}
+function rtdDecode(s) {
+  const pts = []; let i = 0, lat = 0, lon = 0;
+  while (i < s.length) {
+    for (let k = 0; k < 2; k++) {
+      let shift = 0, res = 0, b;
+      do { b = s.charCodeAt(i++) - 63; res |= (b & 0x1f) << shift; shift += 5; } while (b >= 0x20);
+      const v = res & 1 ? ~(res >> 1) : res >> 1;
+      if (k) lon += v; else lat += v;
+    }
+    pts.push({ lat: lat / 1e5, lon: lon / 1e5 });
+  }
+  return pts;
+}
+// tuiles → parcours : { id → { meta, ways: Map(wayId → points) } }
+async function rtdRoutes(names, kinds) {
+  const tiles = await Promise.all(names.map(rtdTile));
+  const out = new Map();
+  for (const T of tiles) {
+    for (const [id, kind, tags, len, bb, idx] of T.r) {
+      if (!kinds.includes(kind)) continue;
+      let R = out.get(id);
+      if (!R) out.set(id, R = { id, kind, tags, len, bb, ways: new Map() });
+      for (const i of idx) { const [wid, enc] = T.w[i]; if (!R.ways.has(wid)) R.ways.set(wid, enc); }
+    }
+  }
+  return out;
+}
+const rtdKinds = () => rtBike() ? ['b', 'm'] : ['h', 'f'];
+// liste des parcours autour d'un point, depuis les tuiles ; null si la zone n'est pas couverte
+async function rtdList(at) {
+  const man = await rtdManifest();
+  if (!man || !(await rtdInFrance(at))) return null;
+  const R = rtRadius(), routes = await rtdRoutes(rtdTilesIn(rtdBoxAround(at, R)), rtdKinds());
+  const out = [];
+  for (const r of routes.values()) {
+    const t = Object.assign({ route: { b: 'bicycle', m: 'mtb', h: 'hiking', f: 'foot' }[r.kind] }, r.tags);
+    // distance réelle : point du parcours le plus proche
+    let near = Infinity;
+    for (const enc of r.ways.values()) for (const p of rtdDecode(enc)) { const d = hav(at, p); if (d < near) near = d; }
+    if (near > R) continue;
+    const b = { minlat: r.bb[0], minlon: r.bb[1], maxlat: r.bb[2], maxlon: r.bb[3] };
+    const big = hav({ lat: b.minlat, lon: b.minlon }, { lat: b.maxlat, lon: b.maxlon }) > 40000;
+    out.push({ id: r.id, tags: t, cat: rtCat(t), name: rtName(t), dist: r.len, near: near < 300 ? 0 : near, big, bounds: b, at, src: 'd' });
+  }
+  out.sort((a, b) => RT_CAT[a.cat].rank - RT_CAT[b.cat].rank || a.near - b.near || a.name.localeCompare(b.name, 'fr'));
+  return out;
+}
+// tracé d'un parcours depuis les tuiles : tout le parcours s'il est petit, la portion autour du point sinon
+async function rtdSegments(it) {
+  const man = await rtdManifest(); if (!man) return null;
+  const box = it.big ? rtdBoxAround(it.at, rtCut()) : [it.bounds.minlat, it.bounds.minlon, it.bounds.maxlat, it.bounds.maxlon];
+  const r = (await rtdRoutes(rtdTilesIn(box), [it.tags.route === 'mtb' ? 'm' : it.tags.route === 'bicycle' ? 'b' : it.tags.route === 'foot' ? 'f' : 'h'])).get(it.id);
+  if (!r) return null;
+  return [...r.ways.values()].map(rtdDecode).filter(s => s.length > 1);
+}
+
 const rtCache = new Map(); // recherches déjà faites (mode + lieu) : pas de nouvelle demande en changeant de mode
 const rt = { at: null, fromMap: false, list: null, key: '', res: null, busy: false };
 const rtBike = () => profile === 'trekking';
@@ -2306,6 +2412,9 @@ async function rtSearch() {
   rt.busy = true;
   try {
     if (rtCache.has(rt.key)) { rt.list = rtCache.get(rt.key); rtListReady(); return; }
+    // en France : données préparées à l'avance, sans serveur OpenStreetMap
+    const local = await rtdList(at).catch(() => null);
+    if (local) { rt.list = local; rtCache.set(rt.key, local); rtListReady(); return; }
     // recherche déjà faite ici il y a moins d'une semaine : affichage immédiat
     try { const s = JSON.parse(store.get('rt:' + rt.key) || 'null'); if (s && Date.now() - s.t < 7 * 864e5) { rt.list = rtListFrom(s.j, at); rtCache.set(rt.key, rt.list); rtListReady(); return; } } catch {}
     const json = await overpassFast(q, null, true, null, true);
@@ -2412,6 +2521,13 @@ function rtGeom(it) {
   return p;
 }
 async function rtFetchGeo(it, key, at) {
+  if (it.src === 'd') {
+    const segs = await rtdSegments(it).catch(() => null);
+    const ch = segs && segs.length && rtChain(segs);
+    if (ch && it.big) { ch.pts = rtClip(ch.pts, at, rtCut()); ch.len = rtLen(ch.pts); }
+    if (ch && ch.pts.length > 1 && ch.len >= 100) return { key, pts: ch.pts, len: ch.len, partial: !!it.big, up: null, hasEle: false };
+    // tuile introuvable : on passe par les serveurs comme avant
+  }
   {
     let g = null;
     if (!g) {
