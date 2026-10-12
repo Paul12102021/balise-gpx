@@ -4,7 +4,7 @@
 
 // La page et le code doivent être de la même version. Sinon (page gardée en cache
 // par le téléphone ou par GitHub), on recharge une page fraîche, au plus 3 fois.
-const APP_VERSION = 94;
+const APP_VERSION = 95;
 try {
   const meta = document.querySelector('meta[name="balise-version"]');
   const pageV = meta ? +meta.content : 0;
@@ -3041,12 +3041,13 @@ function planMarkers() {
   });
 }
 // (re)calcul du segment i, entre les points i et i+1
-function planSeg(i) {
-  const a = plan.wps[i], b = plan.wps[i + 1];
-  const seg = { pts: [a, b], pending: true };
+function planSeg(i, straight) {
+  const a = plan.wps[i], b = plan.wps[i + 1], old = plan.segs[i];
+  const st = straight != null ? straight : old ? !!old.straight : plan.straight;
+  const seg = { pts: [a, b], pending: true, straight: st };
   plan.segs[i] = seg; plan.busy++;
   plan.queue = plan.queue.then(async () => {
-    if (plan.segs.includes(seg)) { const pts = await planSegment(a, b); seg.pts = pts; seg.pending = false; }
+    if (plan.segs.includes(seg)) { const pts = await planSegment(a, b, st); seg.pts = pts; seg.pending = false; }
     plan.busy--; if (planning) planDraw();
   });
 }
@@ -3062,7 +3063,7 @@ function planRemove(k) {
 function openPlan() {
   if (nav) { toast('Quitte d\'abord la navigation.'); return; }
   closeDest(); closeLib(); toggleMore(false, true); $('loopBar').hidden = true;
-  planning = true; document.body.classList.add('plan');
+  planning = true; document.body.classList.add('plan'); planModeUI();
   plan.wps = []; plan.segs = []; planDraw();
   if (me) map.easeTo({ center: [me.lon, me.lat], zoom: Math.max(map.getZoom(), 14), pitch: 0, bearing: 0, duration: 600 });
 }
@@ -3072,8 +3073,8 @@ $('pbClose').onclick = () => {
   if (plan.wps.length > 1 && !$('pbClose').dataset.armed) { $('pbClose').dataset.armed = '1'; $('pbClose').textContent = 'Sûr ?'; setTimeout(() => { delete $('pbClose').dataset.armed; $('pbClose').textContent = 'Quitter'; }, 2500); return; }
   delete $('pbClose').dataset.armed; $('pbClose').textContent = 'Quitter'; closePlan();
 };
-async function planSegment(a, b) {
-  if (plan.straight) return [a, b];
+async function planSegment(a, b, straight) {
+  if (straight) return [a, b];
   try { return await routeVia([a, b], 25000); }
   catch { toast('Pas de chemin trouvé ici : segment en ligne droite', 2500); return [a, b]; }
 }
@@ -3081,13 +3082,13 @@ function planAdd(p) {
   const prev = plan.wps[plan.wps.length - 1];
   plan.wps.push(p);
   if (!prev) { planDraw(); return; }
-  const seg = { pts: [prev, p], pending: true };
+  const st = plan.straight, seg = { pts: [prev, p], pending: true, straight: st };
   plan.segs.push(seg);
   planDraw();
   plan.busy++;
   plan.queue = plan.queue.then(async () => {
     // segment annulé entre-temps : on ne calcule rien
-    if (plan.segs.includes(seg)) { const pts = await planSegment(prev, p); seg.pts = pts; seg.pending = false; }
+    if (plan.segs.includes(seg)) { const pts = await planSegment(prev, p, st); seg.pts = pts; seg.pending = false; }
     plan.busy--; if (planning) planDraw();
   });
 }
@@ -3107,6 +3108,17 @@ function planDraw() {
   $('ptUndo').disabled = !n; $('ptClear').disabled = !n; $('ptLoop').disabled = n < 2; $('ptDone').disabled = n < 2;
   $('ptModeL').textContent = plan.straight ? 'Ligne droite' : 'Chemins';
 }
+// à pied / à vélo : les segments qui suivent les chemins sont recalculés pour le nouveau mode
+function planMode(p) {
+  if (profile === p) return;
+  setProfile(p, true); planModeUI();
+  plan.segs.forEach((sg, i) => { if (sg && !sg.straight) planSeg(i); });
+  planDraw();
+  toast(p === 'trekking' ? 'Itinéraire recalculé pour le vélo' : 'Itinéraire recalculé à pied', 2500);
+}
+function planModeUI() { $('pbFoot').classList.toggle('on', profile !== 'trekking'); $('pbBike').classList.toggle('on', profile === 'trekking'); }
+$('pbFoot').onclick = () => planMode('hiking-mountain');
+$('pbBike').onclick = () => planMode('trekking');
 $('ptUndo').onclick = () => { plan.wps.pop(); plan.segs.length = Math.max(0, plan.wps.length - 1); planDraw(); };
 $('ptClear').onclick = () => { plan.wps = []; plan.segs = []; planDraw(); };
 $('ptMode').onclick = () => { plan.straight = !plan.straight; planDraw(); toast(plan.straight ? 'Les prochains points seront reliés en ligne droite' : 'Les prochains points suivront les chemins', 2500); };

@@ -490,3 +490,7 @@ body.nav .rt-here { display: none; }
 .closebtn.save { background: var(--go); border-color: var(--go); color: #fff; }
 .closebtn.save.done { background: transparent; border-color: var(--line); color: var(--go-ink); }
 .closebtn.save svg { width: 15px; height: 15px; }
+.pb-right { display: flex; flex-direction: column; align-items: flex-end; gap: 6px; flex: none; }
+.pb-seg { background: rgba(255,255,255,.14); }
+.pb-seg button { white-space: nowrap; min-height: 30px; padding: 0 10px; font-size: 13px; color: var(--hud-ink); opacity: .8; }
+.pb-seg button.on { background: var(--hud-ink); color: var(--hud); opacity: 1; }

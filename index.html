@@ -8,13 +8,13 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<meta name="balise-version" content="94">
+<meta name="balise-version" content="95">
 <title>Pisteo</title>
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" href="icon.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
 <link rel="stylesheet" href="vendor/maplibre-gl.css">
-<link rel="stylesheet" href="app.css?v=94">
+<link rel="stylesheet" href="app.css?v=95">
 </head>
 <body>
 <div id="map" aria-label="Carte"></div>
@@ -520,7 +520,10 @@
 <div id="zoneFrame" class="zone-frame" aria-hidden="true"></div>
 <div id="planBar" class="plan-bar">
   <div class="pb-info"><b id="pbStats">Touche la carte pour placer le départ</b><span id="pbHint">Chaque toucher ajoute un point · l'itinéraire suit les chemins</span></div>
-  <button id="pbClose" class="btn small">Quitter</button>
+  <div class="pb-right">
+    <div class="seg pb-seg"><button id="pbFoot">À pied</button><button id="pbBike">À vélo</button></div>
+    <button id="pbClose" class="btn small">Quitter</button>
+  </div>
 </div>
 <div id="planTools" class="plan-tools">
   <button id="ptUndo" class="pt"><svg viewBox="0 0 24 24"><path d="M9 14 4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11"/></svg>Annuler</button>
@@ -543,6 +546,6 @@
 <div id="toast" class="toast" hidden></div>
 
 <script src="vendor/maplibre-gl.js"></script>
-<script src="app.js?v=94"></script>
+<script src="app.js?v=95"></script>
 </body>
 </html>
