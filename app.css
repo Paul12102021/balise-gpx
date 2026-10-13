@@ -517,3 +517,10 @@ body.choosing #sheet, body.choosing .fab-col { display: none !important; }
 .rc-seg { flex: 1; max-width: 260px; }
 .rc-seg button { min-height: 34px; }
 .rc-hint { color: var(--muted); font-size: 12px; text-align: center; }
+/* choix À pied / À vélo sous « Touche la carte à l'endroit où tu veux aller » */
+.pausepill.pick { flex-wrap: wrap; }
+.pausepill.pick > span { flex: 1; min-width: 0; }
+.pick-seg { flex-basis: 100%; background: rgba(255,255,255,.22); margin: 2px 6px 0 -6px; }
+.pick-seg button { color: rgba(255,255,255,.85); min-height: 36px; }
+.pick-seg button.on { background: #fff; color: #1d2a24; }
+.pick-seg[hidden] { display: none; }

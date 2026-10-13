@@ -4,7 +4,7 @@
 
 // La page et le code doivent être de la même version. Sinon (page gardée en cache
 // par le téléphone ou par GitHub), on recharge une page fraîche, au plus 3 fois.
-const APP_VERSION = 108;
+const APP_VERSION = 109;
 try {
   const meta = document.querySelector('meta[name="balise-version"]');
   const pageV = meta ? +meta.content : 0;
@@ -1976,8 +1976,15 @@ async function ensurePlaces() {
 
 // choisir l'arrivée en touchant la carte
 let picking = false; // false, ou la fonction à appeler avec le point touché
-function startPick(txt, cb) { picking = cb; $('pickTxt').textContent = txt; $('pickBanner').hidden = false; }
-$('destPick').onclick = () => { closeDest(); startPick('Touche la carte à l\'endroit où tu veux aller', p => goTo(Object.assign(p, { label: 'le point choisi' }))); };
+// withMode : affiche aussi À pied / À vélo (choisir un lieu où aller)
+function startPick(txt, cb, withMode) {
+  picking = cb; $('pickTxt').textContent = txt; $('pickBanner').hidden = false;
+  $('pickMode').hidden = !withMode; pickModeUI();
+}
+function pickModeUI() { $('pkFoot').classList.toggle('on', profile !== 'trekking'); $('pkBike').classList.toggle('on', profile === 'trekking'); }
+$('pkFoot').onclick = () => { setProfile('hiking-mountain', true); pickModeUI(); };
+$('pkBike').onclick = () => { setProfile('trekking', true); pickModeUI(); };
+$('destPick').onclick = () => { closeDest(); startPick('Touche la carte à l\'endroit où tu veux aller', p => goTo(Object.assign(p, { label: 'le point choisi' })), true); };
 $('pickCancel').onclick = () => { const cb = picking; picking = false; $('pickBanner').hidden = true; if (cb && cb.cancel) cb.cancel(); };
 map.on('click', e => {
   if (planning) {

@@ -8,13 +8,13 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<meta name="balise-version" content="108">
+<meta name="balise-version" content="109">
 <title>Pisteo</title>
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" href="icon.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
 <link rel="stylesheet" href="vendor/maplibre-gl.css">
-<link rel="stylesheet" href="app.css?v=108">
+<link rel="stylesheet" href="app.css?v=109">
 </head>
 <body>
 <div id="map" aria-label="Carte"></div>
@@ -513,6 +513,7 @@
 <div id="pickBanner" class="pausepill pick" hidden>
   <span id="pickTxt">Touche la carte à l'endroit où tu veux aller</span>
   <button id="pickCancel" class="btn small">Annuler</button>
+  <div id="pickMode" class="seg pick-seg" hidden><button id="pkFoot">À pied</button><button id="pkBike">À vélo</button></div>
 </div>
 
 <div id="zoneFrame" class="zone-frame" aria-hidden="true"></div>
@@ -544,6 +545,6 @@
 <div id="toast" class="toast" hidden></div>
 
 <script src="vendor/maplibre-gl.js"></script>
-<script src="app.js?v=108"></script>
+<script src="app.js?v=109"></script>
 </body>
 </html>
