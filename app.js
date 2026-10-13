@@ -4,7 +4,7 @@
 
 // La page et le code doivent être de la même version. Sinon (page gardée en cache
 // par le téléphone ou par GitHub), on recharge une page fraîche, au plus 3 fois.
-const APP_VERSION = 99;
+const APP_VERSION = 100;
 try {
   const meta = document.querySelector('meta[name="balise-version"]');
   const pageV = meta ? +meta.content : 0;
@@ -285,10 +285,14 @@ map.on('load', () => {
   map.addLayer({ id: 'rejoin-casing', type: 'line', source: 'rejoin', layout: round, paint: { 'line-color': '#fff', 'line-width': w(5, 13) } });
   map.addLayer({ id: 'rejoin', type: 'line', source: 'rejoin', layout: round, paint: { 'line-color': COL.me, 'line-width': w(3, 8), 'line-dasharray': [1.2, 1] } });
   map.addLayer({ id: 'turn', type: 'circle', source: 'turn', paint: { 'circle-radius': 7, 'circle-color': '#fff', 'circle-stroke-color': '#17201c', 'circle-stroke-width': 3, 'circle-pitch-alignment': 'map' } });
+  map.addSource('rchoice', { type: 'geojson', data: EMPTY });
+  map.addLayer({ id: 'rchoice-casing', type: 'line', source: 'rchoice', layout: round, paint: { 'line-color': '#fff', 'line-width': w(6, 13) } });
+  map.addLayer({ id: 'rchoice-line', type: 'line', source: 'rchoice', layout: round, paint: { 'line-color': ['get', 'col'], 'line-width': w(3, 8) } });
   map.addSource('plan', { type: 'geojson', data: EMPTY });
-  map.addLayer({ id: 'plan-casing', type: 'line', source: 'plan', filter: ['==', ['geometry-type'], 'LineString'], layout: round, paint: { 'line-color': '#fff', 'line-width': w(6, 13) } });
-  map.addLayer({ id: 'plan-line', type: 'line', source: 'plan', filter: ['all', ['==', ['geometry-type'], 'LineString'], ['!', ['get', 'pending']]], layout: round, paint: { 'line-color': '#7B3FE4', 'line-width': w(3, 8) } });
-  map.addLayer({ id: 'plan-pending', type: 'line', source: 'plan', filter: ['all', ['==', ['geometry-type'], 'LineString'], ['get', 'pending']], layout: round, paint: { 'line-color': '#7B3FE4', 'line-width': w(3, 8), 'line-dasharray': [1, 1.5] } });
+  map.addLayer({ id: 'plan-alt', type: 'line', source: 'plan', filter: ['all', ['==', ['geometry-type'], 'LineString'], ['has', 'alt']], layout: round, paint: { 'line-color': '#8a8f98', 'line-width': w(4, 9), 'line-opacity': 0.75 } });
+  map.addLayer({ id: 'plan-casing', type: 'line', source: 'plan', filter: ['all', ['==', ['geometry-type'], 'LineString'], ['!', ['has', 'alt']]], layout: round, paint: { 'line-color': '#fff', 'line-width': w(6, 13) } });
+  map.addLayer({ id: 'plan-line', type: 'line', source: 'plan', filter: ['all', ['==', ['geometry-type'], 'LineString'], ['!', ['has', 'alt']], ['!', ['get', 'pending']]], layout: round, paint: { 'line-color': '#7B3FE4', 'line-width': w(3, 8) } });
+  map.addLayer({ id: 'plan-pending', type: 'line', source: 'plan', filter: ['all', ['==', ['geometry-type'], 'LineString'], ['!', ['has', 'alt']], ['get', 'pending']], layout: round, paint: { 'line-color': '#7B3FE4', 'line-width': w(3, 8), 'line-dasharray': [1, 1.5] } });
   map.addLayer({ id: 'plan-pts', type: 'circle', source: 'plan', filter: ['==', ['geometry-type'], 'Point'],
     paint: { 'circle-radius': ['case', ['get', 'end'], 8, 6], 'circle-color': ['case', ['get', 'start'], '#2F5E45', ['get', 'end'], '#C62828', '#fff'], 'circle-stroke-color': '#7B3FE4', 'circle-stroke-width': 3 } });
   if (LAYERS[layerIdx].vector) setLayer(layerIdx, false);
@@ -1528,6 +1532,19 @@ const savedThr = store.get('thr');
 let threshold = savedThr == null ? 50 : +savedThr, offCount = 0, isOff = false, lastAlert = 0;
 let rejoin = null, rejoinProg = null, routing = false, lastRoute = 0, rejoinOff = 0;
 let profile = store.get('profile') || 'hiking-mountain';
+// à vélo : « tranquille » (voies vertes et pistes cyclables, profil BRouter safety) ou « rapide » (plus direct, profil trekking)
+let bikeStyle = store.get('bikeStyle') || 'calm';
+const brProf = style => profile !== 'trekking' ? profile : ((style || bikeStyle) === 'fast' ? 'trekking' : 'safety');
+const styleName = s => s === 'fast' ? 'rapide' : 'tranquille';
+// deux tracés sont-ils vraiment différents ? (longueur, ou une bonne part de l'un loin de l'autre)
+function routesDiffer(a, b) {
+  const pa = makePath(a, ''), pb = makePath(b, '');
+  if (Math.abs(pa.total - pb.total) > Math.max(300, 0.08 * Math.min(pa.total, pb.total))) return true;
+  const step = Math.max(1, Math.floor(a.length / 150));
+  let off = 0, n = 0;
+  for (let i = 0; i < a.length; i += step) { const pr = project(pb, a[i], true); n++; if (!pr || pr.dist > 80) off++; }
+  return n > 0 && off / n > 0.15;
+}
 $('thr').value = String(threshold);
 $('thr').onchange = e => {
   threshold = +e.target.value; store.set('thr', threshold);
@@ -1536,6 +1553,8 @@ $('thr').onchange = e => {
 };
 const thrRef = () => threshold || 50; // distance « sur la trace » quand l'alerte est coupée
 $('prof').value = profile;
+$('optBike').value = bikeStyle;
+$('optBike').onchange = e => { bikeStyle = e.target.value; store.set('bikeStyle', bikeStyle); toast(bikeStyle === 'fast' ? 'À vélo : itinéraire rapide proposé en premier' : 'À vélo : itinéraire tranquille (voies vertes, pistes) proposé en premier', 3500); };
 
 // ---------- thème clair / sombre / automatique ----------
 function refreshColors() {
@@ -1701,11 +1720,11 @@ function rejoinCandidates(p, pos) {
   if (pr && pr.along >= from && Math.abs(pr.along - picked[0].along) < step * 2) { const q = pointAt(p, pr.along); picked[0] = { lat: q.lat, lon: q.lon, along: pr.along, dist: pr.dist, score: pr.dist + skipW() * (pr.along - from) }; }
   return picked;
 }
-async function fetchRoute(a, b, ms = 12000) {
+async function fetchRoute(a, b, ms = 12000, style) {
   const ctrl = new AbortController(), timer = setTimeout(() => ctrl.abort(), ms);
   try {
     const ll = q => `${q.lon.toFixed(6)},${q.lat.toFixed(6)}`;
-    const r = await fetch(`https://brouter.de/brouter?lonlats=${ll(a)}|${ll(b)}&profile=${profile}&alternativeidx=0&format=geojson`, { signal: ctrl.signal });
+    const r = await fetch(`https://brouter.de/brouter?lonlats=${ll(a)}|${ll(b)}&profile=${brProf(style)}&alternativeidx=0&format=geojson`, { signal: ctrl.signal });
     if (!r.ok) { let m = ''; try { m = (await r.text()).slice(0, 200); } catch {} const e = new Error(m || 'HTTP ' + r.status); e.server = true; throw e; }
     const j = await r.json(), f = j.features && j.features[0];
     const pts = f.geometry.coordinates.map(c => ({ lon: c[0], lat: c[1], ele: c[2] != null ? c[2] : null }));
@@ -1898,7 +1917,11 @@ function startPick(txt, cb) { picking = cb; $('pickTxt').textContent = txt; $('p
 $('destPick').onclick = () => { closeDest(); startPick('Touche la carte à l\'endroit où tu veux aller', p => goTo(Object.assign(p, { label: 'le point choisi' }))); };
 $('pickCancel').onclick = () => { const cb = picking; picking = false; $('pickBanner').hidden = true; if (cb && cb.cancel) cb.cancel(); };
 map.on('click', e => {
-  if (planning) { planAdd({ lat: e.lngLat.lat, lon: e.lngLat.lng }); return; }
+  if (planning) {
+    const hit = map.queryRenderedFeatures([[e.point.x - 14, e.point.y - 14], [e.point.x + 14, e.point.y + 14]], { layers: ['plan-alt'] })[0];
+    if (hit) { planSwap(plan.segs[hit.properties.alt]); return; }
+    planAdd({ lat: e.lngLat.lat, lon: e.lngLat.lng }); return;
+  }
   // parcours balisés affichés : toucher une ligne ouvre le parcours
   if (!picking && !nav && !$('routes').hidden && !rtSheet.collapsed) { rtSetCollapsed(true); return; }
   if (!picking && rtMapOn && !nav && ($('routes').hidden || rtSheet.collapsed)) {
@@ -1955,11 +1978,11 @@ $('lpFromMap').onclick = () => {
 $('lpGo').onclick = () => { const v = +$('lpVal').value; if (!(v > 0)) { toast('Indique une distance ou une durée.'); return; } loopCfg.val = v; $('loop').hidden = true; makeLoop(); };
 
 // itinéraire passant par plusieurs points : BRouter, sinon chemins téléchargés
-async function routeVia(pts, ms) {
+async function routeVia(pts, ms, style) {
   const ll = q => `${q.lon.toFixed(6)},${q.lat.toFixed(6)}`;
   const ctrl = new AbortController(), timer = setTimeout(() => ctrl.abort(), ms);
   try {
-    const r = await fetch(`https://brouter.de/brouter?lonlats=${pts.map(ll).join('|')}&profile=${profile}&alternativeidx=0&format=geojson`, { signal: ctrl.signal });
+    const r = await fetch(`https://brouter.de/brouter?lonlats=${pts.map(ll).join('|')}&profile=${brProf(style)}&alternativeidx=0&format=geojson`, { signal: ctrl.signal });
     if (!r.ok) { const e = new Error((await r.text().catch(() => '')).slice(0, 160) || 'HTTP ' + r.status); e.server = true; throw e; }
     const f = (await r.json()).features[0];
     return f.geometry.coordinates.map(c => ({ lon: c[0], lat: c[1], ele: c[2] != null ? c[2] : null }));
@@ -3078,10 +3101,10 @@ function planMarkers() {
 function planSeg(i, straight) {
   const a = plan.wps[i], b = plan.wps[i + 1], old = plan.segs[i];
   const st = straight != null ? straight : old ? !!old.straight : plan.straight;
-  const seg = { pts: [a, b], pending: true, straight: st };
+  const seg = { pts: [a, b], pending: true, straight: st, style: old && old.style };
   plan.segs[i] = seg; plan.busy++;
   plan.queue = plan.queue.then(async () => {
-    if (plan.segs.includes(seg)) { const pts = await planSegment(a, b, st); seg.pts = pts; seg.pending = false; }
+    if (plan.segs.includes(seg)) await planSegment(a, b, st, seg);
     plan.busy--; if (planning) planDraw();
   });
 }
@@ -3107,10 +3130,31 @@ $('pbClose').onclick = () => {
   if (plan.wps.length > 1 && !$('pbClose').dataset.armed) { $('pbClose').dataset.armed = '1'; $('pbClose').textContent = 'Sûr ?'; setTimeout(() => { delete $('pbClose').dataset.armed; $('pbClose').textContent = 'Quitter'; }, 2500); return; }
   delete $('pbClose').dataset.armed; $('pbClose').textContent = 'Quitter'; closePlan();
 };
-async function planSegment(a, b, straight) {
-  if (straight) return [a, b];
-  try { return await routeVia([a, b], 25000); }
-  catch { toast('Pas de chemin trouvé ici : segment en ligne droite', 2500); return [a, b]; }
+// calcule le segment ; à vélo, les versions tranquille et rapide sont calculées ensemble,
+// et si elles diffèrent vraiment, l'autre reste affichée en gris : la toucher la choisit
+async function planSegment(a, b, straight, seg) {
+  seg.alt = null; seg.pending = false;
+  if (straight) { seg.pts = [a, b]; return; }
+  if (profile !== 'trekking') {
+    try { seg.pts = await routeVia([a, b], 25000); }
+    catch { toast('Pas de chemin trouvé ici : segment en ligne droite', 2500); seg.pts = [a, b]; }
+    return;
+  }
+  const [c, f] = await Promise.allSettled([routeVia([a, b], 25000, 'calm'), routeVia([a, b], 25000, 'fast')]);
+  if (c.status !== 'fulfilled' && f.status !== 'fulfilled') { toast('Pas de chemin trouvé ici : segment en ligne droite', 2500); seg.pts = [a, b]; return; }
+  if (c.status === 'fulfilled' && f.status === 'fulfilled' && routesDiffer(c.value, f.value)) {
+    seg.alt = { calm: c.value, fast: f.value };
+    seg.style = seg.style || bikeStyle;
+    seg.pts = seg.alt[seg.style];
+    const o = seg.style === 'fast' ? 'calm' : 'fast';
+    toast(`Itinéraire ${styleName(seg.style)} : ${fmtDist(makePath(seg.pts, '').total)} · le ${styleName(o)} (${fmtDist(makePath(seg.alt[o], '').total)}) est en gris`, 6000, { label: 'Prendre le ' + styleName(o), run: () => planSwap(seg) });
+  } else seg.pts = (c.status === 'fulfilled' ? c : f).value;
+}
+function planSwap(seg) {
+  if (!seg.alt || !plan.segs.includes(seg)) return;
+  seg.style = seg.style === 'fast' ? 'calm' : 'fast'; seg.pts = seg.alt[seg.style];
+  planDraw();
+  toast(`Itinéraire ${styleName(seg.style)} choisi · ${fmtDist(makePath(seg.pts, '').total)}`, 2500);
 }
 function planAdd(p) {
   const prev = plan.wps[plan.wps.length - 1];
@@ -3122,13 +3166,15 @@ function planAdd(p) {
   plan.busy++;
   plan.queue = plan.queue.then(async () => {
     // segment annulé entre-temps : on ne calcule rien
-    if (plan.segs.includes(seg)) { const pts = await planSegment(prev, p, st); seg.pts = pts; seg.pending = false; }
+    if (plan.segs.includes(seg)) await planSegment(prev, p, st, seg);
     plan.busy--; if (planning) planDraw();
   });
 }
 function planAll() { const out = []; plan.segs.forEach((sg, k) => out.push(...(k ? sg.pts.slice(1) : sg.pts))); return out; }
 function planDraw() {
   const feats = plan.segs.map(sg => ({ type: 'Feature', properties: { pending: !!sg.pending }, geometry: { type: 'LineString', coordinates: sg.pts.map(q => [q.lon, q.lat]) } }));
+  // l'autre version (tranquille / rapide), en gris sous le tracé choisi
+  plan.segs.forEach((sg, k) => { if (sg.alt) feats.unshift({ type: 'Feature', properties: { alt: k }, geometry: { type: 'LineString', coordinates: sg.alt[sg.style === 'fast' ? 'calm' : 'fast'].map(q => [q.lon, q.lat]) } }); });
   setSrc('plan', { type: 'FeatureCollection', features: feats });
   planMarkers();
   const n = plan.wps.length, all = planAll();
@@ -3188,9 +3234,21 @@ async function goTo(dest) {
     const s = Math.round((Date.now() - t0) / 1000);
     toast(`Calcul de l'itinéraire… ${s} s` + (km > 40 ? ` · long trajet (${Math.round(km)} km à vol d'oiseau), ça peut prendre jusqu'à ${wait >= 60 ? Math.round(wait / 60) + ' min' : wait + ' s'}` : ''), 3000);
   }, 1000);
-  let r, err = null;
-  try { r = await fetchRoute(pos, dest, wait * 1000); }
-  catch (e) { err = e; }
+  let r, err = null, style = null;
+  if (profile === 'trekking') {
+    const [c, f] = await Promise.allSettled([fetchRoute(pos, dest, wait * 1000, 'calm'), fetchRoute(pos, dest, wait * 1000, 'fast')]);
+    clearInterval(tick);
+    if (c.status === 'fulfilled' && f.status === 'fulfilled' && routesDiffer(c.value.pts, f.value.pts)) {
+      style = await chooseRoute({ calm: c.value.pts, fast: f.value.pts });
+      if (!style) return;
+      r = style === 'fast' ? f.value : c.value;
+    } else if (c.status === 'fulfilled' || f.status === 'fulfilled') {
+      r = (c.status === 'fulfilled' ? c : f).value; style = c.status === 'fulfilled' ? 'calm' : 'fast';
+    } else err = c.reason;
+  } else {
+    try { r = await fetchRoute(pos, dest, wait * 1000); }
+    catch (e) { err = e; }
+  }
   clearInterval(tick);
   if (err) {
     const offline = navigator.onLine === false || (!err.server && err.name !== 'AbortError');
@@ -3206,22 +3264,42 @@ async function goTo(dest) {
   r.pts.push({ lat: dest.lat, lon: dest.lon, ele: null });
   if (nav && !track) document.body.classList.remove('free');
   await showTrack({ name: 'Vers ' + dest.label, pts: r.pts }, !nav);
-  track.route = dest;
-  toast(`${fmtDist(track.total)} jusqu'à ${dest.label} ${profile === 'trekking' ? 'à vélo' : 'à pied'}`, 4000);
+  track.route = dest; track.style = style;
+  toast(`${fmtDist(track.total)} jusqu'à ${dest.label} ${profile === 'trekking' ? 'à vélo' + (style ? ', itinéraire ' + styleName(style) : '') : 'à pied'}`, 4000);
   if (nav) { arrived = false; guidance(); say(`Itinéraire calculé, ${speakDist(track.total)}`); }
   else startNav();
+}
+// deux itinéraires vélo vraiment différents : on les montre sur la carte et on laisse choisir
+const RC_COL = { calm: '#1f9d55', fast: '#e8742a' };
+function chooseRoute(alt) {
+  return new Promise(res => {
+    const order = bikeStyle === 'fast' ? ['fast', 'calm'] : ['calm', 'fast'];
+    setSrc('rchoice', { type: 'FeatureCollection', features: order.slice().reverse().map(s => ({ type: 'Feature', properties: { s, col: RC_COL[s] }, geometry: { type: 'LineString', coordinates: alt[s].map(q => [q.lon, q.lat]) } })) });
+    const list = $('rcList'); list.innerHTML = '';
+    const done = s => { $('rc').hidden = true; setSrc('rchoice', EMPTY); res(s); };
+    for (const s of order) {
+      const p = makePath(alt[s], ''), sp = lpSpeed(), min = Math.round((p.total / 1000 / sp.v + (p.hasEle ? p.totalUp / sp.climb : 0)) * 60);
+      const b = document.createElement('button');
+      b.innerHTML = `<span class="rt-dot" style="background:${RC_COL[s]}"></span><span class="t"><b>${s === 'fast' ? 'Rapide' : 'Tranquille'} · ${fmtDist(p.total)}</b><small>${s === 'fast' ? 'Plus direct, davantage de rues' : 'Voies vertes et pistes cyclables'} · ${min >= 60 ? Math.floor(min / 60) + ' h ' + String(min % 60).padStart(2, '0') : min + ' min'}${p.hasEle ? ' · D+ ' + fmtM(p.totalUp) : ''}</small></span>`;
+      b.onclick = () => done(s);
+      list.appendChild(b);
+    }
+    $('rcClose').onclick = () => done(null);
+    $('rc').hidden = false;
+    setTimeout(() => { try { map.fitBounds(boundsOf([alt.calm, alt.fast]), { padding: { top: 80, bottom: $('rc').offsetHeight + 30, left: 30, right: 70 }, bearing: 0, pitch: 0, duration: 600 }); } catch {} }, 60);
+  });
 }
 async function reroute() {
   if (routing || !me || !track || !track.route) return;
   routing = true; lastRoute = Date.now(); $('btnRejoin').classList.add('busy'); guidance();
-  const dest = track.route;
+  const dest = track.route, style = track.style;
   try {
     let r;
-    try { r = await fetchRoute(me, dest, Math.round(clamp(25 + hav(me, dest) / 1000 * 0.4, 25, 120)) * 1000); }
+    try { r = await fetchRoute(me, dest, Math.round(clamp(25 + hav(me, dest) / 1000 * 0.4, 25, 120)) * 1000, style); }
     catch (e) { await loadGraphs(); r = localRouteTo(me, dest); if (!r) throw e; }
     r.pts.push({ lat: dest.lat, lon: dest.lon, ele: null });
     await showTrack({ name: 'Vers ' + dest.label, pts: r.pts }, false);
-    track.route = dest; isOff = false; offCount = 0; arrived = false;
+    track.route = dest; track.style = style; isOff = false; offCount = 0; arrived = false;
     say('Itinéraire recalculé');
   } catch { /* pas de réseau : nouvel essai automatique dans 30 s */ }
   routing = false; $('btnRejoin').classList.remove('busy'); guidance();

@@ -8,13 +8,13 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<meta name="balise-version" content="99">
+<meta name="balise-version" content="100">
 <title>Pisteo</title>
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" href="icon.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
 <link rel="stylesheet" href="vendor/maplibre-gl.css">
-<link rel="stylesheet" href="app.css?v=99">
+<link rel="stylesheet" href="app.css?v=100">
 </head>
 <body>
 <div id="map" aria-label="Carte"></div>
@@ -197,6 +197,10 @@
         <option value="hiking-mountain">À pied</option>
         <option value="trekking">À vélo</option>
       </select>
+    </div>
+    <div class="row">
+      <label for="optBike">À vélo, je préfère<br><small>Si l'autre itinéraire est différent, tu pourras le choisir</small></label>
+      <select id="optBike"><option value="calm">Tranquille (voies vertes, pistes)</option><option value="fast">Rapide (plus direct)</option></select>
     </div>
     <div class="row">
       <span>Cartes hors ligne<br><small>Trace, département ou zone</small><br><small id="mapsStatus" class="dl-live" hidden></small></span>
@@ -515,6 +519,11 @@
   <button id="pickCancel" class="btn small">Annuler</button>
 </div>
 
+<div id="rc" class="rc-card" hidden>
+  <div class="rt-card-h"><b>Deux itinéraires à vélo : lequel ?</b><button id="rcClose" class="rt-x" aria-label="Annuler">✕</button></div>
+  <div id="rcList" class="rt-pick-list"></div>
+</div>
+
 <div id="zoneFrame" class="zone-frame" aria-hidden="true"></div>
 <div id="planBar" class="plan-bar">
   <div class="pb-info"><b id="pbStats">Touche la carte pour placer le départ</b><span id="pbHint">Chaque toucher ajoute un point · l'itinéraire suit les chemins</span></div>
@@ -544,6 +553,6 @@
 <div id="toast" class="toast" hidden></div>
 
 <script src="vendor/maplibre-gl.js"></script>
-<script src="app.js?v=99"></script>
+<script src="app.js?v=100"></script>
 </body>
 </html>
