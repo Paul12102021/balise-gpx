@@ -4,7 +4,7 @@
 
 // La page et le code doivent être de la même version. Sinon (page gardée en cache
 // par le téléphone ou par GitHub), on recharge une page fraîche, au plus 3 fois.
-const APP_VERSION = 105;
+const APP_VERSION = 106;
 try {
   const meta = document.querySelector('meta[name="balise-version"]');
   const pageV = meta ? +meta.content : 0;
@@ -285,9 +285,6 @@ map.on('load', () => {
   map.addLayer({ id: 'rejoin-casing', type: 'line', source: 'rejoin', layout: round, paint: { 'line-color': '#fff', 'line-width': w(5, 13) } });
   map.addLayer({ id: 'rejoin', type: 'line', source: 'rejoin', layout: round, paint: { 'line-color': COL.me, 'line-width': w(3, 8), 'line-dasharray': [1.2, 1] } });
   map.addLayer({ id: 'turn', type: 'circle', source: 'turn', paint: { 'circle-radius': 7, 'circle-color': '#fff', 'circle-stroke-color': '#17201c', 'circle-stroke-width': 3, 'circle-pitch-alignment': 'map' } });
-  map.addSource('rchoice', { type: 'geojson', data: EMPTY });
-  map.addLayer({ id: 'rchoice-casing', type: 'line', source: 'rchoice', layout: round, paint: { 'line-color': '#fff', 'line-width': w(6, 13) } });
-  map.addLayer({ id: 'rchoice-line', type: 'line', source: 'rchoice', layout: round, paint: { 'line-color': ['get', 'col'], 'line-width': w(3, 8) } });
   map.addSource('plan', { type: 'geojson', data: EMPTY });
   map.addLayer({ id: 'plan-alt-casing', type: 'line', source: 'plan', filter: ['all', ['==', ['geometry-type'], 'LineString'], ['has', 'alt']], layout: round, paint: { 'line-color': '#fff', 'line-width': w(7, 14) } });
   map.addLayer({ id: 'plan-alt', type: 'line', source: 'plan', filter: ['all', ['==', ['geometry-type'], 'LineString'], ['has', 'alt']], layout: round, paint: { 'line-color': '#6b7079', 'line-width': w(4, 9) } });
@@ -3186,15 +3183,24 @@ function planRemove(k) {
   else { plan.segs.splice(k - 1, 2, null); planSeg(k - 1); }
   planDraw();
 }
-function openPlan() {
+// go : aller vers un lieu (départ = ma position, arrivée = le lieu), avec « Naviguer » au lieu d'« Enregistrer »
+function openPlan(go, from) {
   if (nav) { toast('Quitte d\'abord la navigation.'); return; }
   closeDest(); closeLib(); toggleMore(false, true); $('loopBar').hidden = true;
   planning = true; document.body.classList.add('plan'); planModeUI();
-  plan.wps = []; plan.segs = []; planDraw();
-  if (me) map.easeTo({ center: [me.lon, me.lat], zoom: Math.max(map.getZoom(), 14), pitch: 0, bearing: 0, duration: 600 });
+  plan.go = go && go.lat != null ? go : null;
+  $('ptDoneL').textContent = plan.go ? 'Naviguer' : 'Enregistrer';
+  plan.wps = []; plan.segs = [];
+  if (plan.go) {
+    plan.wps = [{ lat: from.lat, lon: from.lon }, { lat: plan.go.lat, lon: plan.go.lon }];
+    planSeg(0, false); plan.segs[0].fit = true;
+    fitBoth([plan.wps], () => $('planTools').offsetHeight + 10);
+  }
+  planDraw();
+  if (!plan.go && me) map.easeTo({ center: [me.lon, me.lat], zoom: Math.max(map.getZoom(), 14), pitch: 0, bearing: 0, duration: 600 });
 }
-function closePlan() { routeLabels([]); planning = false; document.body.classList.remove('plan'); plan.wps = []; plan.segs = []; planMarkers(); setSrc('plan', EMPTY); }
-$('destPlan').onclick = openPlan;
+function closePlan() { routeLabels([]); planning = false; plan.go = null; document.body.classList.remove('plan'); plan.wps = []; plan.segs = []; planMarkers(); setSrc('plan', EMPTY); }
+$('destPlan').onclick = () => openPlan();
 $('pbClose').onclick = () => {
   if (plan.wps.length > 1 && !$('pbClose').dataset.armed) { $('pbClose').dataset.armed = '1'; $('pbClose').textContent = 'Sûr ?'; setTimeout(() => { delete $('pbClose').dataset.armed; $('pbClose').textContent = 'Quitter'; }, 2500); return; }
   delete $('pbClose').dataset.armed; $('pbClose').textContent = 'Quitter'; closePlan();
@@ -3244,6 +3250,7 @@ function planDraw() {
   // l'autre version (tranquille / rapide), en gris sous le tracé choisi
   const lbls = [];
   plan.segs.forEach((sg, k) => {
+    if (sg.fit && !sg.pending && !sg.alt) { delete sg.fit; fitBoth([sg.pts], () => $('planTools').offsetHeight + 10); }
     if (!sg.alt) return;
     const keys = Object.keys(sg.alt), lab = s => `${BIKE[s].name} · ${fmtDist(makePath(sg.alt[s], '').total)}`;
     const other = s => sg.alt[s === sg.style ? keys.find(x => x !== s) : sg.style];
@@ -3264,9 +3271,9 @@ function planDraw() {
   else if (n === 1) { $('pbStats').textContent = 'Départ placé · touche le point suivant'; }
   else {
     const pth = makePath(all, '');
-    $('pbStats').textContent = `${fmtDist(pth.total)}${pth.hasEle ? ' · D+ ' + fmtM(pth.totalUp) : ''} · ${n} points` + (plan.busy ? ' · calcul…' : '');
+    $('pbStats').textContent = (plan.go ? `Vers ${plan.go.label} · ` : '') + `${fmtDist(pth.total)}${pth.hasEle ? ' · D+ ' + fmtM(pth.totalUp) : ''}` + (plan.go ? '' : ` · ${n} points`) + (plan.busy ? ' · calcul…' : '');
   }
-  $('pbHint').textContent = (plan.straight ? 'Ligne droite' : 'Suit les chemins') + (n > 1 ? ' · glisse un point pour le déplacer, touche-le pour le supprimer' : ' · chaque toucher ajoute un point');
+  $('pbHint').textContent = plan.go ? 'Touche la carte pour ajouter un passage · Naviguer pour partir' : (plan.straight ? 'Ligne droite' : 'Suit les chemins') + (n > 1 ? ' · glisse un point pour le déplacer, touche-le pour le supprimer' : ' · chaque toucher ajoute un point');
   $('ptUndo').disabled = !n; $('ptClear').disabled = !n; $('ptLoop').disabled = n < 2; $('ptDone').disabled = n < 2;
   $('ptModeL').textContent = plan.straight ? 'Ligne droite' : 'Chemins';
 }
@@ -3289,6 +3296,7 @@ $('ptDone').onclick = async () => {
   if (plan.wps.length < 2) return;
   $('ptDone').disabled = true;
   await plan.queue;
+  if (plan.go) { planGo(); return; }
   const pts = removeSpurs(planAll()), pth = makePath(pts, '');
   const def = `Itinéraire ${profile === 'trekking' ? 'à vélo' : 'à pied'} de ${fmtDist(pth.total)}`;
   const name = (prompt('Nom de l\'itinéraire', def) || def).trim();
@@ -3304,78 +3312,39 @@ map.on('contextmenu', e => {
   toast(me ? `À ${fmtDist(hav(me, d))} à vol d'oiseau` : 'Point choisi', 6000, { label: 'Y aller', run: () => goTo(d) });
 });
 
+// lancer la navigation vers le lieu tracé dans l'écran d'itinéraire
+async function planGo() {
+  const last = plan.wps[plan.wps.length - 1], dest = { lat: last.lat, lon: last.lon, label: plan.go.label };
+  const sg = plan.segs[0], simple = plan.wps.length === 2 && sg && !sg.straight;
+  const style = simple && profile === 'trekking' ? sg.style || null : null;
+  const pts = removeSpurs(planAll());
+  closePlan();
+  await showTrack({ name: 'Vers ' + dest.label, pts }, true);
+  // trajet direct : recalculé tout seul si on s'en écarte
+  if (simple) { track.route = dest; track.style = style; }
+  toast(`${fmtDist(track.total)} jusqu'à ${dest.label} ${profile === 'trekking' ? 'à vélo' + (style ? ', itinéraire ' + styleName(style) : '') : 'à pied'}`, 4000);
+  startNav();
+}
 async function goTo(dest) {
   closeDest();
   if (!startGPS()) return;
-  toast('Calcul de l\'itinéraire…', 20000);
+  toast('Recherche de ta position…', 20000);
   const pos = await waitFix(20000);
   if (!pos) { toast('Position GPS introuvable. Va à découvert et réessaie.', 5000); return; }
-  // un long trajet demande plus de temps au serveur : on attend en conséquence et on affiche l'attente
-  const km = hav(pos, dest) / 1000, wait = Math.round(clamp(25 + km * 0.4, 25, 120));
-  let r, style = null;
-  // calcul, puis choix sur la carte (itinéraire, et à pied / à vélo : changer de mode recalcule)
-  for (;;) {
-    toast('Calcul de l\'itinéraire…', 20000);
-    const t0 = Date.now(), tick = setInterval(() => {
-      const s = Math.round((Date.now() - t0) / 1000);
-      toast(`Calcul de l'itinéraire… ${s} s` + (km > 40 ? ` · long trajet (${Math.round(km)} km à vol d'oiseau), ça peut prendre jusqu'à ${wait >= 60 ? Math.round(wait / 60) + ' min' : wait + ' s'}` : ''), 3000);
-    }, 1000);
-    let kept = {}, err = null;
-    if (profile === 'trekking') { const v = await bikeVariants(s => fetchRoute(pos, dest, wait * 1000, s)); kept = v.kept; err = v.err; }
-    else { try { kept.foot = await fetchRoute(pos, dest, wait * 1000); } catch (e) { err = e; } }
-    clearInterval(tick);
-    if (!Object.keys(kept).length) {
-      err = err || new Error('');
-      const offline = navigator.onLine === false || (!err.server && err.name !== 'AbortError');
-      if (offline) { await loadGraphs(); const lr = localRouteTo(pos, dest); if (lr) kept[profile === 'trekking' ? bikeStyle : 'foot'] = lr; }
-      if (!Object.keys(kept).length) {
-        const why = !offline ? (km > 150 ? `trajet trop long pour le serveur d'itinéraires (${Math.round(km)} km à vol d'oiseau). Choisis une étape plus proche` : err.name === 'AbortError' ? 'le serveur d\'itinéraires ne répond pas, réessaie dans un instant' : 'le serveur d\'itinéraires n\'a pas trouvé de chemin' + (/island|not mapped|position/i.test(err.message) ? ' (point hors des routes et chemins connus)' : ''))
-          : 'pas de réseau, et cet endroit est hors des chemins téléchargés';
-        toast('Itinéraire impossible : ' + why + '.', 7000);
-        return;
-      }
-    }
-    const pick = await chooseRoute(Object.fromEntries(Object.entries(kept).map(([k, v]) => [k, v.pts])));
-    if (!pick) return;
-    if (pick.mode) { setProfile(pick.mode, true); continue; }
-    r = kept[pick]; style = pick === 'foot' ? null : pick;
-    break;
-  }
+  clearTimeout(toastT); $('toast').hidden = true;
+  if (!nav) { openPlan(dest, pos); return; }
+  // en pleine navigation : itinéraire direct (type préféré), sans quitter le guidage
+  toast('Calcul de l\'itinéraire…', 20000);
+  const wait = Math.round(clamp(25 + hav(pos, dest) / 1000 * 0.4, 25, 120));
+  let r = null;
+  try { r = await fetchRoute(pos, dest, wait * 1000); }
+  catch { await loadGraphs(); r = localRouteTo(pos, dest); }
+  if (!r) { toast('Itinéraire impossible pour l\'instant, réessaie dans un instant.', 5000); return; }
   r.pts.push({ lat: dest.lat, lon: dest.lon, ele: null });
-  if (nav && !track) document.body.classList.remove('free');
-  await showTrack({ name: 'Vers ' + dest.label, pts: r.pts }, !nav);
-  track.route = dest; track.style = style;
-  toast(`${fmtDist(track.total)} jusqu'à ${dest.label} ${profile === 'trekking' ? 'à vélo' + (style ? ', itinéraire ' + styleName(style) : '') : 'à pied'}`, 4000);
-  if (nav) { arrived = false; guidance(); say(`Itinéraire calculé, ${speakDist(track.total)}`); }
-  else startNav();
-}
-// plusieurs itinéraires vélo vraiment différents : on les montre sur la carte et on laisse choisir
-const RT = s => BIKE[s] || { name: 'À pied', col: '#7B3FE4' };
-function chooseRoute(alt) {
-  return new Promise(res => {
-    const order = Object.keys(alt), other = s => alt[order.find(x => x !== s)];
-    setSrc('rchoice', { type: 'FeatureCollection', features: order.slice().reverse().map(s => ({ type: 'Feature', properties: { s, col: RT(s).col }, geometry: { type: 'LineString', coordinates: alt[s].map(q => [q.lon, q.lat]) } })) });
-    const list = $('rcList'); list.innerHTML = '';
-    const done = s => { $('rc').hidden = true; document.body.classList.remove('choosing'); setSrc('rchoice', EMPTY); routeLabels([]); res(s); };
-    for (const s of order) {
-      const p = makePath(alt[s], ''), sp = lpSpeed(), min = Math.round((p.total / 1000 / sp.v + (p.hasEle ? p.totalUp / sp.climb : 0)) * 60);
-      const b = document.createElement('button');
-      b.innerHTML = `<span class="rt-dot" style="background:${RT(s).col}"></span><b>${RT(s).name}</b><small>${fmtDist(p.total)} · ${min >= 60 ? Math.floor(min / 60) + ' h ' + String(min % 60).padStart(2, '0') : min + ' min'}${p.hasEle ? ' · D+ ' + fmtM(p.totalUp) : ''}</small>`;
-      b.onclick = () => done(s);
-      list.appendChild(b);
-    }
-    $('rcClose').onclick = () => done(null);
-    const bike = profile === 'trekking';
-    $('rcFoot').classList.toggle('on', !bike); $('rcBike').classList.toggle('on', bike);
-    $('rcFoot').onclick = () => { if (bike) done({ mode: 'hiking-mountain' }); };
-    $('rcBike').onclick = () => { if (!bike) done({ mode: 'trekking' }); };
-    $('rcHint').textContent = order.length > 1 ? 'Touche un itinéraire pour partir' : 'Touche l\'itinéraire pour partir';
-    clearTimeout(toastT); $('toast').hidden = true;
-    document.body.classList.add('choosing');
-    $('rc').hidden = false;
-    routeLabels(order.map(s => ({ pt: farPoint(alt[s], other(s)), text: `${RT(s).name} · ${fmtDist(makePath(alt[s], '').total)}`, col: RT(s).col, on: true, run: () => done(s) })));
-    fitBoth(Object.values(alt), () => innerHeight - $('rc').getBoundingClientRect().top);
-  });
+  if (!track) document.body.classList.remove('free');
+  await showTrack({ name: 'Vers ' + dest.label, pts: r.pts }, false);
+  track.route = dest; track.style = profile === 'trekking' ? bikeStyle : null;
+  arrived = false; guidance(); say(`Itinéraire calculé, ${speakDist(track.total)}`);
 }
 async function reroute() {
   if (routing || !me || !track || !track.route) return;
