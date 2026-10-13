@@ -514,3 +514,6 @@ body.choosing #sheet, body.choosing .fab-col { display: none !important; }
 .rc-card[hidden] { display: none; }
 .rc-lbl { --c: #7B3FE4; padding: 5px 10px; border-radius: 999px; border: 2px solid #fff; background: var(--c); color: #fff; font: 600 13px/1.2 system-ui, sans-serif; white-space: nowrap; box-shadow: 0 2px 8px rgba(0,0,0,.3); cursor: pointer; }
 .rc-lbl:not(.on) { opacity: .92; }
+.rc-seg { flex: 1; max-width: 260px; }
+.rc-seg button { min-height: 34px; }
+.rc-hint { color: var(--muted); font-size: 12px; text-align: center; }

@@ -4,7 +4,7 @@
 
 // La page et le code doivent être de la même version. Sinon (page gardée en cache
 // par le téléphone ou par GitHub), on recharge une page fraîche, au plus 3 fois.
-const APP_VERSION = 104;
+const APP_VERSION = 105;
 try {
   const meta = document.querySelector('meta[name="balise-version"]');
   const pageV = meta ? +meta.content : 0;
@@ -1598,6 +1598,7 @@ function routesDiffer(a, b) {
 }
 // point du tracé a le plus éloigné du tracé b : là où poser son étiquette
 function farPoint(a, b) {
+  if (!b) return a[a.length >> 1];
   const pb = makePath(b, ''), step = Math.max(1, Math.floor(a.length / 200));
   let best = a[a.length >> 1], bd = -1;
   for (let i = 0; i < a.length; i += step) { const pr = project(pb, a[i], true); if (pr && pr.dist > bd) { bd = pr.dist; best = a[i]; } }
@@ -3311,35 +3312,34 @@ async function goTo(dest) {
   if (!pos) { toast('Position GPS introuvable. Va à découvert et réessaie.', 5000); return; }
   // un long trajet demande plus de temps au serveur : on attend en conséquence et on affiche l'attente
   const km = hav(pos, dest) / 1000, wait = Math.round(clamp(25 + km * 0.4, 25, 120));
-  const t0 = Date.now(), tick = setInterval(() => {
-    const s = Math.round((Date.now() - t0) / 1000);
-    toast(`Calcul de l'itinéraire… ${s} s` + (km > 40 ? ` · long trajet (${Math.round(km)} km à vol d'oiseau), ça peut prendre jusqu'à ${wait >= 60 ? Math.round(wait / 60) + ' min' : wait + ' s'}` : ''), 3000);
-  }, 1000);
-  let r, err = null, style = null;
-  if (profile === 'trekking') {
-    const { kept, err: e1 } = await bikeVariants(s => fetchRoute(pos, dest, wait * 1000, s)), keys = Object.keys(kept);
+  let r, style = null;
+  // calcul, puis choix sur la carte (itinéraire, et à pied / à vélo : changer de mode recalcule)
+  for (;;) {
+    toast('Calcul de l\'itinéraire…', 20000);
+    const t0 = Date.now(), tick = setInterval(() => {
+      const s = Math.round((Date.now() - t0) / 1000);
+      toast(`Calcul de l'itinéraire… ${s} s` + (km > 40 ? ` · long trajet (${Math.round(km)} km à vol d'oiseau), ça peut prendre jusqu'à ${wait >= 60 ? Math.round(wait / 60) + ' min' : wait + ' s'}` : ''), 3000);
+    }, 1000);
+    let kept = {}, err = null;
+    if (profile === 'trekking') { const v = await bikeVariants(s => fetchRoute(pos, dest, wait * 1000, s)); kept = v.kept; err = v.err; }
+    else { try { kept.foot = await fetchRoute(pos, dest, wait * 1000); } catch (e) { err = e; } }
     clearInterval(tick);
-    if (keys.length > 1) {
-      style = await chooseRoute(Object.fromEntries(keys.map(k => [k, kept[k].pts])));
-      if (!style) return;
-      r = kept[style];
-    } else if (keys.length) { style = keys[0]; r = kept[style]; }
-    else err = e1;
-  } else {
-    try { r = await fetchRoute(pos, dest, wait * 1000); }
-    catch (e) { err = e; }
-  }
-  clearInterval(tick);
-  if (err) {
-    const offline = navigator.onLine === false || (!err.server && err.name !== 'AbortError');
-    if (offline) { await loadGraphs(); r = localRouteTo(pos, dest); }
-    if (!r) {
-      const why = !offline ? (km > 150 ? `trajet trop long pour le serveur d'itinéraires (${Math.round(km)} km à vol d'oiseau). Choisis une étape plus proche` : err.name === 'AbortError' ? 'le serveur d\'itinéraires ne répond pas, réessaie dans un instant' : 'le serveur d\'itinéraires n\'a pas trouvé de chemin' + (/island|not mapped|position/i.test(err.message) ? ' (point hors des routes et chemins connus)' : ''))
-        : 'pas de réseau, et cet endroit est hors des chemins téléchargés';
-      toast('Itinéraire impossible : ' + why + '.', 7000);
-      return;
+    if (!Object.keys(kept).length) {
+      err = err || new Error('');
+      const offline = navigator.onLine === false || (!err.server && err.name !== 'AbortError');
+      if (offline) { await loadGraphs(); const lr = localRouteTo(pos, dest); if (lr) kept[profile === 'trekking' ? bikeStyle : 'foot'] = lr; }
+      if (!Object.keys(kept).length) {
+        const why = !offline ? (km > 150 ? `trajet trop long pour le serveur d'itinéraires (${Math.round(km)} km à vol d'oiseau). Choisis une étape plus proche` : err.name === 'AbortError' ? 'le serveur d\'itinéraires ne répond pas, réessaie dans un instant' : 'le serveur d\'itinéraires n\'a pas trouvé de chemin' + (/island|not mapped|position/i.test(err.message) ? ' (point hors des routes et chemins connus)' : ''))
+          : 'pas de réseau, et cet endroit est hors des chemins téléchargés';
+        toast('Itinéraire impossible : ' + why + '.', 7000);
+        return;
+      }
     }
-    toast('Pas de réseau : itinéraire calculé avec les chemins téléchargés', 4000);
+    const pick = await chooseRoute(Object.fromEntries(Object.entries(kept).map(([k, v]) => [k, v.pts])));
+    if (!pick) return;
+    if (pick.mode) { setProfile(pick.mode, true); continue; }
+    r = kept[pick]; style = pick === 'foot' ? null : pick;
+    break;
   }
   r.pts.push({ lat: dest.lat, lon: dest.lon, ele: null });
   if (nav && !track) document.body.classList.remove('free');
@@ -3350,24 +3350,30 @@ async function goTo(dest) {
   else startNav();
 }
 // plusieurs itinéraires vélo vraiment différents : on les montre sur la carte et on laisse choisir
+const RT = s => BIKE[s] || { name: 'À pied', col: '#7B3FE4' };
 function chooseRoute(alt) {
   return new Promise(res => {
     const order = Object.keys(alt), other = s => alt[order.find(x => x !== s)];
-    setSrc('rchoice', { type: 'FeatureCollection', features: order.slice().reverse().map(s => ({ type: 'Feature', properties: { s, col: BIKE[s].col }, geometry: { type: 'LineString', coordinates: alt[s].map(q => [q.lon, q.lat]) } })) });
+    setSrc('rchoice', { type: 'FeatureCollection', features: order.slice().reverse().map(s => ({ type: 'Feature', properties: { s, col: RT(s).col }, geometry: { type: 'LineString', coordinates: alt[s].map(q => [q.lon, q.lat]) } })) });
     const list = $('rcList'); list.innerHTML = '';
     const done = s => { $('rc').hidden = true; document.body.classList.remove('choosing'); setSrc('rchoice', EMPTY); routeLabels([]); res(s); };
     for (const s of order) {
       const p = makePath(alt[s], ''), sp = lpSpeed(), min = Math.round((p.total / 1000 / sp.v + (p.hasEle ? p.totalUp / sp.climb : 0)) * 60);
       const b = document.createElement('button');
-      b.innerHTML = `<span class="rt-dot" style="background:${BIKE[s].col}"></span><b>${BIKE[s].name}</b><small>${fmtDist(p.total)} · ${min >= 60 ? Math.floor(min / 60) + ' h ' + String(min % 60).padStart(2, '0') : min + ' min'}${p.hasEle ? ' · D+ ' + fmtM(p.totalUp) : ''}</small>`;
+      b.innerHTML = `<span class="rt-dot" style="background:${RT(s).col}"></span><b>${RT(s).name}</b><small>${fmtDist(p.total)} · ${min >= 60 ? Math.floor(min / 60) + ' h ' + String(min % 60).padStart(2, '0') : min + ' min'}${p.hasEle ? ' · D+ ' + fmtM(p.totalUp) : ''}</small>`;
       b.onclick = () => done(s);
       list.appendChild(b);
     }
     $('rcClose').onclick = () => done(null);
+    const bike = profile === 'trekking';
+    $('rcFoot').classList.toggle('on', !bike); $('rcBike').classList.toggle('on', bike);
+    $('rcFoot').onclick = () => { if (bike) done({ mode: 'hiking-mountain' }); };
+    $('rcBike').onclick = () => { if (!bike) done({ mode: 'trekking' }); };
+    $('rcHint').textContent = order.length > 1 ? 'Touche un itinéraire pour partir' : 'Touche l\'itinéraire pour partir';
     clearTimeout(toastT); $('toast').hidden = true;
     document.body.classList.add('choosing');
     $('rc').hidden = false;
-    routeLabels(order.map(s => ({ pt: farPoint(alt[s], other(s)), text: `${BIKE[s].name} · ${fmtDist(makePath(alt[s], '').total)}`, col: BIKE[s].col, on: true, run: () => done(s) })));
+    routeLabels(order.map(s => ({ pt: farPoint(alt[s], other(s)), text: `${RT(s).name} · ${fmtDist(makePath(alt[s], '').total)}`, col: RT(s).col, on: true, run: () => done(s) })));
     fitBoth(Object.values(alt), () => innerHeight - $('rc').getBoundingClientRect().top);
   });
 }
