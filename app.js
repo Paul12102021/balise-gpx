@@ -4,7 +4,7 @@
 
 // La page et le code doivent être de la même version. Sinon (page gardée en cache
 // par le téléphone ou par GitHub), on recharge une page fraîche, au plus 3 fois.
-const APP_VERSION = 109;
+const APP_VERSION = 110;
 try {
   const meta = document.querySelector('meta[name="balise-version"]');
   const pageV = meta ? +meta.content : 0;
@@ -1976,15 +1976,18 @@ async function ensurePlaces() {
 
 // choisir l'arrivée en touchant la carte
 let picking = false; // false, ou la fonction à appeler avec le point touché
-// withMode : affiche aussi À pied / À vélo (choisir un lieu où aller)
-function startPick(txt, cb, withMode) {
-  picking = cb; $('pickTxt').textContent = txt; $('pickBanner').hidden = false;
-  $('pickMode').hidden = !withMode; pickModeUI();
-}
-function pickModeUI() { $('pkFoot').classList.toggle('on', profile !== 'trekking'); $('pkBike').classList.toggle('on', profile === 'trekking'); }
-$('pkFoot').onclick = () => { setProfile('hiking-mountain', true); pickModeUI(); };
-$('pkBike').onclick = () => { setProfile('trekking', true); pickModeUI(); };
-$('destPick').onclick = () => { closeDest(); startPick('Touche la carte à l\'endroit où tu veux aller', p => goTo(Object.assign(p, { label: 'le point choisi' })), true); };
+function startPick(txt, cb) { picking = cb; $('pickTxt').textContent = txt; $('pickBanner').hidden = false; }
+// choisir sur la carte : écran d'itinéraire, départ = ma position, le prochain toucher place l'arrivée
+$('destPick').onclick = async () => {
+  closeDest();
+  if (nav) { startPick('Touche la carte à l\'endroit où tu veux aller', p => goTo(Object.assign(p, { label: 'le point choisi' }))); return; }
+  if (!startGPS()) return;
+  toast('Recherche de ta position…', 20000);
+  const pos = await waitFix(20000);
+  if (!pos) { toast('Position GPS introuvable. Va à découvert et réessaie.', 5000); return; }
+  clearTimeout(toastT); $('toast').hidden = true;
+  openPlan({ label: 'le point choisi' }, pos);
+};
 $('pickCancel').onclick = () => { const cb = picking; picking = false; $('pickBanner').hidden = true; if (cb && cb.cancel) cb.cancel(); };
 map.on('click', e => {
   if (planning) {
@@ -3190,16 +3193,17 @@ function openPlan(go, from) {
   if (nav) { toast('Quitte d\'abord la navigation.'); return; }
   closeDest(); closeLib(); toggleMore(false, true); $('loopBar').hidden = true;
   planning = true; document.body.classList.add('plan'); planModeUI();
-  plan.go = go && go.lat != null ? go : null;
+  plan.go = go && go.label ? go : null;
   $('ptDoneL').textContent = plan.go ? 'Naviguer' : 'Enregistrer';
   plan.wps = []; plan.segs = [];
-  if (plan.go) {
+  if (plan.go && go.lat == null) plan.wps = [{ lat: from.lat, lon: from.lon }]; // arrivée à placer
+  else if (plan.go) {
     plan.wps = [{ lat: from.lat, lon: from.lon }, { lat: plan.go.lat, lon: plan.go.lon }];
     planSeg(0, false); plan.segs[0].fit = true;
     fitBoth([plan.wps], () => $('planTools').offsetHeight + 10);
   }
   planDraw();
-  if (!plan.go && me) map.easeTo({ center: [me.lon, me.lat], zoom: Math.max(map.getZoom(), 14), pitch: 0, bearing: 0, duration: 600 });
+  if ((!plan.go || plan.wps.length < 2) && me) map.easeTo({ center: [me.lon, me.lat], zoom: Math.max(map.getZoom(), 14), pitch: 0, bearing: 0, duration: 600 });
 }
 function closePlan() { routeLabels([]); planning = false; plan.go = null; document.body.classList.remove('plan'); plan.wps = []; plan.segs = []; planMarkers(); setSrc('plan', EMPTY); }
 $('destPlan').onclick = () => openPlan();
@@ -3270,12 +3274,12 @@ function planDraw() {
   planMarkers();
   const n = plan.wps.length, all = planAll();
   if (!n) { $('pbStats').textContent = 'Touche la carte pour placer le départ'; }
-  else if (n === 1) { $('pbStats').textContent = 'Départ placé · touche le point suivant'; }
+  else if (n === 1) { $('pbStats').textContent = plan.go ? 'Touche la carte à l\'endroit où tu veux aller' : 'Départ placé · touche le point suivant'; }
   else {
     const pth = makePath(all, '');
     $('pbStats').textContent = (plan.go ? `Vers ${plan.go.label} · ` : '') + `${fmtDist(pth.total)}${pth.hasEle ? ' · D+ ' + fmtM(pth.totalUp) : ''}` + (plan.go ? '' : ` · ${n} points`) + (plan.busy ? ' · calcul…' : '');
   }
-  $('pbHint').textContent = plan.go ? 'Touche la carte pour ajouter un passage · Naviguer pour partir' : (plan.straight ? 'Ligne droite' : 'Suit les chemins') + (n > 1 ? ' · glisse un point pour le déplacer, touche-le pour le supprimer' : ' · chaque toucher ajoute un point');
+  $('pbHint').textContent = plan.go ? (n < 2 ? 'Départ : ta position · l\'itinéraire suit les chemins' : 'Touche la carte pour ajouter un passage · Naviguer pour partir') : (plan.straight ? 'Ligne droite' : 'Suit les chemins') + (n > 1 ? ' · glisse un point pour le déplacer, touche-le pour le supprimer' : ' · chaque toucher ajoute un point');
   $('ptUndo').disabled = !n; $('ptClear').disabled = !n; $('ptLoop').disabled = n < 2; $('ptDone').disabled = n < 2;
   $('ptModeL').textContent = plan.straight ? 'Ligne droite' : 'Chemins';
 }
