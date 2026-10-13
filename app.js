@@ -4,7 +4,7 @@
 
 // La page et le code doivent être de la même version. Sinon (page gardée en cache
 // par le téléphone ou par GitHub), on recharge une page fraîche, au plus 3 fois.
-const APP_VERSION = 103;
+const APP_VERSION = 104;
 try {
   const meta = document.querySelector('meta[name="balise-version"]');
   const pageV = meta ? +meta.content : 0;
@@ -1587,11 +1587,14 @@ async function bikeVariants(fn) {
 // deux tracés sont-ils vraiment différents ? (longueur, ou une bonne part de l'un loin de l'autre)
 function routesDiffer(a, b) {
   const pa = makePath(a, ''), pb = makePath(b, '');
-  if (Math.abs(pa.total - pb.total) > Math.max(400, 0.1 * Math.min(pa.total, pb.total))) return true;
-  const step = Math.max(1, Math.floor(a.length / 150));
-  let off = 0, n = 0;
-  for (let i = 0; i < a.length; i += step) { const pr = project(pb, a[i], true); n++; if (!pr || pr.dist > 100) off++; }
-  return n > 0 && off / n > 0.2;
+  // proches = même longueur à 12 % près et presque tout le tracé à moins de 250 m de l'autre (dans les deux sens)
+  if (Math.abs(pa.total - pb.total) > Math.max(800, 0.12 * Math.min(pa.total, pb.total))) return true;
+  const far = (x, py) => {
+    const step = Math.max(1, Math.floor(x.length / 150)); let off = 0, n = 0;
+    for (let i = 0; i < x.length; i += step) { const pr = project(py, x[i], true); n++; if (!pr || pr.dist > 250) off++; }
+    return n ? off / n : 0;
+  };
+  return Math.max(far(a, pb), far(b, pa)) > 0.25;
 }
 // point du tracé a le plus éloigné du tracé b : là où poser son étiquette
 function farPoint(a, b) {
