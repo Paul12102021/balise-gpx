@@ -4,7 +4,7 @@
 
 // La page et le code doivent être de la même version. Sinon (page gardée en cache
 // par le téléphone ou par GitHub), on recharge une page fraîche, au plus 3 fois.
-const APP_VERSION = 100;
+const APP_VERSION = 101;
 try {
   const meta = document.querySelector('meta[name="balise-version"]');
   const pageV = meta ? +meta.content : 0;
@@ -289,7 +289,8 @@ map.on('load', () => {
   map.addLayer({ id: 'rchoice-casing', type: 'line', source: 'rchoice', layout: round, paint: { 'line-color': '#fff', 'line-width': w(6, 13) } });
   map.addLayer({ id: 'rchoice-line', type: 'line', source: 'rchoice', layout: round, paint: { 'line-color': ['get', 'col'], 'line-width': w(3, 8) } });
   map.addSource('plan', { type: 'geojson', data: EMPTY });
-  map.addLayer({ id: 'plan-alt', type: 'line', source: 'plan', filter: ['all', ['==', ['geometry-type'], 'LineString'], ['has', 'alt']], layout: round, paint: { 'line-color': '#8a8f98', 'line-width': w(4, 9), 'line-opacity': 0.75 } });
+  map.addLayer({ id: 'plan-alt-casing', type: 'line', source: 'plan', filter: ['all', ['==', ['geometry-type'], 'LineString'], ['has', 'alt']], layout: round, paint: { 'line-color': '#fff', 'line-width': w(7, 14) } });
+  map.addLayer({ id: 'plan-alt', type: 'line', source: 'plan', filter: ['all', ['==', ['geometry-type'], 'LineString'], ['has', 'alt']], layout: round, paint: { 'line-color': '#6b7079', 'line-width': w(4, 9) } });
   map.addLayer({ id: 'plan-casing', type: 'line', source: 'plan', filter: ['all', ['==', ['geometry-type'], 'LineString'], ['!', ['has', 'alt']]], layout: round, paint: { 'line-color': '#fff', 'line-width': w(6, 13) } });
   map.addLayer({ id: 'plan-line', type: 'line', source: 'plan', filter: ['all', ['==', ['geometry-type'], 'LineString'], ['!', ['has', 'alt']], ['!', ['get', 'pending']]], layout: round, paint: { 'line-color': '#7B3FE4', 'line-width': w(3, 8) } });
   map.addLayer({ id: 'plan-pending', type: 'line', source: 'plan', filter: ['all', ['==', ['geometry-type'], 'LineString'], ['!', ['has', 'alt']], ['get', 'pending']], layout: round, paint: { 'line-color': '#7B3FE4', 'line-width': w(3, 8), 'line-dasharray': [1, 1.5] } });
@@ -1544,6 +1545,27 @@ function routesDiffer(a, b) {
   let off = 0, n = 0;
   for (let i = 0; i < a.length; i += step) { const pr = project(pb, a[i], true); n++; if (!pr || pr.dist > 80) off++; }
   return n > 0 && off / n > 0.15;
+}
+// point du tracé a le plus éloigné du tracé b : là où poser son étiquette
+function farPoint(a, b) {
+  const pb = makePath(b, ''), step = Math.max(1, Math.floor(a.length / 200));
+  let best = a[a.length >> 1], bd = -1;
+  for (let i = 0; i < a.length; i += step) { const pr = project(pb, a[i], true); if (pr && pr.dist > bd) { bd = pr.dist; best = a[i]; } }
+  return best;
+}
+// étiquettes « Tranquille · 9,1 km » posées sur la carte, à toucher pour choisir
+let rcMks = [];
+function routeLabels(list) {
+  rcMks.forEach(m => m.remove()); rcMks = [];
+  for (const l of list) {
+    const el = document.createElement('button');
+    el.className = 'rc-lbl' + (l.on ? ' on' : ''); el.style.setProperty('--c', l.col); el.textContent = l.text;
+    el.onclick = ev => { ev.stopPropagation(); l.run && l.run(); };
+    rcMks.push(new maplibregl.Marker({ element: el }).setLngLat([l.pt.lon, l.pt.lat]).addTo(map));
+  }
+}
+function fitBoth(list, bottom) {
+  setTimeout(() => { try { map.fitBounds(boundsOf(list), { padding: { top: 90, bottom: bottom() + 30, left: 40, right: 70 }, bearing: 0, pitch: 0, duration: 600 }); } catch {} }, 80);
 }
 $('thr').value = String(threshold);
 $('thr').onchange = e => {
@@ -3124,7 +3146,7 @@ function openPlan() {
   plan.wps = []; plan.segs = []; planDraw();
   if (me) map.easeTo({ center: [me.lon, me.lat], zoom: Math.max(map.getZoom(), 14), pitch: 0, bearing: 0, duration: 600 });
 }
-function closePlan() { planning = false; document.body.classList.remove('plan'); plan.wps = []; plan.segs = []; planMarkers(); setSrc('plan', EMPTY); }
+function closePlan() { routeLabels([]); planning = false; document.body.classList.remove('plan'); plan.wps = []; plan.segs = []; planMarkers(); setSrc('plan', EMPTY); }
 $('destPlan').onclick = openPlan;
 $('pbClose').onclick = () => {
   if (plan.wps.length > 1 && !$('pbClose').dataset.armed) { $('pbClose').dataset.armed = '1'; $('pbClose').textContent = 'Sûr ?'; setTimeout(() => { delete $('pbClose').dataset.armed; $('pbClose').textContent = 'Quitter'; }, 2500); return; }
@@ -3143,18 +3165,18 @@ async function planSegment(a, b, straight, seg) {
   const [c, f] = await Promise.allSettled([routeVia([a, b], 25000, 'calm'), routeVia([a, b], 25000, 'fast')]);
   if (c.status !== 'fulfilled' && f.status !== 'fulfilled') { toast('Pas de chemin trouvé ici : segment en ligne droite', 2500); seg.pts = [a, b]; return; }
   if (c.status === 'fulfilled' && f.status === 'fulfilled' && routesDiffer(c.value, f.value)) {
-    seg.alt = { calm: c.value, fast: f.value };
+    seg.alt = { calm: c.value, fast: f.value }; seg.fit = true;
     seg.style = seg.style || bikeStyle;
     seg.pts = seg.alt[seg.style];
     const o = seg.style === 'fast' ? 'calm' : 'fast';
-    toast(`Itinéraire ${styleName(seg.style)} : ${fmtDist(makePath(seg.pts, '').total)} · le ${styleName(o)} (${fmtDist(makePath(seg.alt[o], '').total)}) est en gris`, 6000, { label: 'Prendre le ' + styleName(o), run: () => planSwap(seg) });
+    toast(`Deux itinéraires : touche l'étiquette grise pour prendre le ${styleName(o)}`, 5000);
   } else seg.pts = (c.status === 'fulfilled' ? c : f).value;
 }
 function planSwap(seg) {
   if (!seg.alt || !plan.segs.includes(seg)) return;
   seg.style = seg.style === 'fast' ? 'calm' : 'fast'; seg.pts = seg.alt[seg.style];
   planDraw();
-  toast(`Itinéraire ${styleName(seg.style)} choisi · ${fmtDist(makePath(seg.pts, '').total)}`, 2500);
+  toast(`Itinéraire ${styleName(seg.style)} choisi`, 2000);
 }
 function planAdd(p) {
   const prev = plan.wps[plan.wps.length - 1];
@@ -3174,6 +3196,15 @@ function planAll() { const out = []; plan.segs.forEach((sg, k) => out.push(...(k
 function planDraw() {
   const feats = plan.segs.map(sg => ({ type: 'Feature', properties: { pending: !!sg.pending }, geometry: { type: 'LineString', coordinates: sg.pts.map(q => [q.lon, q.lat]) } }));
   // l'autre version (tranquille / rapide), en gris sous le tracé choisi
+  const lbls = [];
+  plan.segs.forEach((sg, k) => {
+    if (!sg.alt) return;
+    const o = sg.style === 'fast' ? 'calm' : 'fast', lab = s => `${s === 'fast' ? 'Rapide' : 'Tranquille'} · ${fmtDist(makePath(sg.alt[s], '').total)}`;
+    lbls.push({ pt: farPoint(sg.alt[sg.style], sg.alt[o]), text: lab(sg.style), col: '#7B3FE4', on: true });
+    lbls.push({ pt: farPoint(sg.alt[o], sg.alt[sg.style]), text: lab(o), col: '#6b7079', run: () => planSwap(sg) });
+    if (sg.fit) { delete sg.fit; fitBoth([sg.alt.calm, sg.alt.fast], () => $('planTools').offsetHeight + 10); }
+  });
+  routeLabels(lbls);
   plan.segs.forEach((sg, k) => { if (sg.alt) feats.unshift({ type: 'Feature', properties: { alt: k }, geometry: { type: 'LineString', coordinates: sg.alt[sg.style === 'fast' ? 'calm' : 'fast'].map(q => [q.lon, q.lat]) } }); });
   setSrc('plan', { type: 'FeatureCollection', features: feats });
   planMarkers();
@@ -3276,7 +3307,7 @@ function chooseRoute(alt) {
     const order = bikeStyle === 'fast' ? ['fast', 'calm'] : ['calm', 'fast'];
     setSrc('rchoice', { type: 'FeatureCollection', features: order.slice().reverse().map(s => ({ type: 'Feature', properties: { s, col: RC_COL[s] }, geometry: { type: 'LineString', coordinates: alt[s].map(q => [q.lon, q.lat]) } })) });
     const list = $('rcList'); list.innerHTML = '';
-    const done = s => { $('rc').hidden = true; setSrc('rchoice', EMPTY); res(s); };
+    const done = s => { $('rc').hidden = true; setSrc('rchoice', EMPTY); routeLabels([]); res(s); };
     for (const s of order) {
       const p = makePath(alt[s], ''), sp = lpSpeed(), min = Math.round((p.total / 1000 / sp.v + (p.hasEle ? p.totalUp / sp.climb : 0)) * 60);
       const b = document.createElement('button');
@@ -3286,7 +3317,8 @@ function chooseRoute(alt) {
     }
     $('rcClose').onclick = () => done(null);
     $('rc').hidden = false;
-    setTimeout(() => { try { map.fitBounds(boundsOf([alt.calm, alt.fast]), { padding: { top: 80, bottom: $('rc').offsetHeight + 30, left: 30, right: 70 }, bearing: 0, pitch: 0, duration: 600 }); } catch {} }, 60);
+    routeLabels(order.map(s => { const o = s === 'fast' ? 'calm' : 'fast'; return { pt: farPoint(alt[s], alt[o]), text: `${s === 'fast' ? 'Rapide' : 'Tranquille'} · ${fmtDist(makePath(alt[s], '').total)}`, col: RC_COL[s], on: true, run: () => done(s) }; }));
+    fitBoth([alt.calm, alt.fast], () => $('rc').getBoundingClientRect().top > 0 ? innerHeight - $('rc').getBoundingClientRect().top : $('rc').offsetHeight);
   });
 }
 async function reroute() {
