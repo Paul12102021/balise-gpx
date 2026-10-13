@@ -4,7 +4,7 @@
 
 // La page et le code doivent être de la même version. Sinon (page gardée en cache
 // par le téléphone ou par GitHub), on recharge une page fraîche, au plus 3 fois.
-const APP_VERSION = 106;
+const APP_VERSION = 107;
 try {
   const meta = document.querySelector('meta[name="balise-version"]');
   const pageV = meta ? +meta.content : 0;
@@ -1530,16 +1530,14 @@ const savedThr = store.get('thr');
 let threshold = savedThr == null ? 50 : +savedThr, offCount = 0, isOff = false, lastAlert = 0;
 let rejoin = null, rejoinProg = null, routing = false, lastRoute = 0, rejoinOff = 0;
 let profile = store.get('profile') || 'hiking-mountain';
-// à vélo : « tranquille » (voies vertes et pistes cyclables, profil BRouter safety) ou « rapide » (plus direct, profil trekking)
-// à vélo, trois façons de calculer : rapide (trekking), tranquille (safety, pistes cyclables)
-// et balade (bords de l'eau : profil personnalisé balade.brf, envoyé à BRouter)
+// à vélo, deux façons de calculer : rapide (profil BRouter trekking, proposé en premier)
+// et balade (bords de l'eau : profil personnalisé balade.brf, envoyé à BRouter),
+// proposée seulement quand elle passe vraiment ailleurs
 const BIKE = {
-  calm: { name: 'Tranquille', col: '#1f9d55' },
   fast: { name: 'Rapide', col: '#e8742a' },
   river: { name: 'Balade', col: '#1e7fd6' },
 };
-let bikeStyle = store.get('bikeStyle') || 'calm';
-if (!BIKE[bikeStyle]) bikeStyle = 'calm';
+const bikeStyle = 'fast';
 const styleName = s => BIKE[s] ? BIKE[s].name.toLowerCase() : '';
 let riverId = null, riverP = null;
 function riverProfile(renew) {
@@ -1555,8 +1553,7 @@ function riverProfile(renew) {
 }
 async function brProf(style) {
   if (profile !== 'trekking') return profile;
-  style = style || bikeStyle;
-  return style === 'fast' ? 'trekking' : style === 'river' ? riverProfile() : 'safety';
+  return style === 'river' ? riverProfile() : 'trekking';
 }
 // requête BRouter ; un profil personnalisé expiré sur le serveur est renvoyé une fois
 async function brFetch(lonlats, style, signal) {
@@ -1623,8 +1620,6 @@ $('thr').onchange = e => {
 };
 const thrRef = () => threshold || 50; // distance « sur la trace » quand l'alerte est coupée
 $('prof').value = profile;
-$('optBike').value = bikeStyle;
-$('optBike').onchange = e => { bikeStyle = e.target.value; store.set('bikeStyle', bikeStyle); toast(`À vélo : itinéraire ${styleName(bikeStyle)} proposé en premier`, 3000); };
 
 // ---------- thème clair / sombre / automatique ----------
 function refreshColors() {
