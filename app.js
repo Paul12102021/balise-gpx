@@ -4,7 +4,7 @@
 
 // La page et le code doivent être de la même version. Sinon (page gardée en cache
 // par le téléphone ou par GitHub), on recharge une page fraîche, au plus 3 fois.
-const APP_VERSION = 110;
+const APP_VERSION = 111;
 try {
   const meta = document.querySelector('meta[name="balise-version"]');
   const pageV = meta ? +meta.content : 0;
@@ -241,13 +241,24 @@ const EMPTY = { type: 'FeatureCollection', features: [] };
 const lineFeature = pts => ({ type: 'Feature', properties: {}, geometry: { type: 'LineString', coordinates: pts.map(p => [p.lon, p.lat]) } });
 const pointFeature = p => ({ type: 'Feature', properties: {}, geometry: { type: 'Point', coordinates: [p.lon, p.lat] } });
 
+// vue de départ : la dernière vue de la carte, sinon la dernière position connue, sinon les Alpes
+function startView() {
+  try {
+    const v = JSON.parse(store.get('view') || 'null');
+    if (v && isFinite(v.lat) && isFinite(v.lon)) return { center: [v.lon, v.lat], zoom: clamp(v.z || 14, 3, 18) };
+    const p = JSON.parse(store.get('lastPos') || 'null');
+    if (p && isFinite(p.lat)) return { center: [p.lon, p.lat], zoom: 14 };
+  } catch {}
+  return { center: [6.6, 45.9], zoom: 9 };
+}
 const map = new maplibregl.Map({
   container: 'map',
   style: { version: 8, sources: { base: baseSource(LAYERS[layerIdx].vector ? LAYERS[0] : LAYERS[layerIdx]) },
     layers: [{ id: 'bg', type: 'background', paint: { 'background-color': cssVar('--mapbg') || '#E4E9DC' } }, { id: 'base', type: 'raster', source: 'base' }] },
-  center: [6.6, 45.9], zoom: 9, maxPitch: 70, attributionControl: false, fadeDuration: 0
+  ...startView(), maxPitch: 70, attributionControl: false, fadeDuration: 0
 });
 map.addControl(new maplibregl.AttributionControl({ compact: true }), 'bottom-left');
+map.on('moveend', () => { const c = map.getCenter(); store.set('view', JSON.stringify({ lat: +c.lat.toFixed(5), lon: +c.lng.toFixed(5), z: +map.getZoom().toFixed(1) })); });
 map.touchZoomRotate.enableRotation();
 
 const ready = new Promise(res => map.on('load', res));
@@ -3208,8 +3219,7 @@ function openPlan(go, from) {
 function closePlan() { routeLabels([]); planning = false; plan.go = null; document.body.classList.remove('plan'); plan.wps = []; plan.segs = []; planMarkers(); setSrc('plan', EMPTY); }
 $('destPlan').onclick = () => openPlan();
 $('pbClose').onclick = () => {
-  if (plan.wps.length > 1 && !$('pbClose').dataset.armed) { $('pbClose').dataset.armed = '1'; $('pbClose').textContent = 'Sûr ?'; setTimeout(() => { delete $('pbClose').dataset.armed; $('pbClose').textContent = 'Quitter'; }, 2500); return; }
-  delete $('pbClose').dataset.armed; $('pbClose').textContent = 'Quitter'; closePlan();
+  closePlan();
 };
 // calcule le segment ; à vélo, les versions tranquille et rapide sont calculées ensemble,
 // et si elles diffèrent vraiment, l'autre reste affichée en gris : la toucher la choisit
