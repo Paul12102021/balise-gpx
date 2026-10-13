@@ -4,7 +4,7 @@
 
 // La page et le code doivent être de la même version. Sinon (page gardée en cache
 // par le téléphone ou par GitHub), on recharge une page fraîche, au plus 3 fois.
-const APP_VERSION = 102;
+const APP_VERSION = 103;
 try {
   const meta = document.querySelector('meta[name="balise-version"]');
   const pageV = meta ? +meta.content : 0;
@@ -1534,17 +1534,64 @@ let threshold = savedThr == null ? 50 : +savedThr, offCount = 0, isOff = false, 
 let rejoin = null, rejoinProg = null, routing = false, lastRoute = 0, rejoinOff = 0;
 let profile = store.get('profile') || 'hiking-mountain';
 // à vélo : « tranquille » (voies vertes et pistes cyclables, profil BRouter safety) ou « rapide » (plus direct, profil trekking)
+// à vélo, trois façons de calculer : rapide (trekking), tranquille (safety, pistes cyclables)
+// et balade (bords de l'eau : profil personnalisé balade.brf, envoyé à BRouter)
+const BIKE = {
+  calm: { name: 'Tranquille', col: '#1f9d55' },
+  fast: { name: 'Rapide', col: '#e8742a' },
+  river: { name: 'Balade', col: '#1e7fd6' },
+};
 let bikeStyle = store.get('bikeStyle') || 'calm';
-const brProf = style => profile !== 'trekking' ? profile : ((style || bikeStyle) === 'fast' ? 'trekking' : 'safety');
-const styleName = s => s === 'fast' ? 'rapide' : 'tranquille';
+if (!BIKE[bikeStyle]) bikeStyle = 'calm';
+const styleName = s => BIKE[s] ? BIKE[s].name.toLowerCase() : '';
+let riverId = null, riverP = null;
+function riverProfile(renew) {
+  if (renew) { riverId = null; riverP = null; }
+  if (riverId) return Promise.resolve(riverId);
+  riverP = riverP || (async () => {
+    const t = await fetch('balade.brf?v=' + APP_VERSION).then(r => { if (!r.ok) throw new Error('profil'); return r.text(); });
+    const j = await fetch('https://brouter.de/brouter/profile', { method: 'POST', body: t }).then(r => r.json());
+    if (!j.profileid) { const e = new Error(j.error || 'profil refusé'); e.server = true; throw e; }
+    return (riverId = j.profileid);
+  })().catch(e => { riverP = null; throw e; });
+  return riverP;
+}
+async function brProf(style) {
+  if (profile !== 'trekking') return profile;
+  style = style || bikeStyle;
+  return style === 'fast' ? 'trekking' : style === 'river' ? riverProfile() : 'safety';
+}
+// requête BRouter ; un profil personnalisé expiré sur le serveur est renvoyé une fois
+async function brFetch(lonlats, style, signal) {
+  for (let k = 0; ; k++) {
+    const prof = await brProf(style);
+    const r = await fetch(`https://brouter.de/brouter?lonlats=${lonlats}&profile=${prof}&alternativeidx=0&format=geojson`, { signal });
+    if (r.ok) return r.json();
+    const m = (await r.text().catch(() => '')).slice(0, 200);
+    if (k === 0 && /^custom_/.test(prof)) { await riverProfile(true); continue; }
+    const e = new Error(m || 'HTTP ' + r.status); e.server = true; throw e;
+  }
+}
+// calcule les variantes vélo (la préférée d'abord) et ne garde que celles vraiment différentes
+async function bikeVariants(fn) {
+  const order = [bikeStyle, ...Object.keys(BIKE).filter(s => s !== bikeStyle)], jobs = [];
+  for (const s of order) { jobs.push(fn(s).then(v => ({ v }), e => ({ e }))); await new Promise(r => setTimeout(r, 250)); }
+  const res = await Promise.all(jobs), kept = {}, P = x => x.pts || x;
+  let err = null;
+  res.forEach((r, i) => {
+    if (r.e) { err = err || r.e; return; }
+    if (Object.values(kept).every(k => routesDiffer(P(k), P(r.v)))) kept[order[i]] = r.v;
+  });
+  return { kept, err };
+}
 // deux tracés sont-ils vraiment différents ? (longueur, ou une bonne part de l'un loin de l'autre)
 function routesDiffer(a, b) {
   const pa = makePath(a, ''), pb = makePath(b, '');
-  if (Math.abs(pa.total - pb.total) > Math.max(300, 0.08 * Math.min(pa.total, pb.total))) return true;
+  if (Math.abs(pa.total - pb.total) > Math.max(400, 0.1 * Math.min(pa.total, pb.total))) return true;
   const step = Math.max(1, Math.floor(a.length / 150));
   let off = 0, n = 0;
-  for (let i = 0; i < a.length; i += step) { const pr = project(pb, a[i], true); n++; if (!pr || pr.dist > 80) off++; }
-  return n > 0 && off / n > 0.15;
+  for (let i = 0; i < a.length; i += step) { const pr = project(pb, a[i], true); n++; if (!pr || pr.dist > 100) off++; }
+  return n > 0 && off / n > 0.2;
 }
 // point du tracé a le plus éloigné du tracé b : là où poser son étiquette
 function farPoint(a, b) {
@@ -1576,7 +1623,7 @@ $('thr').onchange = e => {
 const thrRef = () => threshold || 50; // distance « sur la trace » quand l'alerte est coupée
 $('prof').value = profile;
 $('optBike').value = bikeStyle;
-$('optBike').onchange = e => { bikeStyle = e.target.value; store.set('bikeStyle', bikeStyle); toast(bikeStyle === 'fast' ? 'À vélo : itinéraire rapide proposé en premier' : 'À vélo : itinéraire tranquille (voies vertes, pistes) proposé en premier', 3500); };
+$('optBike').onchange = e => { bikeStyle = e.target.value; store.set('bikeStyle', bikeStyle); toast(`À vélo : itinéraire ${styleName(bikeStyle)} proposé en premier`, 3000); };
 
 // ---------- thème clair / sombre / automatique ----------
 function refreshColors() {
@@ -1746,9 +1793,7 @@ async function fetchRoute(a, b, ms = 12000, style) {
   const ctrl = new AbortController(), timer = setTimeout(() => ctrl.abort(), ms);
   try {
     const ll = q => `${q.lon.toFixed(6)},${q.lat.toFixed(6)}`;
-    const r = await fetch(`https://brouter.de/brouter?lonlats=${ll(a)}|${ll(b)}&profile=${brProf(style)}&alternativeidx=0&format=geojson`, { signal: ctrl.signal });
-    if (!r.ok) { let m = ''; try { m = (await r.text()).slice(0, 200); } catch {} const e = new Error(m || 'HTTP ' + r.status); e.server = true; throw e; }
-    const j = await r.json(), f = j.features && j.features[0];
+    const j = await brFetch(`${ll(a)}|${ll(b)}`, style, ctrl.signal), f = j.features && j.features[0];
     const pts = f.geometry.coordinates.map(c => ({ lon: c[0], lat: c[1], ele: c[2] != null ? c[2] : null }));
     return { pts, len: +f.properties['track-length'] || 0 };
   } finally { clearTimeout(timer); }
@@ -1941,7 +1986,7 @@ $('pickCancel').onclick = () => { const cb = picking; picking = false; $('pickBa
 map.on('click', e => {
   if (planning) {
     const hit = map.queryRenderedFeatures([[e.point.x - 14, e.point.y - 14], [e.point.x + 14, e.point.y + 14]], { layers: ['plan-alt'] })[0];
-    if (hit) { planSwap(plan.segs[hit.properties.alt]); return; }
+    if (hit) { planSwap(plan.segs[hit.properties.alt], hit.properties.s); return; }
     planAdd({ lat: e.lngLat.lat, lon: e.lngLat.lng }); return;
   }
   // parcours balisés affichés : toucher une ligne ouvre le parcours
@@ -2004,9 +2049,7 @@ async function routeVia(pts, ms, style) {
   const ll = q => `${q.lon.toFixed(6)},${q.lat.toFixed(6)}`;
   const ctrl = new AbortController(), timer = setTimeout(() => ctrl.abort(), ms);
   try {
-    const r = await fetch(`https://brouter.de/brouter?lonlats=${pts.map(ll).join('|')}&profile=${brProf(style)}&alternativeidx=0&format=geojson`, { signal: ctrl.signal });
-    if (!r.ok) { const e = new Error((await r.text().catch(() => '')).slice(0, 160) || 'HTTP ' + r.status); e.server = true; throw e; }
-    const f = (await r.json()).features[0];
+    const f = (await brFetch(pts.map(ll).join('|'), style, ctrl.signal)).features[0];
     return f.geometry.coordinates.map(c => ({ lon: c[0], lat: c[1], ele: c[2] != null ? c[2] : null }));
   } catch (e) {
     if (e.server || e.name === 'AbortError') throw e;
@@ -3162,19 +3205,18 @@ async function planSegment(a, b, straight, seg) {
     catch { toast('Pas de chemin trouvé ici : segment en ligne droite', 2500); seg.pts = [a, b]; }
     return;
   }
-  const [c, f] = await Promise.allSettled([routeVia([a, b], 25000, 'calm'), routeVia([a, b], 25000, 'fast')]);
-  if (c.status !== 'fulfilled' && f.status !== 'fulfilled') { toast('Pas de chemin trouvé ici : segment en ligne droite', 2500); seg.pts = [a, b]; return; }
-  if (c.status === 'fulfilled' && f.status === 'fulfilled' && routesDiffer(c.value, f.value)) {
-    seg.alt = { calm: c.value, fast: f.value }; seg.fit = true;
-    seg.style = seg.style || bikeStyle;
-    seg.pts = seg.alt[seg.style];
-    const o = seg.style === 'fast' ? 'calm' : 'fast';
-    toast(`Deux itinéraires : touche l'étiquette grise pour prendre le ${styleName(o)}`, 5000);
-  } else seg.pts = (c.status === 'fulfilled' ? c : f).value;
+  const { kept } = await bikeVariants(s => routeVia([a, b], 25000, s)), keys = Object.keys(kept);
+  if (!keys.length) { toast('Pas de chemin trouvé ici : segment en ligne droite', 2500); seg.pts = [a, b]; return; }
+  if (keys.length > 1) {
+    seg.alt = kept; seg.fit = true;
+    if (!keys.includes(seg.style)) seg.style = keys[0];
+    seg.pts = kept[seg.style];
+    toast(`${keys.length} itinéraires possibles : touche une étiquette grise pour changer`, 5000);
+  } else { seg.style = keys[0]; seg.pts = kept[keys[0]]; }
 }
-function planSwap(seg) {
-  if (!seg.alt || !plan.segs.includes(seg)) return;
-  seg.style = seg.style === 'fast' ? 'calm' : 'fast'; seg.pts = seg.alt[seg.style];
+function planSwap(seg, s) {
+  if (!seg || !seg.alt || !seg.alt[s] || !plan.segs.includes(seg)) return;
+  seg.style = s; seg.pts = seg.alt[s];
   planDraw();
   toast(`Itinéraire ${styleName(seg.style)} choisi`, 2000);
 }
@@ -3199,13 +3241,18 @@ function planDraw() {
   const lbls = [];
   plan.segs.forEach((sg, k) => {
     if (!sg.alt) return;
-    const o = sg.style === 'fast' ? 'calm' : 'fast', lab = s => `${s === 'fast' ? 'Rapide' : 'Tranquille'} · ${fmtDist(makePath(sg.alt[s], '').total)}`;
-    lbls.push({ pt: farPoint(sg.alt[sg.style], sg.alt[o]), text: lab(sg.style), col: '#7B3FE4', on: true });
-    lbls.push({ pt: farPoint(sg.alt[o], sg.alt[sg.style]), text: lab(o), col: '#6b7079', run: () => planSwap(sg) });
-    if (sg.fit) { delete sg.fit; fitBoth([sg.alt.calm, sg.alt.fast], () => $('planTools').offsetHeight + 10); }
+    const keys = Object.keys(sg.alt), lab = s => `${BIKE[s].name} · ${fmtDist(makePath(sg.alt[s], '').total)}`;
+    const other = s => sg.alt[s === sg.style ? keys.find(x => x !== s) : sg.style];
+    for (const s of keys) {
+      if (s === sg.style) lbls.push({ pt: farPoint(sg.alt[s], other(s)), text: lab(s), col: '#7B3FE4', on: true });
+      else {
+        lbls.push({ pt: farPoint(sg.alt[s], other(s)), text: lab(s), col: '#6b7079', run: () => planSwap(sg, s) });
+        feats.unshift({ type: 'Feature', properties: { alt: k, s }, geometry: { type: 'LineString', coordinates: sg.alt[s].map(q => [q.lon, q.lat]) } });
+      }
+    }
+    if (sg.fit) { delete sg.fit; fitBoth(Object.values(sg.alt), () => $('planTools').offsetHeight + 10); }
   });
   routeLabels(lbls);
-  plan.segs.forEach((sg, k) => { if (sg.alt) feats.unshift({ type: 'Feature', properties: { alt: k }, geometry: { type: 'LineString', coordinates: sg.alt[sg.style === 'fast' ? 'calm' : 'fast'].map(q => [q.lon, q.lat]) } }); });
   setSrc('plan', { type: 'FeatureCollection', features: feats });
   planMarkers();
   const n = plan.wps.length, all = planAll();
@@ -3267,15 +3314,14 @@ async function goTo(dest) {
   }, 1000);
   let r, err = null, style = null;
   if (profile === 'trekking') {
-    const [c, f] = await Promise.allSettled([fetchRoute(pos, dest, wait * 1000, 'calm'), fetchRoute(pos, dest, wait * 1000, 'fast')]);
+    const { kept, err: e1 } = await bikeVariants(s => fetchRoute(pos, dest, wait * 1000, s)), keys = Object.keys(kept);
     clearInterval(tick);
-    if (c.status === 'fulfilled' && f.status === 'fulfilled' && routesDiffer(c.value.pts, f.value.pts)) {
-      style = await chooseRoute({ calm: c.value.pts, fast: f.value.pts });
+    if (keys.length > 1) {
+      style = await chooseRoute(Object.fromEntries(keys.map(k => [k, kept[k].pts])));
       if (!style) return;
-      r = style === 'fast' ? f.value : c.value;
-    } else if (c.status === 'fulfilled' || f.status === 'fulfilled') {
-      r = (c.status === 'fulfilled' ? c : f).value; style = c.status === 'fulfilled' ? 'calm' : 'fast';
-    } else err = c.reason;
+      r = kept[style];
+    } else if (keys.length) { style = keys[0]; r = kept[style]; }
+    else err = e1;
   } else {
     try { r = await fetchRoute(pos, dest, wait * 1000); }
     catch (e) { err = e; }
@@ -3300,18 +3346,17 @@ async function goTo(dest) {
   if (nav) { arrived = false; guidance(); say(`Itinéraire calculé, ${speakDist(track.total)}`); }
   else startNav();
 }
-// deux itinéraires vélo vraiment différents : on les montre sur la carte et on laisse choisir
-const RC_COL = { calm: '#1f9d55', fast: '#e8742a' };
+// plusieurs itinéraires vélo vraiment différents : on les montre sur la carte et on laisse choisir
 function chooseRoute(alt) {
   return new Promise(res => {
-    const order = bikeStyle === 'fast' ? ['fast', 'calm'] : ['calm', 'fast'];
-    setSrc('rchoice', { type: 'FeatureCollection', features: order.slice().reverse().map(s => ({ type: 'Feature', properties: { s, col: RC_COL[s] }, geometry: { type: 'LineString', coordinates: alt[s].map(q => [q.lon, q.lat]) } })) });
+    const order = Object.keys(alt), other = s => alt[order.find(x => x !== s)];
+    setSrc('rchoice', { type: 'FeatureCollection', features: order.slice().reverse().map(s => ({ type: 'Feature', properties: { s, col: BIKE[s].col }, geometry: { type: 'LineString', coordinates: alt[s].map(q => [q.lon, q.lat]) } })) });
     const list = $('rcList'); list.innerHTML = '';
     const done = s => { $('rc').hidden = true; document.body.classList.remove('choosing'); setSrc('rchoice', EMPTY); routeLabels([]); res(s); };
     for (const s of order) {
       const p = makePath(alt[s], ''), sp = lpSpeed(), min = Math.round((p.total / 1000 / sp.v + (p.hasEle ? p.totalUp / sp.climb : 0)) * 60);
       const b = document.createElement('button');
-      b.innerHTML = `<span class="rt-dot" style="background:${RC_COL[s]}"></span><b>${s === 'fast' ? 'Rapide' : 'Tranquille'}</b><small>${fmtDist(p.total)} · ${min >= 60 ? Math.floor(min / 60) + ' h ' + String(min % 60).padStart(2, '0') : min + ' min'}${p.hasEle ? ' · D+ ' + fmtM(p.totalUp) : ''}</small>`;
+      b.innerHTML = `<span class="rt-dot" style="background:${BIKE[s].col}"></span><b>${BIKE[s].name}</b><small>${fmtDist(p.total)} · ${min >= 60 ? Math.floor(min / 60) + ' h ' + String(min % 60).padStart(2, '0') : min + ' min'}${p.hasEle ? ' · D+ ' + fmtM(p.totalUp) : ''}</small>`;
       b.onclick = () => done(s);
       list.appendChild(b);
     }
@@ -3319,8 +3364,8 @@ function chooseRoute(alt) {
     clearTimeout(toastT); $('toast').hidden = true;
     document.body.classList.add('choosing');
     $('rc').hidden = false;
-    routeLabels(order.map(s => { const o = s === 'fast' ? 'calm' : 'fast'; return { pt: farPoint(alt[s], alt[o]), text: `${s === 'fast' ? 'Rapide' : 'Tranquille'} · ${fmtDist(makePath(alt[s], '').total)}`, col: RC_COL[s], on: true, run: () => done(s) }; }));
-    fitBoth([alt.calm, alt.fast], () => innerHeight - $('rc').getBoundingClientRect().top);
+    routeLabels(order.map(s => ({ pt: farPoint(alt[s], other(s)), text: `${BIKE[s].name} · ${fmtDist(makePath(alt[s], '').total)}`, col: BIKE[s].col, on: true, run: () => done(s) })));
+    fitBoth(Object.values(alt), () => innerHeight - $('rc').getBoundingClientRect().top);
   });
 }
 async function reroute() {

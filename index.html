@@ -8,13 +8,13 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<meta name="balise-version" content="102">
+<meta name="balise-version" content="103">
 <title>Pisteo</title>
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" href="icon.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
 <link rel="stylesheet" href="vendor/maplibre-gl.css">
-<link rel="stylesheet" href="app.css?v=102">
+<link rel="stylesheet" href="app.css?v=103">
 </head>
 <body>
 <div id="map" aria-label="Carte"></div>
@@ -199,8 +199,8 @@
       </select>
     </div>
     <div class="row">
-      <label for="optBike">Itinéraire vélo proposé<br><small>Tranquille : voies vertes, pistes · Rapide : plus direct</small></label>
-      <select id="optBike"><option value="calm">Tranquille</option><option value="fast">Rapide</option></select>
+      <label for="optBike">Itinéraire vélo proposé<br><small>Tranquille : pistes cyclables · Rapide : direct · Balade : bords de l'eau</small></label>
+      <select id="optBike"><option value="calm">Tranquille</option><option value="fast">Rapide</option><option value="river">Balade</option></select>
     </div>
     <div class="row">
       <span>Cartes hors ligne<br><small>Trace, département ou zone</small><br><small id="mapsStatus" class="dl-live" hidden></small></span>
@@ -553,6 +553,6 @@
 <div id="toast" class="toast" hidden></div>
 
 <script src="vendor/maplibre-gl.js"></script>
-<script src="app.js?v=102"></script>
+<script src="app.js?v=103"></script>
 </body>
 </html>
