@@ -4,7 +4,7 @@
 
 // La page et le code doivent être de la même version. Sinon (page gardée en cache
 // par le téléphone ou par GitHub), on recharge une page fraîche, au plus 3 fois.
-const APP_VERSION = 101;
+const APP_VERSION = 102;
 try {
   const meta = document.querySelector('meta[name="balise-version"]');
   const pageV = meta ? +meta.content : 0;
@@ -3307,18 +3307,20 @@ function chooseRoute(alt) {
     const order = bikeStyle === 'fast' ? ['fast', 'calm'] : ['calm', 'fast'];
     setSrc('rchoice', { type: 'FeatureCollection', features: order.slice().reverse().map(s => ({ type: 'Feature', properties: { s, col: RC_COL[s] }, geometry: { type: 'LineString', coordinates: alt[s].map(q => [q.lon, q.lat]) } })) });
     const list = $('rcList'); list.innerHTML = '';
-    const done = s => { $('rc').hidden = true; setSrc('rchoice', EMPTY); routeLabels([]); res(s); };
+    const done = s => { $('rc').hidden = true; document.body.classList.remove('choosing'); setSrc('rchoice', EMPTY); routeLabels([]); res(s); };
     for (const s of order) {
       const p = makePath(alt[s], ''), sp = lpSpeed(), min = Math.round((p.total / 1000 / sp.v + (p.hasEle ? p.totalUp / sp.climb : 0)) * 60);
       const b = document.createElement('button');
-      b.innerHTML = `<span class="rt-dot" style="background:${RC_COL[s]}"></span><span class="t"><b>${s === 'fast' ? 'Rapide' : 'Tranquille'} · ${fmtDist(p.total)}</b><small>${s === 'fast' ? 'Plus direct, davantage de rues' : 'Voies vertes et pistes cyclables'} · ${min >= 60 ? Math.floor(min / 60) + ' h ' + String(min % 60).padStart(2, '0') : min + ' min'}${p.hasEle ? ' · D+ ' + fmtM(p.totalUp) : ''}</small></span>`;
+      b.innerHTML = `<span class="rt-dot" style="background:${RC_COL[s]}"></span><b>${s === 'fast' ? 'Rapide' : 'Tranquille'}</b><small>${fmtDist(p.total)} · ${min >= 60 ? Math.floor(min / 60) + ' h ' + String(min % 60).padStart(2, '0') : min + ' min'}${p.hasEle ? ' · D+ ' + fmtM(p.totalUp) : ''}</small>`;
       b.onclick = () => done(s);
       list.appendChild(b);
     }
     $('rcClose').onclick = () => done(null);
+    clearTimeout(toastT); $('toast').hidden = true;
+    document.body.classList.add('choosing');
     $('rc').hidden = false;
     routeLabels(order.map(s => { const o = s === 'fast' ? 'calm' : 'fast'; return { pt: farPoint(alt[s], alt[o]), text: `${s === 'fast' ? 'Rapide' : 'Tranquille'} · ${fmtDist(makePath(alt[s], '').total)}`, col: RC_COL[s], on: true, run: () => done(s) }; }));
-    fitBoth([alt.calm, alt.fast], () => $('rc').getBoundingClientRect().top > 0 ? innerHeight - $('rc').getBoundingClientRect().top : $('rc').offsetHeight);
+    fitBoth([alt.calm, alt.fast], () => innerHeight - $('rc').getBoundingClientRect().top);
   });
 }
 async function reroute() {

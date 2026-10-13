@@ -504,7 +504,13 @@ body.nav .rt-here { display: none; }
 #btnNew { padding-left: 4px; padding-right: 4px; white-space: nowrap; font-size: 14px; }
 
 /* choix entre deux itinéraires vélo (tranquille / rapide) */
-.rc-card { position: fixed; z-index: 22; left: 10px; right: 10px; bottom: calc(var(--sheet-h, 260px) + 10px); background: var(--panel); color: var(--ink); border-radius: 14px; box-shadow: 0 6px 24px rgba(0,0,0,.22); padding: 12px; display: flex; flex-direction: column; gap: 8px; }
+.rc-card { position: fixed; z-index: 22; left: 10px; right: 10px; bottom: calc(env(safe-area-inset-bottom, 0px) + 10px); background: var(--panel); color: var(--ink); border-radius: 14px; box-shadow: 0 6px 24px rgba(0,0,0,.22); padding: 10px 12px; display: flex; flex-direction: column; gap: 6px; }
+.rc-card .rt-x { width: 30px; height: 30px; }
+#rcList button { padding: 9px 12px; }
+#rcList button b { flex: none; }
+#rcList button small { margin-left: auto; white-space: nowrap; }
+/* pendant le choix, le panneau du bas et les boutons s'effacent : la carte montre les deux tracés */
+body.choosing #sheet, body.choosing .fab-col { display: none !important; }
 .rc-card[hidden] { display: none; }
 .rc-lbl { --c: #7B3FE4; padding: 5px 10px; border-radius: 999px; border: 2px solid #fff; background: var(--c); color: #fff; font: 600 13px/1.2 system-ui, sans-serif; white-space: nowrap; box-shadow: 0 2px 8px rgba(0,0,0,.3); cursor: pointer; }
 .rc-lbl:not(.on) { opacity: .92; }
