@@ -468,7 +468,7 @@ body.nav .rt-here { display: none; }
 
 /* ---------- parcours balisés : bouton liste/carte, aperçu, choix ---------- */
 .rt-toggle { margin-left: auto; margin-right: 6px; min-height: 36px; padding: 0 12px; border-radius: 18px; border: 1px solid var(--line); background: var(--paper); color: var(--ink); font: 600 14px var(--font); cursor: pointer; }
-#routes.has-card .rt-where, #routes.has-card #rtStatus { display: none; }
+#routes.has-card .rt-bar, #routes.has-card #rtStatus { display: none; }
 .rt-card-h { display: flex; align-items: center; gap: 10px; }
 .rt-card-h b { font-size: 15px; }
 .rt-x { margin-left: auto; flex: none; width: 34px; height: 34px; border-radius: 50%; border: 1px solid var(--line); background: var(--paper); color: var(--ink); font-size: 15px; cursor: pointer; }
@@ -518,3 +518,8 @@ body.choosing #sheet, body.choosing .fab-col { display: none !important; }
 .rc-seg button { min-height: 34px; }
 .rc-hint { color: var(--muted); font-size: 12px; text-align: center; }
 .dest-h { list-style: none; padding: 10px 2px 2px; font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: .04em; }
+/* parcours balisés : lieu et mode (à pied / à vélo) côte à côte dans l'en-tête */
+.rt-bar { display: flex; gap: 8px; }
+.rt-bar .rt-where { flex: 1.5; margin: 0; }
+.rt-bar .rt-mode { flex: 1; }
+.rt-bar .seg button { font-size: 13px; padding: 0 4px; white-space: nowrap; }
