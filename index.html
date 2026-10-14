@@ -8,13 +8,13 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<meta name="balise-version" content="114">
+<meta name="balise-version" content="115">
 <title>Pisteo</title>
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" href="icon.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
 <link rel="stylesheet" href="vendor/maplibre-gl.css">
-<link rel="stylesheet" href="app.css?v=114">
+<link rel="stylesheet" href="app.css?v=115">
 </head>
 <body>
 <div id="map" aria-label="Carte"></div>
@@ -354,7 +354,8 @@
         <button id="rtToggle" class="rt-toggle">Liste ▴</button>
         <button id="rtClose" class="closebtn" aria-label="Fermer"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></svg>Fermer</button>
       </div>
-      <div class="rt-bar"><div class="seg rt-where"><button id="rtFromMe" class="on">Autour de moi</button><button id="rtFromMap">Zone affichée</button></div><div class="seg rt-mode"><button id="rtFoot">À pied</button><button id="rtBike">À vélo</button></div></div>
+      <div class="rt-bar"><input id="rtQ" class="search rt-q" type="search" placeholder="Chercher un lieu…" autocomplete="off" enterkeyhint="search"><div class="seg rt-mode"><button id="rtFoot">À pied</button><button id="rtBike">À vélo</button></div></div>
+      <ul id="rtQList" class="lib-list rt-qlist" hidden></ul>
       <p id="rtStatus" class="note"></p>
       <div id="rtPick" class="rt-pick" hidden>
         <div class="rt-card-h"><b>Plusieurs parcours passent ici : lequel ?</b><button id="rtPickClose" class="rt-x" aria-label="Fermer">✕</button></div>
@@ -378,7 +379,6 @@
   </div>
 </div>
 
-<button id="rtHere" class="rt-here" hidden>⟳ Chercher dans cette zone</button>
 
 <div id="rtMapBar" class="loop-bar" hidden>
   <div class="lb-info"><b id="rtmTitle">Parcours balisés</b><span id="rtmSub">Touche une ligne de couleur pour ouvrir le parcours.</span></div>
@@ -540,6 +540,6 @@
 <div id="toast" class="toast" hidden></div>
 
 <script src="vendor/maplibre-gl.js"></script>
-<script src="app.js?v=114"></script>
+<script src="app.js?v=115"></script>
 </body>
 </html>

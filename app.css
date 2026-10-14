@@ -518,8 +518,9 @@ body.choosing #sheet, body.choosing .fab-col { display: none !important; }
 .rc-seg button { min-height: 34px; }
 .rc-hint { color: var(--muted); font-size: 12px; text-align: center; }
 .dest-h { list-style: none; padding: 10px 2px 2px; font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: .04em; }
-/* parcours balisés : lieu et mode (à pied / à vélo) côte à côte dans l'en-tête */
-.rt-bar { display: flex; gap: 8px; }
-.rt-bar .rt-where { flex: 1.5; margin: 0; }
-.rt-bar .rt-mode { flex: 1; }
-.rt-bar .seg button { font-size: 13px; padding: 0 4px; white-space: nowrap; }
+/* parcours balisés : recherche d'un lieu et mode (à pied / à vélo) dans l'en-tête */
+.rt-bar { display: flex; gap: 8px; align-items: center; }
+.rt-bar .rt-q { flex: 1; min-width: 0; min-height: 44px; }
+.rt-bar .rt-mode { flex: none; }
+.rt-bar .seg button { font-size: 13px; padding: 0 10px; white-space: nowrap; }
+.rt-qlist { max-height: 40vh; overflow-y: auto; margin: 6px 0 0; }
