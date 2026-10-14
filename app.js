@@ -4,7 +4,7 @@
 
 // La page et le code doivent être de la même version. Sinon (page gardée en cache
 // par le téléphone ou par GitHub), on recharge une page fraîche, au plus 3 fois.
-const APP_VERSION = 115;
+const APP_VERSION = 116;
 try {
   const meta = document.querySelector('meta[name="balise-version"]');
   const pageV = meta ? +meta.content : 0;
@@ -163,6 +163,8 @@ function project(p, pos, global = false) {
 // Elle n'avance que lorsqu'on est vraiment sur la trace : loin d'elle, le point le plus proche
 // ne dit rien de ce qui a été parcouru. Elle est gardée en mémoire pour la trace ouverte.
 let done = null; // { along, pos, miss }
+// joinNear : trace pas encore commencée, on rejoint son point le plus proche plutôt que son départ
+let joinNear = false;
 const doneKey = () => track ? track.name + '|' + Math.round(track.total) : '';
 function loadDone() {
   done = null;
@@ -409,6 +411,7 @@ function fitTo(ptsList) {
 }
 
 async function showTrack(t, fit = true) {
+  joinNear = false;
   track = makePath(t.pts, t.name); progress = null; clearRejoin(); loadDone();
   // le texte et le profil s'affichent tout de suite, la carte suit dès qu'elle est prête
   $('trackName').textContent = `${t.name} · ${fmtDist(track.total)}${track.hasEle ? ' · D+ ' + fmtM(track.totalUp) : ''}`;
@@ -1413,6 +1416,7 @@ let lastTurnKey = '';
 const spoken = new Map();
 var nextDist = Infinity; // distance jusqu'au prochain virage (pour l'économie de batterie)
 function guidance() {
+  joinPickUI();
   if (!nav) return;
   nextDist = Infinity;
   if (!me) { setBanner('gps', '', 'Recherche du signal GPS…', 'gps'); return; }
@@ -1774,7 +1778,15 @@ function offTrackLogic() {
 // Où rejoindre la trace : devant ce qui a déjà été parcouru (jamais en arrière), en évitant de
 // sauter une grosse partie du parcours — chaque mètre de trace sauté compte pour un demi-mètre de détour.
 // Si la trace n'est pas commencée, on vise son début (sauter du parcours y coûte bien plus cher).
-const skipW = () => done ? 0.5 : 2;
+const skipW = () => done ? 0.5 : joinNear ? 0 : 2;
+// choix « Départ / Plus proche », affiché tant qu'on rejoint une trace pas encore commencée
+function joinPickUI() {
+  const show = !!(nav && track && !track.route && !done && (rejoin || routing) && track.total > 1000);
+  $('joinPick').hidden = !show;
+  if (show) { $('jpStart').classList.toggle('on', !joinNear); $('jpNear').classList.toggle('on', joinNear); }
+}
+$('jpStart').onclick = () => { if (!joinNear) return; joinNear = false; joinPickUI(); toast('Direction le départ de la trace', 2500); requestRejoin(true); };
+$('jpNear').onclick = () => { if (joinNear) return; joinNear = true; joinPickUI(); toast('Direction le point le plus proche de la trace', 2500); requestRejoin(true); };
 // croiser la trace sur une partie qu'on n'a pas à faire (avant le point visé) ne compte pas comme un retour
 function rightPart() {
   if (!rejoin || !rejoin.target || rejoin.target.along == null || !progress) return true;
