@@ -517,3 +517,4 @@ body.choosing #sheet, body.choosing .fab-col { display: none !important; }
 .rc-seg { flex: 1; max-width: 260px; }
 .rc-seg button { min-height: 34px; }
 .rc-hint { color: var(--muted); font-size: 12px; text-align: center; }
+.dest-h { list-style: none; padding: 10px 2px 2px; font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: .04em; }

@@ -4,7 +4,7 @@
 
 // La page et le code doivent être de la même version. Sinon (page gardée en cache
 // par le téléphone ou par GitHub), on recharge une page fraîche, au plus 3 fois.
-const APP_VERSION = 111;
+const APP_VERSION = 112;
 try {
   const meta = document.querySelector('meta[name="balise-version"]');
   const pageV = meta ? +meta.content : 0;
@@ -1880,27 +1880,109 @@ $('destQ').oninput = () => {
   if (q.length < 3) { $('destList').innerHTML = ''; return; }
   searchT = setTimeout(() => searchPlaces(q), 300);
 };
+// Recherche : adresses (IGN), lieux par nom (Photon, OpenStreetMap : « Decathlon »…)
+// et lieux par type autour de soi (OpenStreetMap : « piscine », « boulangerie »…)
+const POI_TYPES = [
+  [/piscines?|baignade|nager/, 'Piscine', 'nwr["leisure"="sports_centre"]["sport"~"swimming"];nwr["leisure"="water_park"];nwr["leisure"="swimming_pool"]["access"~"yes|public|customers"];'],
+  [/boulangeries?|pain/, 'Boulangerie', 'nwr["shop"="bakery"];'],
+  [/supermarches?|supermarkets?|courses|epicerie|alimentation/, 'Magasin d\'alimentation', 'nwr["shop"~"^(supermarket|convenience)$"];'],
+  [/pharmacies?/, 'Pharmacie', 'nwr["amenity"="pharmacy"];'],
+  [/gares?|train/, 'Gare', 'nwr["railway"~"^(station|halt)$"];'],
+  [/toilettes?|wc/, 'Toilettes', 'nwr["amenity"="toilets"];'],
+  [/eau|fontaines?/, 'Point d\'eau', 'nwr["amenity"="drinking_water"];'],
+  [/velo|velos|cycles?|reparation/, 'Magasin vélo', 'nwr["shop"="bicycle"];nwr["amenity"="bicycle_repair_station"];'],
+  [/cafes?|bars?/, 'Café, bar', 'nwr["amenity"~"^(cafe|bar|pub)$"];'],
+  [/restaurants?|manger|resto/, 'Restaurant', 'nwr["amenity"~"^(restaurant|fast_food)$"];'],
+  [/hopital|hopitaux|urgences/, 'Hôpital', 'nwr["amenity"="hospital"];'],
+  [/medecins?|docteur/, 'Médecin', 'nwr["amenity"="doctors"];'],
+  [/campings?/, 'Camping', 'nwr["tourism"="camp_site"];'],
+  [/hotels?/, 'Hôtel', 'nwr["tourism"~"^(hotel|guest_house)$"];'],
+  [/musees?/, 'Musée', 'nwr["tourism"="museum"];'],
+  [/parcs?|jardins?/, 'Parc', 'nwr["leisure"~"^(park|garden)$"]["name"];'],
+  [/essence|carburant|station service/, 'Station-service', 'nwr["amenity"="fuel"];'],
+  [/distributeurs?|dab|banques?|retrait/, 'Distributeur, banque', 'nwr["amenity"~"^(atm|bank)$"];'],
+  [/poste/, 'Bureau de poste', 'nwr["amenity"="post_office"];'],
+  [/cinemas?/, 'Cinéma', 'nwr["amenity"="cinema"];'],
+  [/mairies?/, 'Mairie', 'nwr["amenity"="townhall"];'],
+  [/police|gendarmerie/, 'Police, gendarmerie', 'nwr["amenity"="police"];'],
+  [/stades?/, 'Stade', 'nwr["leisure"="stadium"];'],
+  [/bibliotheques?|mediatheques?/, 'Bibliothèque', 'nwr["amenity"="library"];'],
+  [/eglises?/, 'Église', 'nwr["amenity"="place_of_worship"];'],
+  [/plages?/, 'Plage', 'nwr["natural"="beach"];'],
+  [/aires? de jeux|jeux/, 'Aire de jeux', 'nwr["leisure"="playground"];'],
+  [/recharge|borne/, 'Borne de recharge', 'nwr["amenity"="charging_station"];'],
+  [/pique nique/, 'Pique-nique', 'nwr["tourism"="picnic_site"];nwr["leisure"="picnic_table"];'],
+  [/salles? de sport|fitness|muscu/, 'Salle de sport', 'nwr["leisure"="fitness_centre"];'],
+  [/parkings?/, 'Parking', 'nwr["amenity"="parking"]["access"!~"private"];'],
+];
+function poiType(q) {
+  const n = ' ' + normName(q) + ' ';
+  return POI_TYPES.find(([re]) => new RegExp(' (' + re.source + ') ').test(n));
+}
+async function searchNearbyType(t, c, signal) {
+  const [, label, sel] = t, R = 12000, around = `(around:${R},${c.lat.toFixed(5)},${c.lon.toFixed(5)})`;
+  const q = `[out:json][timeout:15];(${sel.split(';').filter(Boolean).map(x => x + around + ';').join('')});out center tags 80;`;
+  const j = await overpassFast(q, null, true, signal, true);
+  return (j.elements || []).map(el => {
+    const lat = el.lat != null ? el.lat : el.center && el.center.lat, lon = el.lon != null ? el.lon : el.center && el.center.lon, tg = el.tags || {};
+    return { lat, lon, name: tg.name || tg.brand || label, sub: [tg.name ? label : '', tg['addr:city'] || ''].filter(Boolean).join(' · ') };
+  }).filter(p => p.lat != null).sort((x, y) => hav(c, x) - hav(c, y)).slice(0, 8);
+}
+async function searchPhoton(q, c, signal) {
+  const r = await fetch(`https://photon.komoot.io/api/?q=${encodeURIComponent(q)}&lat=${c.lat.toFixed(4)}&lon=${c.lon.toFixed(4)}&limit=10&lang=fr`, { signal });
+  const j = await r.json();
+  return (j.features || []).filter(f => f.properties.osm_key !== 'place' && f.properties.osm_key !== 'boundary' && (f.properties.name)).map(f => {
+    const p = f.properties, [lon, lat] = f.geometry.coordinates;
+    return { lat, lon, name: p.name, sub: [p.street ? (p.housenumber ? p.housenumber + ' ' : '') + p.street : '', p.city || p.county || ''].filter(Boolean).join(', ') };
+  }).filter(p => hav(c, p) < 100000).sort((x, y) => hav(c, x) - hav(c, y)).slice(0, 6);
+}
 async function searchPlaces(q) {
   const seq = ++searchSeq, list = $('destList');
   const c = me || (() => { const m = map.getCenter(); return { lat: m.lat, lon: m.lng }; })();
   try {
     if (navigator.onLine === false) throw new Error('hors ligne');
-    const ctrl = new AbortController(), timer = setTimeout(() => ctrl.abort(), 6000);
-    const r = await fetch(`https://data.geopf.fr/geocodage/search?q=${encodeURIComponent(q)}&limit=6&lat=${c.lat.toFixed(4)}&lon=${c.lon.toFixed(4)}`, { signal: ctrl.signal });
-    clearTimeout(timer);
-    const j = await r.json();
-    if (seq !== searchSeq) return;
-    list.innerHTML = '';
-    if (!j.features || !j.features.length) { list.innerHTML = '<li class="note">Aucun résultat.</li>'; return; }
-    for (const f of j.features) {
-      const p = f.properties, [lon, lat] = f.geometry.coordinates;
+    const ctrl = new AbortController(), timer = setTimeout(() => ctrl.abort(), 20000);
+    const groups = { type: null, name: null, addr: null }, t = poiType(q);
+    let ignErr = false;
+    const item = (name, sub, p, label) => {
       const li = document.createElement('li'), b = document.createElement('button');
       b.className = 'lib-item'; b.innerHTML = '<b></b><span></span>';
-      b.querySelector('b').textContent = p.label;
-      b.querySelector('span').textContent = (p.context || '') + (me ? ` · ${fmtDist(hav(me, { lat, lon }))} à vol d'oiseau` : '');
-      b.onclick = () => goTo({ lat, lon, label: p.name || p.label });
-      li.appendChild(b); list.appendChild(li);
-    }
+      b.querySelector('b').textContent = name;
+      b.querySelector('span').textContent = [sub, me ? `${fmtDist(hav(me, p))} à vol d'oiseau` : ''].filter(Boolean).join(' · ');
+      b.onclick = () => goTo({ lat: p.lat, lon: p.lon, label });
+      li.appendChild(b); return li;
+    };
+    const head = txt => { const li = document.createElement('li'); li.className = 'note dest-h'; li.textContent = txt; return li; };
+    const draw = () => {
+      if (seq !== searchSeq) return;
+      list.innerHTML = '';
+      let shown = 0, waiting = 0;
+      const sec = (g, title) => {
+        if (g === null) { waiting++; return; }
+        if (!g.length) return;
+        list.appendChild(head(title)); g.forEach(x => { list.appendChild(x); shown++; });
+      };
+      if (t) sec(groups.type, `${t[1]} autour de toi`);
+      sec(groups.name, 'Lieux');
+      sec(groups.addr, 'Adresses');
+      if (waiting) list.appendChild(head('Recherche…'));
+      else if (!shown) list.innerHTML = '<li class="note">Aucun résultat.</li>';
+    };
+    draw();
+    const jobs = [
+      fetch(`https://data.geopf.fr/geocodage/search?q=${encodeURIComponent(q)}&limit=6&lat=${c.lat.toFixed(4)}&lon=${c.lon.toFixed(4)}`, { signal: ctrl.signal }).then(r => r.json())
+        .then(j => (j.features || []).map(f => { const p = f.properties, [lon, lat] = f.geometry.coordinates; return item(p.label, p.context || '', { lat, lon }, p.name || p.label); }))
+        .catch(() => { ignErr = true; return []; }).then(v => { groups.addr = v; draw(); return v; }),
+      searchPhoton(q, c, ctrl.signal).then(v => v.map(p => item(p.name, p.sub, p, p.name))).catch(() => [])
+        .then(v => { groups.name = v; draw(); return v; }),
+    ];
+    if (t) jobs.push(searchNearbyType(t, c, ctrl.signal).then(v => v.map(p => item(p.name, p.sub, p, p.name))).catch(() => [])
+      .then(v => { groups.type = v; draw(); return v; }));
+    const res = await Promise.all(jobs);
+    clearTimeout(timer);
+    if (seq !== searchSeq) return;
+    // rien trouvé et le serveur d'adresses injoignable : on passe à la recherche hors connexion
+    if (!res.some(v => v.length) && (navigator.onLine === false || ignErr)) throw new Error('hors ligne');
   } catch {
     // pas de réseau : communes des départements téléchargés
     const res = await searchLocalPlaces(q, c);
