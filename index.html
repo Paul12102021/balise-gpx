@@ -8,13 +8,13 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<meta name="balise-version" content="116">
+<meta name="balise-version" content="117">
 <title>Pisteo</title>
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" href="icon.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
 <link rel="stylesheet" href="vendor/maplibre-gl.css">
-<link rel="stylesheet" href="app.css?v=116">
+<link rel="stylesheet" href="app.css?v=117">
 </head>
 <body>
 <div id="map" aria-label="Carte"></div>
@@ -78,6 +78,7 @@
 <div id="navBottom" class="navbottom nav-only">
   <div class="nb-bar"><div id="nbBar"></div></div>
   <div class="nb-grip" id="nbGrip" role="button" aria-label="Afficher ou masquer la progression"></div>
+  <div id="joinPick" class="join-pick" hidden><span>Rejoindre la trace</span><div class="seg"><button id="jpStart">au départ</button><button id="jpNear">au plus proche</button></div></div>
   <div class="nb-row">
     <button id="btnExit" class="nb-btn" aria-label="Quitter la navigation">
       <svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></svg>
@@ -537,10 +538,9 @@
   <div id="ebRem" class="eb-rem"></div>
   <div class="eb-hint">Écran noir pour économiser la batterie · touche pour voir la carte</div>
 </div>
-<div id="joinPick" class="join-pick" hidden><span>Rejoindre la trace</span><div class="seg"><button id="jpStart">Au départ</button><button id="jpNear">Au plus proche</button></div></div>
 <div id="toast" class="toast" hidden></div>
 
 <script src="vendor/maplibre-gl.js"></script>
-<script src="app.js?v=116"></script>
+<script src="app.js?v=117"></script>
 </body>
 </html>
