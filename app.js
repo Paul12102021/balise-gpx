@@ -4,7 +4,7 @@
 
 // La page et le code doivent être de la même version. Sinon (page gardée en cache
 // par le téléphone ou par GitHub), on recharge une page fraîche, au plus 3 fois.
-const APP_VERSION = 117;
+const APP_VERSION = 118;
 try {
   const meta = document.querySelector('meta[name="balise-version"]');
   const pageV = meta ? +meta.content : 0;
@@ -898,6 +898,16 @@ function stvButton(it, keepMsg) {
 }
 
 // aperçu de la sortie sur un fond de carte (tuiles du fond choisi)
+// fond de la carte des sorties : choisi à part (fonds en images seulement), sinon celui de la carte
+const SO_LAYERS = () => LAYERS.filter(l => !l.vector);
+function soLayer() {
+  const id = store.get('soLayer'), list = SO_LAYERS();
+  return list.find(l => l.id === id) || (LAYERS[layerIdx].vector ? LAYERS[0] : LAYERS[layerIdx]);
+}
+$('sdLayer').onclick = () => {
+  const list = SO_LAYERS(), k = list.indexOf(soLayer()), n = list[(k + 1) % list.length];
+  store.set('soLayer', n.id); previewRedraw && previewRedraw();
+};
 function drawRecMap(cv, pts) {
   const dpr = window.devicePixelRatio || 1, W = cv.clientWidth, H = cv.clientHeight;
   if (!W) return;
@@ -905,7 +915,8 @@ function drawRecMap(cv, pts) {
   const ctx = cv.getContext('2d'); ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
   ctx.fillStyle = cssVar('--mapbg') || '#E4E9DC'; ctx.fillRect(0, 0, W, H);
   if (pts.length < 2) return;
-  const L = LAYERS[layerIdx].vector ? LAYERS[0] : LAYERS[layerIdx];
+  const L = soLayer();
+  $('sdLayer').textContent = L.name.replace(/ \(.*\)/, '') + ' ▾';
   let z = Math.min(L.max, 17);
   const bb = (zz) => { let a = Infinity, b = -Infinity, c = Infinity, d = -Infinity; for (const p of pts) { const x = wx(p.lon, zz), y = wy(p.lat, zz); a = Math.min(a, x); b = Math.max(b, x); c = Math.min(c, y); d = Math.max(d, y); } return [a, b, c, d]; };
   let B = bb(z);
@@ -913,7 +924,7 @@ function drawRecMap(cv, pts) {
   const ox = (B[0] + B[1]) / 2 - W / 2, oy = (B[2] + B[3]) / 2 - H / 2;
   for (let ty = Math.floor(oy / 256); ty <= Math.floor((oy + H) / 256); ty++)
     for (let tx = Math.floor(ox / 256); tx <= Math.floor((ox + W) / 256); tx++) {
-      const im = pipTile(z, tx, ty); if (im) ctx.drawImage(im, tx * 256 - ox, ty * 256 - oy, 256.5, 256.5);
+      const im = pipTile(z, tx, ty, L); if (im) ctx.drawImage(im, tx * 256 - ox, ty * 256 - oy, 256.5, 256.5);
     }
   const P = pts.map(p => [wx(p.lon, z) - ox, wy(p.lat, z) - oy, p.s]);
   const stroke = (col, w) => {
@@ -1244,8 +1255,8 @@ function wrapText(ctx, txt, maxW, maxLines) {
 // La carte de la fenêtre réduite est dessinée à la main à partir des tuiles (la carte principale
 // ne se redessine plus quand l'appli est en arrière-plan) : centrée sur toi, sens de la marche vers le haut.
 const pipTiles = new Map();
-function pipTile(z, x, y) {
-  const L = LAYERS[layerIdx].vector ? LAYERS[0] : LAYERS[layerIdx];
+function pipTile(z, x, y, layer) {
+  const L = layer || (LAYERS[layerIdx].vector ? LAYERS[0] : LAYERS[layerIdx]);
   const n = 2 ** z; x = ((x % n) + n) % n;
   const key = L.id + '/' + z + '/' + x + '/' + y;
   let im = pipTiles.get(key);

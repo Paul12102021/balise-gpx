@@ -530,3 +530,6 @@ body.choosing #sheet, body.choosing .fab-col { display: none !important; }
 .join-pick .seg { flex: 1; }
 .join-pick .seg button { min-height: 32px; font-size: 13px; white-space: nowrap; padding: 0 6px; }
 .join-pick[hidden] { display: none; }
+/* carte d'une sortie : bouton pour changer le fond */
+.so-mapbox { position: relative; }
+.so-layer { position: absolute; top: 8px; right: 8px; background: var(--panel); color: var(--ink); box-shadow: 0 2px 8px rgba(0,0,0,.25); }
