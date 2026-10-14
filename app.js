@@ -1781,7 +1781,7 @@ function offTrackLogic() {
 const skipW = () => done ? 0.5 : joinNear ? 0 : 2;
 // choix « Départ / Plus proche », affiché tant qu'on rejoint une trace pas encore commencée
 function joinPickUI() {
-  const show = !!(nav && track && !track.route && !done && isOff && (rejoin || routing) && track.total > 1000);
+  const show = !!(nav && track && !track.route && !done && (rejoin || routing) && track.total > 1000);
   $('joinPick').hidden = !show;
   if (show) { $('jpStart').classList.toggle('on', !joinNear); $('jpNear').classList.toggle('on', joinNear); }
 }
