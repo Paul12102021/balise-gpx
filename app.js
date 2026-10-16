@@ -4,7 +4,7 @@
 
 // La page et le code doivent être de la même version. Sinon (page gardée en cache
 // par le téléphone ou par GitHub), on recharge une page fraîche, au plus 3 fois.
-const APP_VERSION = 118;
+const APP_VERSION = 119;
 try {
   const meta = document.querySelector('meta[name="balise-version"]');
   const pageV = meta ? +meta.content : 0;
@@ -413,6 +413,8 @@ function fitTo(ptsList) {
 async function showTrack(t, fit = true) {
   joinNear = false;
   track = makePath(t.pts, t.name); progress = null; clearRejoin(); loadDone();
+  // carrefours à feux de l'itinéraire (position le long du tracé), pour le temps estimé
+  track.sig = (t.signals || []).map(s => { const pr = project(track, s, true); return pr && pr.dist < 60 ? pr.along : null; }).filter(v => v != null).sort((x, y) => x - y);
   // le texte et le profil s'affichent tout de suite, la carte suit dès qu'elle est prête
   $('trackName').textContent = `${t.name} · ${fmtDist(track.total)}${track.hasEle ? ' · D+ ' + fmtM(track.totalUp) : ''}`;
   $('btnClose').hidden = false; $('btnReverse').hidden = false; $('btnSaveTr').hidden = false; refreshSaveBtn(); $('btnNew').hidden = false; $('btnNew').parentElement.classList.add('has-new');
@@ -1819,13 +1821,27 @@ function rejoinCandidates(p, pos) {
   if (pr && pr.along >= from && Math.abs(pr.along - picked[0].along) < step * 2) { const q = pointAt(p, pr.along); picked[0] = { lat: q.lat, lon: q.lon, along: pr.along, dist: pr.dist, score: pr.dist + skipW() * (pr.along - from) }; }
   return picked;
 }
+// carrefours à feux d'un itinéraire BRouter : sur la carte, chaque passage piéton à feux est noté à part,
+// donc les points « feu » à moins de 60 m les uns des autres comptent pour un seul carrefour
+function brSignals(f) {
+  try {
+    const m = f.properties.messages, iN = m[0].indexOf('NodeTags'), out = [];
+    if (iN < 0) return out;
+    for (const r of m.slice(1)) {
+      if (!/traffic_signals/.test(r[iN] || '')) continue;
+      const p = { lon: r[0] / 1e6, lat: r[1] / 1e6 };
+      if (!out.some(q => hav(q, p) < 60)) out.push(p);
+    }
+    return out;
+  } catch { return []; }
+}
 async function fetchRoute(a, b, ms = 12000, style) {
   const ctrl = new AbortController(), timer = setTimeout(() => ctrl.abort(), ms);
   try {
     const ll = q => `${q.lon.toFixed(6)},${q.lat.toFixed(6)}`;
     const j = await brFetch(`${ll(a)}|${ll(b)}`, style, ctrl.signal), f = j.features && j.features[0];
     const pts = f.geometry.coordinates.map(c => ({ lon: c[0], lat: c[1], ele: c[2] != null ? c[2] : null }));
-    return { pts, len: +f.properties['track-length'] || 0 };
+    return { pts, len: +f.properties['track-length'] || 0, signals: brSignals(f) };
   } finally { clearTimeout(timer); }
 }
 async function requestRejoin(manual) {
@@ -2172,7 +2188,9 @@ async function routeVia(pts, ms, style) {
   const ctrl = new AbortController(), timer = setTimeout(() => ctrl.abort(), ms);
   try {
     const f = (await brFetch(pts.map(ll).join('|'), style, ctrl.signal)).features[0];
-    return f.geometry.coordinates.map(c => ({ lon: c[0], lat: c[1], ele: c[2] != null ? c[2] : null }));
+    const out = f.geometry.coordinates.map(c => ({ lon: c[0], lat: c[1], ele: c[2] != null ? c[2] : null }));
+    out.signals = brSignals(f);
+    return out;
   } catch (e) {
     if (e.server || e.name === 'AbortError') throw e;
     // pas de réseau : enchaînement d'itinéraires sur les chemins téléchargés
@@ -3467,9 +3485,9 @@ async function planGo() {
   const last = plan.wps[plan.wps.length - 1], dest = { lat: last.lat, lon: last.lon, label: plan.go.label };
   const sg = plan.segs[0], simple = plan.wps.length === 2 && sg && !sg.straight;
   const style = simple && profile === 'trekking' ? sg.style || null : null;
-  const pts = removeSpurs(planAll());
+  const pts = removeSpurs(planAll()), signals = plan.segs.flatMap(s => (s && s.pts.signals) || []);
   closePlan();
-  await showTrack({ name: 'Vers ' + dest.label, pts }, true);
+  await showTrack({ name: 'Vers ' + dest.label, pts, signals }, true);
   // trajet direct : recalculé tout seul si on s'en écarte
   if (simple) { track.route = dest; track.style = style; }
   toast(`${fmtDist(track.total)} jusqu'à ${dest.label} ${profile === 'trekking' ? 'à vélo' + (style ? ', itinéraire ' + styleName(style) : '') : 'à pied'}`, 4000);
@@ -3492,7 +3510,7 @@ async function goTo(dest) {
   if (!r) { toast('Itinéraire impossible pour l\'instant, réessaie dans un instant.', 5000); return; }
   r.pts.push({ lat: dest.lat, lon: dest.lon, ele: null });
   if (!track) document.body.classList.remove('free');
-  await showTrack({ name: 'Vers ' + dest.label, pts: r.pts }, false);
+  await showTrack({ name: 'Vers ' + dest.label, pts: r.pts, signals: r.signals }, false);
   track.route = dest; track.style = profile === 'trekking' ? bikeStyle : null;
   arrived = false; guidance(); say(`Itinéraire calculé, ${speakDist(track.total)}`);
 }
@@ -3505,7 +3523,7 @@ async function reroute() {
     try { r = await fetchRoute(me, dest, Math.round(clamp(25 + hav(me, dest) / 1000 * 0.4, 25, 120)) * 1000, style); }
     catch (e) { await loadGraphs(); r = localRouteTo(me, dest); if (!r) throw e; }
     r.pts.push({ lat: dest.lat, lon: dest.lon, ele: null });
-    await showTrack({ name: 'Vers ' + dest.label, pts: r.pts }, false);
+    await showTrack({ name: 'Vers ' + dest.label, pts: r.pts, signals: r.signals }, false);
     track.route = dest; track.style = style; isOff = false; offCount = 0; arrived = false;
     say('Itinéraire recalculé');
   } catch { /* pas de réseau : nouvel essai automatique dans 30 s */ }
@@ -3531,7 +3549,9 @@ function remainingInfo() {
   const base = (bike ? 16 : 4.5) / 3.6, climb = bike ? 800 : 600;
   const w = speedEma ? clamp(freeD / 3000, 0, 0.85) : 0;
   const v = w * clamp(speedEma || base, 0.5, 15) + (1 - w) * base;
-  const secs = rem / v + (track.hasEle ? (1 - w) * up / climb * 3600 : 0);
+  // + environ 20 s d'attente par carrefour à feux restant
+  const sigLeft = track.sig ? track.sig.filter(s => s > di.along + 20).length : 0;
+  const secs = rem / v + (track.hasEle ? (1 - w) * up / climb * 3600 : 0) + sigLeft * 20;
   return { rem, up, secs };
 }
 // un chiffre trop long pour sa colonne est rapetissé plutôt que de déborder sur le voisin
