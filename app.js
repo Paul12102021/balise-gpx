@@ -4,7 +4,7 @@
 
 // La page et le code doivent être de la même version. Sinon (page gardée en cache
 // par le téléphone ou par GitHub), on recharge une page fraîche, au plus 3 fois.
-const APP_VERSION = 123;
+const APP_VERSION = 124;
 try {
   const meta = document.querySelector('meta[name="balise-version"]');
   const pageV = meta ? +meta.content : 0;
@@ -4177,7 +4177,8 @@ async function downloadPack(pack, tiles) {
     }
   };
   show();
-  await Promise.all(Array.from({ length: 8 }, worker));
+  // OpenFreeMap demande 4 requêtes simultanées au plus pour le hors ligne
+  await Promise.all(Array.from({ length: prov === 'ofm' ? 4 : 8 }, worker));
   const stopped = dl.stop, reason = dl.reason; dl = null;
   if (fetched > 50 && prov === 'ign') { tileKB = clamp(Math.round(fetchedBytes / fetched / 1024 * 10) / 10 || tileKB, 8, 60); store.set('tileKB', tileKB); }
   await save(!stopped && fail === 0);
@@ -4206,7 +4207,10 @@ $('dlTrace').onclick = async () => {
   };
   const codes = await depsOfLine(pack.line);
   if (!codes.length) pack.prov = 'ofm'; // trace à l'étranger : carte Monde
-  await downloadPack(pack, pack.prov === 'ofm' ? traceTiles(tr, 14) : traceTiles(tr));
+  let tiles = pack.prov === 'ofm' ? traceTiles(tr, 14) : traceTiles(tr);
+  if (pack.prov === 'ofm' && tiles.length > OFM_MAX) tiles = traceTiles(tr, 13);
+  if (pack.prov === 'ofm' && tiles.length > OFM_MAX) { toast('Trace trop longue pour la carte Monde hors ligne : utilise plutôt « Une zone de la carte », en plusieurs morceaux.', 6000); return; }
+  await downloadPack(pack, tiles);
   // puis le réseau des chemins, pour calculer les itinéraires sans connexion
   if (navigator.onLine !== false) {
     if (codes.length) downloadPlaces(codes); else downloadOsmPlaces(pack, corridorBoxes(tr));
@@ -4241,6 +4245,8 @@ function zoneTiles(b, zmin, zmax) {
   return out;
 }
 const OFM_KB = 25; // poids moyen d'une tuile vectorielle
+// règles d'OpenFreeMap pour le hors ligne : 3 000 tuiles ou 50 Mo au plus par téléchargement
+const OFM_MAX = 3000;
 let zoneMode = false;
 function zoneBBox() {
   // le cadre en pointillés laisse une marge de 10 % autour de l'écran
@@ -4262,7 +4268,7 @@ function zonePlan() {
 }
 function updateZoneInfo() {
   if (!zoneMode) return;
-  const z = zonePlan(), tooBig = z.tiles.length > 25000;
+  const z = zonePlan(), tooBig = z.tiles.length > (z.prov === 'ofm' ? OFM_MAX : 25000) || (z.prov === 'ofm' && z.mapKB > 50 * 1024);
   $('zoneInfo').textContent = tooBig
     ? `Zone trop grande (${Math.round(z.km2).toLocaleString('fr-FR')} km²) : zoome un peu`
     : `${Math.round(z.km2).toLocaleString('fr-FR')} km² · carte ${z.prov === 'ofm' ? 'Monde' : 'IGN'} ~${fmtMo(z.mapKB)}` + (z.gKB ? ` · chemins ~${fmtMo(z.gKB)}` : '');
