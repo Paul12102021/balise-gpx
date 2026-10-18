@@ -8,13 +8,13 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<meta name="balise-version" content="122">
+<meta name="balise-version" content="123">
 <title>Pisteo</title>
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" href="icon.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
 <link rel="stylesheet" href="vendor/maplibre-gl.css">
-<link rel="stylesheet" href="app.css?v=122">
+<link rel="stylesheet" href="app.css?v=123">
 </head>
 <body>
 <div id="map" aria-label="Carte"></div>
@@ -279,7 +279,7 @@
     <p class="note">Tes sorties et traces restent sur ce téléphone. Pour ne rien perdre (changement de téléphone, appli désinstallée), garde de temps en temps une sauvegarde : dans ton Drive, par mail ou sur ton ordinateur.</p>
     <p id="bkSum" class="lib-sum"></p>
     <button id="bkSave" class="btn go">Créer une sauvegarde</button>
-    <button id="bkLoad" class="btn">Restaurer une sauvegarde…</button>
+    <button id="bkLoad" class="btn">Restaurer une sauvegarde</button>
     <p id="bkMsg" class="fin-msg" role="status" hidden></p>
     <p class="note">La restauration ajoute les sorties et traces du fichier à celles déjà présentes, sans rien effacer. Les cartes hors ligne ne sont pas copiées dans le fichier (trop lourdes), seulement leur liste : après une restauration, « Mes cartes » propose de toutes les retélécharger. La connexion Strava est à refaire.</p>
     <input type="file" id="bkIn" accept=".json,application/json" hidden>
@@ -564,6 +564,6 @@
 <div id="toast" class="toast" hidden></div>
 
 <script src="vendor/maplibre-gl.js"></script>
-<script src="app.js?v=122"></script>
+<script src="app.js?v=123"></script>
 </body>
 </html>
