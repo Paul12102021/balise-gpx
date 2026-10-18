@@ -4,7 +4,7 @@
 
 // La page et le code doivent être de la même version. Sinon (page gardée en cache
 // par le téléphone ou par GitHub), on recharge une page fraîche, au plus 3 fois.
-const APP_VERSION = 129;
+const APP_VERSION = 130;
 try {
   const meta = document.querySelector('meta[name="balise-version"]');
   const pageV = meta ? +meta.content : 0;
@@ -4897,6 +4897,33 @@ function startSim() {
 }
 function stopSim() { if (sim) { clearInterval(sim); sim = null; } }
 $('btnSim').onclick = startSim;
+
+// =====================================================================
+// Écran d'accueil : une seule fois, au tout premier lancement (pas pour ceux qui ont déjà des traces)
+// =====================================================================
+let onbI = 0;
+function onbShow(i) {
+  onbI = i;
+  $('onb').querySelectorAll('.onb-s').forEach((x, k) => x.classList.toggle('on', k === i));
+  $('onb').querySelectorAll('.onb-dots i').forEach((x, k) => x.classList.toggle('on', k === i));
+  const last = i === 3;
+  $('onbNext').textContent = last ? 'C\'est parti' : 'Suivant'; $('onbSkip').hidden = last;
+}
+function onbClose() { $('onb').hidden = true; store.set('onb', '1'); }
+$('onbNext').onclick = () => onbI < 3 ? onbShow(onbI + 1) : onbClose();
+$('onbSkip').onclick = onbClose;
+// glisser à gauche / à droite pour changer d'écran
+(() => { let x0 = null;
+  $('onb').addEventListener('touchstart', e => { x0 = e.touches[0].clientX; }, { passive: true });
+  $('onb').addEventListener('touchend', e => { if (x0 == null) return; const dx = e.changedTouches[0].clientX - x0; x0 = null;
+    if (dx < -50 && onbI < 3) onbShow(onbI + 1); else if (dx > 50 && onbI > 0) onbShow(onbI - 1); });
+})();
+(async () => {
+  if (store.get('onb') === '1' || /[?&]shared=1/.test(location.search)) return;
+  const had = (await listRecent()).length > 0 || store.get('gpx');
+  if (had) { store.set('onb', '1'); return; }
+  onbShow(0); $('onb').hidden = false;
+})();
 
 // =====================================================================
 // Exemple, panneau, démarrage

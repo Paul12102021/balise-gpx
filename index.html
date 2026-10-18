@@ -8,13 +8,13 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<meta name="balise-version" content="129">
+<meta name="balise-version" content="130">
 <title>Pisteo</title>
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" href="icon.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
 <link rel="stylesheet" href="vendor/maplibre-gl.css">
-<link rel="stylesheet" href="app.css?v=129">
+<link rel="stylesheet" href="app.css?v=130">
 </head>
 <body>
 <div id="map" aria-label="Carte"></div>
@@ -288,6 +288,34 @@
     <p id="bkMsg" class="fin-msg" role="status" hidden></p>
     <p class="note">La restauration ajoute les sorties et traces du fichier à celles déjà présentes, sans rien effacer. Les cartes hors ligne ne sont pas copiées dans le fichier (trop lourdes), seulement leur liste : après une restauration, « Mes cartes » propose de toutes les retélécharger. La connexion Strava est à refaire.</p>
     <input type="file" id="bkIn" accept=".json,application/json" hidden>
+  </div>
+</div>
+<div id="onb" class="onb" hidden role="dialog" aria-label="Bienvenue dans Pisteo">
+  <div class="onb-card">
+    <div class="onb-slides">
+      <section class="onb-s on">
+        <div class="onb-art"><img src="icon.svg" alt=""></div>
+        <h2>Bienvenue dans Pisteo</h2>
+        <p>Suis tes traces GPX à pied ou à vélo, guidé à la voix, même sans réseau. Gratuit, sans compte : tout reste sur ton téléphone.</p>
+      </section>
+      <section class="onb-s">
+        <div class="onb-art"><svg viewBox="0 0 24 24"><path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><path d="M14 3v6h6M9 15l2 2 4-4"/></svg></div>
+        <h2>1 · Ouvre ta trace</h2>
+        <p><b>Mes traces › Chercher un fichier GPX</b>, ou « Partager » un GPX reçu par mail ou WhatsApp vers Pisteo. Pas de trace ? <b>Naviguer</b> propose une boucle, les parcours balisés ou un lieu.</p>
+      </section>
+      <section class="onb-s">
+        <div class="onb-art"><svg viewBox="0 0 24 24"><path d="M12 3 19 21 12 17 5 21z"/></svg></div>
+        <h2>2 · Laisse-toi guider</h2>
+        <p>Touche <b>Naviguer</b> : la carte suit ton sens de marche et chaque virage est annoncé. Si tu sors de la trace, Pisteo te prévient et calcule le retour par les chemins. Touche <b>●</b> pour enregistrer ta sortie.</p>
+      </section>
+      <section class="onb-s">
+        <div class="onb-art"><svg viewBox="0 0 24 24"><path d="M3 6l6-3 6 3 6-3v15l-6 3-6-3-6 3z"/><path d="M9 3v15M15 6v15"/></svg></div>
+        <h2>3 · Pense au hors ligne</h2>
+        <p>En montagne, le réseau manque souvent. Avant de partir : <b>Réglages › Mes cartes</b>, pour télécharger la carte le long de ta trace ou d'un département, avec les chemins.</p>
+      </section>
+    </div>
+    <div class="onb-dots"><i class="on"></i><i></i><i></i><i></i></div>
+    <div class="onb-acts"><button id="onbSkip" class="btn ghost">Passer</button><button id="onbNext" class="btn go">Suivant</button></div>
   </div>
 </div>
 <div id="feedback" class="lib" hidden>
@@ -581,6 +609,6 @@
 <div id="toast" class="toast" hidden></div>
 
 <script src="vendor/maplibre-gl.js"></script>
-<script src="app.js?v=129"></script>
+<script src="app.js?v=130"></script>
 </body>
 </html>

@@ -545,3 +545,22 @@ body.choosing #sheet, body.choosing .fab-col { display: none !important; }
 /* donner mon avis */
 .fb-text { width: 100%; box-sizing: border-box; min-height: 130px; padding: 12px; border: 1px solid var(--line); border-radius: 12px; background: var(--panel); color: var(--ink); font: inherit; font-size: 15px; resize: vertical; }
 .fb-text:focus { outline: 2px solid var(--go); outline-offset: 1px; }
+
+/* écran d'accueil au premier lancement */
+.onb { position: fixed; inset: 0; z-index: 50; background: rgba(10,16,13,.55); display: flex; align-items: center; justify-content: center; padding: 16px; }
+.onb[hidden] { display: none; }
+.onb-card { width: 100%; max-width: 400px; background: var(--panel); color: var(--ink); border-radius: 22px; padding: 26px 22px 18px; box-shadow: 0 20px 50px rgba(0,0,0,.3); }
+.onb-s { display: none; text-align: center; min-height: 290px; }
+.onb-s.on { display: block; animation: onbIn .25s ease; }
+@keyframes onbIn { from { opacity: 0; transform: translateX(14px); } to { opacity: 1; transform: none; } }
+.onb-art { width: 92px; height: 92px; margin: 4px auto 18px; border-radius: 24px; background: var(--line); display: grid; place-items: center; }
+.onb-art img { width: 92px; height: 92px; border-radius: 24px; }
+.onb-art svg { width: 46px; height: 46px; fill: none; stroke: var(--go-ink); stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+.onb-s h2 { margin: 0 0 10px; font-size: 22px; }
+.onb-s p { margin: 0; font-size: 16px; line-height: 1.5; color: var(--muted); }
+.onb-s p b { color: var(--ink); }
+.onb-dots { display: flex; justify-content: center; gap: 8px; margin: 18px 0 16px; }
+.onb-dots i { width: 8px; height: 8px; border-radius: 50%; background: var(--line); transition: width .2s; }
+.onb-dots i.on { width: 22px; border-radius: 4px; background: var(--go); }
+.onb-acts { display: flex; gap: 10px; }
+.onb-acts .btn { flex: 1; }
