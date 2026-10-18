@@ -533,3 +533,7 @@ body.choosing #sheet, body.choosing .fab-col { display: none !important; }
 /* carte d'une sortie : bouton pour changer le fond */
 .so-mapbox { position: relative; }
 .so-layer { position: absolute; top: 8px; right: 8px; background: var(--panel); color: var(--ink); box-shadow: 0 2px 8px rgba(0,0,0,.25); }
+
+/* cartes à retélécharger après une restauration */
+#packRestore { display: flex; flex-direction: column; gap: 10px; }
+#packRestore[hidden] { display: none; }

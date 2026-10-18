@@ -4,7 +4,7 @@
 
 // La page et le code doivent être de la même version. Sinon (page gardée en cache
 // par le téléphone ou par GitHub), on recharge une page fraîche, au plus 3 fois.
-const APP_VERSION = 121;
+const APP_VERSION = 122;
 try {
   const meta = document.querySelector('meta[name="balise-version"]');
   const pageV = meta ? +meta.content : 0;
@@ -743,6 +743,7 @@ const bkCount = items => {
   const plural = (n, w) => n + ' ' + w + (n > 1 ? 's' : '');
   return plural(r, 'sortie') + ' et ' + plural(items.length - r, 'trace');
 };
+const bkMaps = n => n + ' carte' + (n > 1 ? 's' : '');
 function bkSay(msg) { const m = $('bkMsg'); m.textContent = msg || ''; m.hidden = !msg; }
 async function bkRefresh() {
   const items = await listRecent();
@@ -754,10 +755,14 @@ $('bkClose').onclick = () => { $('backup').hidden = true; };
 $('backup').onclick = e => { if (e.target === $('backup')) $('backup').hidden = true; };
 $('bkSave').onclick = async () => {
   const items = await listRecent();
-  if (!items.length) { toast('Rien à sauvegarder pour l\'instant'); return; }
+  // les cartes : seulement leur description (pas les images), pour pouvoir les retélécharger
+  const packs = (await listPacks()).filter(p => Array.isArray(p.tiles) && p.tiles.length).map(p => ({
+    id: p.id, kind: p.kind, name: p.name, detail: p.detail, code: p.code, prov: p.prov, bbox: p.bbox, line: p.line,
+    tiles: p.tiles, count: p.tiles.length, graphWanted: !!(p.graph || p.graphWanted) }));
+  if (!items.length && !packs.length) { toast('Rien à sauvegarder pour l\'instant'); return; }
   const settings = {};
   for (const k of BK_KEYS) { const v = store.get(k); if (v != null && v !== '') settings[k] = v; }
-  const data = { app: 'pisteo', format: 1, version: APP_VERSION, date: new Date().toISOString(), settings, tracks: items };
+  const data = { app: 'pisteo', format: 1, version: APP_VERSION, date: new Date().toISOString(), settings, tracks: items, packs };
   const d = new Date(), pad = n => String(n).padStart(2, '0');
   const fname = `pisteo-sauvegarde-${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}.json`;
   const file = new File([JSON.stringify(data)], fname, { type: 'application/json' });
@@ -766,7 +771,7 @@ $('bkSave').onclick = async () => {
   const a = document.createElement('a'); a.href = URL.createObjectURL(file); a.download = fname;
   document.body.appendChild(a); a.click(); setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 1000);
   store.set('bkDate', String(Date.now()));
-  toast('Sauvegarde créée : ' + bkCount(items), 3500);
+  toast('Sauvegarde créée : ' + [items.length && bkCount(items), packs.length && 'liste de ' + bkMaps(packs.length)].filter(Boolean).join(' + '), 3500);
 };
 $('bkLoad').onclick = () => { $('bkIn').value = ''; $('bkIn').click(); };
 $('bkIn').onchange = async e => {
@@ -778,14 +783,23 @@ $('bkIn').onchange = async e => {
   const ok = data.tracks.filter(it => it && typeof it.id === 'string' && typeof it.text === 'string' && /<gpx/i.test(it.text));
   const have = new Set((await listRecent()).map(it => it.id));
   const fresh = ok.filter(it => !have.has(it.id));
+  const havePacks = new Set((await listPacks()).map(p => p.id));
+  const freshPacks = (Array.isArray(data.packs) ? data.packs : []).filter(p => p && typeof p.id === 'string' && Array.isArray(p.tiles)
+    && p.tiles.length && p.tiles.every(t => typeof t === 'string') && Array.isArray(p.bbox) && !havePacks.has(p.id));
   // tout est déjà là : on ne touche à rien
-  if (!fresh.length) { bkSay('Cette sauvegarde est déjà sur l\'appli : rien à restaurer.'); return; }
-  try { for (const it of fresh) await idb('readwrite', st => st.put(it)); }
-  catch { bkSay('Restauration impossible : le stockage du téléphone est plein ou bloqué.'); return; }
+  if (!fresh.length && !freshPacks.length) { bkSay('Cette sauvegarde est déjà sur l\'appli : rien à restaurer.'); return; }
+  try {
+    for (const it of fresh) await idb('readwrite', st => st.put(it));
+    for (const p of freshPacks) await idb('readwrite', st => st.put(Object.assign({}, p, { count: p.tiles.length, bytes: 0, date: Date.now(), complete: false, missing: p.tiles.length, restored: true })), 'packs');
+  } catch { bkSay('Restauration impossible : le stockage du téléphone est plein ou bloqué.'); return; }
+  if (freshPacks.length) drawPacks();
   let setChanged = false;
   if (data.settings && typeof data.settings === 'object')
     for (const k of BK_KEYS) if (typeof data.settings[k] === 'string' && store.get(k) !== data.settings[k]) { store.set(k, data.settings[k]); setChanged = true; }
-  const msg = 'Restauré : ' + bkCount(fresh) + '.';
+  const parts = [];
+  if (fresh.length) parts.push(bkCount(fresh));
+  if (freshPacks.length) parts.push(bkMaps(freshPacks.length) + ' à retélécharger dans Réglages → Mes cartes');
+  const msg = 'Restauré : ' + parts.join(', et ') + '.';
   await bkRefresh();
   if (setChanged) {
     bkSay(msg + ' Réglages appliqués, l\'appli redémarre…');
@@ -4307,15 +4321,50 @@ async function downloadOsmPlaces(pack, boxes) {
 
 // ---------- liste des cartes téléchargées ----------
 async function listPacks() { try { return ((await idb('readonly', st => st.getAll(), 'packs')) || []).sort((a, b) => b.date - a.date); } catch { return []; } }
+// cartes venues d'une sauvegarde : on les retélécharge l'une après l'autre (carte, localités, chemins)
+let restoreRun = false;
+$('packRestoreBtn').onclick = async () => {
+  if (dl || restoreRun) { toast('Un téléchargement est déjà en cours.'); return; }
+  if (navigator.onLine === false) { toast('Pas de réseau : connecte-toi pour télécharger.', 4000); return; }
+  restoreRun = true; $('packRestore').hidden = true;
+  try {
+    for (const p of (await listPacks()).filter(q => q.restored && !q.complete)) {
+      await downloadPack(p, p.tiles);
+      const now = await idb('readonly', st => st.get(p.id), 'packs').catch(() => null);
+      if (!now || !now.complete) break; // arrêté ou incomplet : « Reprendre » ou « Tout retélécharger » plus tard
+      // la carte est là : elle redevient une carte normale, puis on ajoute localités et chemins en plus
+      const wantGraph = !!now.graphWanted;
+      delete now.restored; delete now.graphWanted; delete p.restored; delete p.graphWanted;
+      await idb('readwrite', st => st.put(now), 'packs').catch(() => {}); renderPacks();
+      if (navigator.onLine !== false) {
+        try {
+          if (p.kind === 'dep') { downloadPlaces([p.code]); if (wantGraph) { await loadDeps(); const d = deps.find(x => x.code === p.code); if (d) await downloadDepGraph(p, d.polys); } }
+          else if (p.kind === 'zone') { await downloadOsmPlaces(p, [[p.bbox[1], p.bbox[0], p.bbox[3], p.bbox[2]]]); if (wantGraph) await downloadDepGraph(p, bboxPolys(p.bbox)); }
+          else if (p.kind === 'trace' && p.line) {
+            const lp = makePath(p.line.map(([lon, lat]) => ({ lat, lon, ele: null })), p.name), codes = await depsOfLine(p.line);
+            if (codes.length) downloadPlaces(codes); else downloadOsmPlaces(p, corridorBoxes(lp));
+            if (wantGraph) await downloadGraph(p, corridorBoxes(lp));
+          }
+        } catch {}
+      }
+    }
+  } finally { restoreRun = false; renderPacks(); }
+};
 async function renderPacks() {
   const list = $('packList'), packs = await listPacks();
   list.innerHTML = ''; $('packEmpty').hidden = packs.length > 0;
+  const todo = packs.filter(p => p.restored && !p.complete);
+  $('packRestore').hidden = !todo.length || !!restoreRun;
+  if (todo.length) {
+    const kb = todo.reduce((s, p) => s + (p.missing || p.count || 0) * (p.prov === 'ofm' ? OFM_KB : tileKB), 0);
+    $('packRestoreTxt').textContent = `${bkMaps(todo.length)} de ta sauvegarde ${todo.length > 1 ? 'sont' : 'est'} à retélécharger (~${fmtMo(kb)}). Mieux vaut être en Wi-Fi.`;
+  }
   for (const p of packs) {
     const li = document.createElement('li');
     const info = document.createElement('div'); info.className = 'lib-item';
     info.innerHTML = '<b></b><span></span>';
     info.querySelector('b').textContent = p.name;
-    info.querySelector('span').textContent = `${p.kind === 'trace' ? 'Le long de la trace' : p.kind === 'zone' ? `Zone de ${Math.round(bboxKm2(p.bbox)).toLocaleString('fr-FR')} km²` : 'Département, ' + p.detail} · carte ${p.prov === 'ofm' ? 'Monde' : 'IGN'} · ${fmtMo(p.bytes / 1024)} · ${fmtDate(p.date)}` + (p.complete ? '' : ` · incomplet`) + (p.graph ? (p.graph.partial ? ` · chemins incomplets (${p.graph.km} km)` : ` · itinéraires hors connexion ✓ (${p.graph.km} km de chemins)`) : '');
+    info.querySelector('span').textContent = `${p.kind === 'trace' ? 'Le long de la trace' : p.kind === 'zone' ? `Zone de ${Math.round(bboxKm2(p.bbox)).toLocaleString('fr-FR')} km²` : 'Département, ' + p.detail} · carte ${p.prov === 'ofm' ? 'Monde' : 'IGN'} · ${fmtMo(p.bytes / 1024)} · ${fmtDate(p.date)}` + (p.complete ? '' : p.restored ? ' · à retélécharger' : ` · incomplet`) + (p.graph ? (p.graph.partial ? ` · chemins incomplets (${p.graph.km} km)` : ` · itinéraires hors connexion ✓ (${p.graph.km} km de chemins)`) : '');
     if (dl && dl.packId === p.id) { const live = document.createElement('span'); live.className = 'dl-live'; live.dataset.pack = p.id; live.textContent = 'En cours…'; info.appendChild(live); }
     const acts = document.createElement('div'); acts.className = 'pack-acts';
     if (!p.complete) {
