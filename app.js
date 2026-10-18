@@ -4,7 +4,7 @@
 
 // La page et le code doivent être de la même version. Sinon (page gardée en cache
 // par le téléphone ou par GitHub), on recharge une page fraîche, au plus 3 fois.
-const APP_VERSION = 124;
+const APP_VERSION = 125;
 try {
   const meta = document.querySelector('meta[name="balise-version"]');
   const pageV = meta ? +meta.content : 0;
@@ -212,15 +212,15 @@ function infoAt(along) {
 // =====================================================================
 // Plan IGN : données ouvertes, seul fond que l'on télécharge pour le hors ligne
 const IGN_URL = 'https://data.geopf.fr/wmts?SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0&LAYER=GEOGRAPHICALGRIDSYSTEMS.PLANIGNV2&STYLE=normal&TILEMATRIXSET=PM_0_19&TILEMATRIX={z}&TILEROW={y}&TILECOL={x}&FORMAT=image/png';
+// IGN et Monde : libres de diffusion, utilisables hors ligne.
+// Topo et CyclOSM : serveurs de bénévoles, affichage en ligne seulement, sans garantie de service.
 const LAYERS = [
-  { id: 'topo', name: 'Topo', tiles: ['a', 'b', 'c'].map(s => `https://${s}.tile.opentopomap.org/{z}/{x}/{y}.png`), max: 17,
-    attr: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>, SRTM · © <a href="https://opentopomap.org">OpenTopoMap</a>' },
-  { id: 'cyclosm', name: 'CyclOSM (vélo)', tiles: ['a', 'b', 'c'].map(sd => `https://${sd}.tile-cyclosm.openstreetmap.fr/cyclosm/{z}/{x}/{y}.png`), max: 20,
-    attr: '<a href="https://www.cyclosm.org">CyclOSM</a> · © <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>' },
   { id: 'ign', name: 'IGN', tiles: [IGN_URL], max: 19, attr: '© <a href="https://www.ign.fr">IGN</a> · Plan IGN' },
   { id: 'monde', name: 'Monde (OpenFreeMap)', vector: true, max: 14 },
-  { id: 'osm', name: 'Plan OSM', tiles: ['https://tile.openstreetmap.org/{z}/{x}/{y}.png'], max: 19,
-    attr: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>' }
+  { id: 'topo', name: 'Topo', tiles: ['a', 'b', 'c'].map(s => `https://${s}.tile.opentopomap.org/{z}/{x}/{y}.png`), max: 17, volunteer: true,
+    attr: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>, SRTM · © <a href="https://opentopomap.org">OpenTopoMap</a>' },
+  { id: 'cyclosm', name: 'CyclOSM (vélo)', tiles: ['a', 'b', 'c'].map(sd => `https://${sd}.tile-cyclosm.openstreetmap.fr/cyclosm/{z}/{x}/{y}.png`), max: 20, volunteer: true,
+    attr: '<a href="https://www.cyclosm.org">CyclOSM</a> · © <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>' }
 ];
 // Carte mondiale OpenFreeMap : gratuite, sans limite, téléchargeable ; légère car vectorielle
 const OFM_STYLE = 'https://tiles.openfreemap.org/styles/liberty';
@@ -237,6 +237,8 @@ async function getOfmTiles() {
   try { const t = (await (await fetch(OFM_TILEJSON)).json()).tiles[0]; if (t) { store.set('ofmTiles', t); return t; } } catch {}
   return store.get('ofmTiles') || 'https://tiles.openfreemap.org/planet/20261004_113936_pt/{z}/{x}/{y}.pbf';
 }
+// « Plan OSM » a été retiré (serveur réservé aux usages non commerciaux) : remplacé par Monde, mêmes données
+if (store.get('layerId') === 'osm') store.set('layerId', 'monde');
 let layerIdx = Math.max(0, LAYERS.findIndex(l => l.id === store.get('layerId')));
 const baseSource = l => ({ type: 'raster', tiles: l.tiles, tileSize: 256, maxzoom: l.max, attribution: l.attr });
 const EMPTY = { type: 'FeatureCollection', features: [] };
@@ -353,8 +355,21 @@ async function setLayer(i, remember = true) {
 $('btnLayer').onclick = () => {
   offlineSwitched = null;
   const next = (layerIdx + 1) % LAYERS.length;
-  setLayer(next); toast('Fond de carte : ' + LAYERS[next].name);
+  setLayer(next); toast('Fond de carte : ' + LAYERS[next].name + (LAYERS[next].volunteer ? ' · service bénévole, parfois lent ou indisponible' : ''), LAYERS[next].volunteer ? 4000 : 2800);
 };
+// Fond bénévole qui ne répond plus : on passe sur IGN (France) ou Monde, sans changer le choix enregistré
+let baseErrs = [];
+map.on('error', e => {
+  const L = LAYERS[layerIdx];
+  if (!L || !L.volunteer || e.sourceId !== 'base' || navigator.onLine === false) return;
+  const now = Date.now(); baseErrs = baseErrs.filter(t => now - t < 20000); baseErrs.push(now);
+  if (baseErrs.length < 8) return;
+  baseErrs = [];
+  const c = map.getCenter(), inFr = c.lng > -5.5 && c.lng < 9.8 && c.lat > 41.2 && c.lat < 51.2;
+  const to = LAYERS.findIndex(l => l.id === (inFr ? 'ign' : 'monde'));
+  setLayer(to, false);
+  toast(`${L.name} ne répond pas : carte ${LAYERS[to].name} à la place`, 4500);
+});
 
 // Sans réseau, on bascule tout seul sur la carte IGN téléchargée, puis on revient au fond choisi
 let offlineSwitched = null;
