@@ -4,7 +4,7 @@
 
 // La page et le code doivent être de la même version. Sinon (page gardée en cache
 // par le téléphone ou par GitHub), on recharge une page fraîche, au plus 3 fois.
-const APP_VERSION = 119;
+const APP_VERSION = 120;
 try {
   const meta = document.querySelector('meta[name="balise-version"]');
   const pageV = meta ? +meta.content : 0;
@@ -734,6 +734,58 @@ function stvUI() {
   $('stvAutoS').textContent = bl ? 'Un message « Strava » apparaît à la fin de la sortie' : 'Sinon : bouton « Mettre sur Strava » dans la fiche de la sortie';
   $('stvStatus').textContent = !on ? 'Non connecté · import manuel possible' : bl ? 'Import manuel (envoi direct refusé sans abonnement)' : 'Connecté' + (store.get('stvAuto') === '1' ? ' · envoi automatique' : ' · envoi à la demande');
 }
+// ---------- Sauvegarde : sorties, traces et réglages dans un fichier, et restauration ----------
+// réglages choisis par l'utilisateur (pas l'état en cours, ni les caches, ni la connexion Strava)
+const BK_KEYS = ['thr', 'voice', 'vib', 'autoRec', 'eco', 'ecoSeen', 'banner', 'theme', 'profile', 'layerId', 'soLayer',
+  'rtFilt', 'npProfOnly', 'showPacks', 'stvAuto', 'recHint'];
+const bkCount = items => {
+  const r = items.filter(isRec).length;
+  const plural = (n, w) => n + ' ' + w + (n > 1 ? 's' : '');
+  return plural(r, 'sortie') + ' et ' + plural(items.length - r, 'trace');
+};
+async function openBackup() {
+  $('backup').hidden = false; $('bkSum').textContent = '…';
+  const items = await listRecent();
+  $('bkSum').textContent = items.length ? 'Sur ce téléphone : ' + bkCount(items) : 'Aucune sortie ni trace sur ce téléphone pour l\'instant.';
+}
+$('btnBackup').onclick = openBackup;
+$('bkClose').onclick = () => { $('backup').hidden = true; };
+$('backup').onclick = e => { if (e.target === $('backup')) $('backup').hidden = true; };
+$('bkSave').onclick = async () => {
+  const items = await listRecent();
+  if (!items.length) { toast('Rien à sauvegarder pour l\'instant'); return; }
+  const settings = {};
+  for (const k of BK_KEYS) { const v = store.get(k); if (v != null && v !== '') settings[k] = v; }
+  const data = { app: 'pisteo', format: 1, version: APP_VERSION, date: new Date().toISOString(), settings, tracks: items };
+  const d = new Date(), pad = n => String(n).padStart(2, '0');
+  const fname = `pisteo-sauvegarde-${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}.json`;
+  const file = new File([JSON.stringify(data)], fname, { type: 'application/json' });
+  try { if (navigator.canShare && navigator.canShare({ files: [file] })) { await navigator.share({ files: [file], title: 'Sauvegarde Pisteo' }); store.set('bkDate', String(Date.now())); return; } }
+  catch (e) { if (e.name === 'AbortError') return; }
+  const a = document.createElement('a'); a.href = URL.createObjectURL(file); a.download = fname;
+  document.body.appendChild(a); a.click(); setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 1000);
+  store.set('bkDate', String(Date.now()));
+  toast('Sauvegarde créée : ' + bkCount(items), 3500);
+};
+$('bkLoad').onclick = () => { $('bkIn').value = ''; $('bkIn').click(); };
+$('bkIn').onchange = async e => {
+  const f = e.target.files && e.target.files[0]; if (!f) return;
+  let data;
+  try { data = JSON.parse(await f.text()); } catch { data = null; }
+  if (!data || data.app !== 'pisteo' || !Array.isArray(data.tracks)) { toast('Ce fichier n\'est pas une sauvegarde Pisteo', 4000); return; }
+  const ok = data.tracks.filter(it => it && typeof it.id === 'string' && typeof it.text === 'string' && /<gpx/i.test(it.text));
+  const have = new Set((await listRecent()).map(it => it.id));
+  const fresh = ok.filter(it => !have.has(it.id));
+  try { for (const it of fresh) await idb('readwrite', st => st.put(it)); }
+  catch { toast('Restauration impossible : stockage plein ou bloqué', 4500); return; }
+  let setChanged = false;
+  if (data.settings && typeof data.settings === 'object')
+    for (const k of BK_KEYS) if (typeof data.settings[k] === 'string' && store.get(k) !== data.settings[k]) { store.set(k, data.settings[k]); setChanged = true; }
+  const msg = fresh.length ? 'Restauré : ' + bkCount(fresh) : 'Tout était déjà sur ce téléphone';
+  if (setChanged) { toast(msg + ' · réglages appliqués, rechargement…', 3000); setTimeout(() => location.reload(), 2500); }
+  else { toast(msg, 4000); openBackup(); }
+};
+
 function openStrava() { stvUI(); $('strava').hidden = false; }
 $('btnStrava').onclick = openStrava;
 $('stvClose').onclick = () => { $('strava').hidden = true; };
@@ -4851,7 +4903,7 @@ if (saved) { try { showTrack(parseGPX(saved)); } catch { drawProfile(); } } else
 checkShared();
 stvReturn(); setTimeout(stvRetry, 8000);
 stvUI();
-const VERSION = APP_VERSION + ' · 12 oct. 2026';
+const VERSION = APP_VERSION + ' · 18 oct. 2026';
 $('note').textContent = (window.isSecureContext ? '' : 'Attention : le GPS ne fonctionne qu\'en HTTPS. ') + 'Version ' + VERSION;
 // Mises à jour : on vérifie à chaque ouverture et on recharge dès qu'une nouvelle version est prête
 // (jamais pendant une navigation ou un enregistrement : on attend la fin)

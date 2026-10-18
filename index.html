@@ -8,13 +8,13 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<meta name="balise-version" content="119">
+<meta name="balise-version" content="120">
 <title>Pisteo</title>
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" href="icon.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
 <link rel="stylesheet" href="vendor/maplibre-gl.css">
-<link rel="stylesheet" href="app.css?v=119">
+<link rel="stylesheet" href="app.css?v=120">
 </head>
 <body>
 <div id="map" aria-label="Carte"></div>
@@ -207,6 +207,10 @@
       <span>Strava<br><small id="stvStatus">Non connecté</small></span>
       <button id="btnStrava" class="btn">Strava</button>
     </div>
+    <div class="row">
+      <span>Sauvegarde<br><small>Tes sorties, traces et réglages dans un fichier</small></span>
+      <button id="btnBackup" class="btn">Sauvegarde</button>
+    </div>
     <p class="note version-line"><span id="note"></span> · <button id="btnRepair" class="linkbtn" title="Recharge l'appli sans toucher à tes traces ni à tes cartes">Réparer l'appli</button></p>
   </div>
 </section>
@@ -266,6 +270,20 @@
   </div>
 </div>
 
+<div id="backup" class="lib" hidden>
+  <div class="lib-panel" role="dialog" aria-label="Sauvegarde">
+    <div class="lib-head">
+      <b>Sauvegarde</b>
+      <button id="bkClose" class="closebtn" aria-label="Fermer"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></svg>Fermer</button>
+    </div>
+    <p class="note">Tes sorties et traces restent sur ce téléphone. Pour ne rien perdre (changement de téléphone, appli désinstallée), garde de temps en temps une sauvegarde : dans ton Drive, par mail ou sur ton ordinateur.</p>
+    <p id="bkSum" class="lib-sum"></p>
+    <button id="bkSave" class="btn go">Créer une sauvegarde</button>
+    <button id="bkLoad" class="btn">Restaurer une sauvegarde…</button>
+    <p class="note">La restauration ajoute les sorties et traces du fichier à celles déjà présentes, sans rien effacer. Les cartes hors ligne et la connexion Strava ne sont pas incluses : il suffit de les refaire.</p>
+    <input type="file" id="bkIn" accept=".json,application/json" hidden>
+  </div>
+</div>
 <div id="strava" class="lib" hidden>
   <div class="lib-panel" role="dialog" aria-label="Strava">
     <div class="lib-head">
@@ -541,6 +559,6 @@
 <div id="toast" class="toast" hidden></div>
 
 <script src="vendor/maplibre-gl.js"></script>
-<script src="app.js?v=119"></script>
+<script src="app.js?v=120"></script>
 </body>
 </html>
