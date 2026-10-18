@@ -4,7 +4,7 @@
 
 // La page et le code doivent être de la même version. Sinon (page gardée en cache
 // par le téléphone ou par GitHub), on recharge une page fraîche, au plus 3 fois.
-const APP_VERSION = 128;
+const APP_VERSION = 129;
 try {
   const meta = document.querySelector('meta[name="balise-version"]');
   const pageV = meta ? +meta.content : 0;
@@ -840,6 +840,29 @@ $('bkIn').onchange = async e => {
   } else bkSay(msg);
 };
 try { const m = sessionStorage.getItem('bkDone'); if (m) { sessionStorage.removeItem('bkDone'); setTimeout(() => toast(m + ' Réglages appliqués.', 4000), 800); } } catch {}
+
+// ---------- Donner mon avis : un e-mail prérempli (pas de serveur) ----------
+const FB_MAIL = 'pisteo.app@gmail.com';
+let fbKind = 'Problème';
+$('btnFeedback').onclick = () => { $('feedback').hidden = false; setTimeout(() => $('fbText').focus(), 200); };
+$('fbClose').onclick = () => { $('feedback').hidden = true; };
+$('feedback').onclick = e => { if (e.target === $('feedback')) $('feedback').hidden = true; };
+$('fbKind').querySelectorAll('button').forEach(b => b.onclick = () => {
+  fbKind = b.dataset.k; $('fbKind').querySelectorAll('button').forEach(x => x.classList.toggle('on', x === b));
+  $('fbText').placeholder = fbKind === 'Problème' ? "Raconte ce qui s'est passé : ce que tu faisais, ce que tu attendais, ce que l'appli a fait…"
+    : fbKind === 'Idée' ? 'Quelle fonction te manque ? Dans quelle situation te servirait-elle ?' : "Qu'est-ce qui te plaît, ou te déplaît ?";
+});
+$('fbSend').onclick = () => {
+  const txt = $('fbText').value.trim();
+  if (!txt) { toast('Écris quelques mots avant d\'envoyer'); return; }
+  const ua = navigator.userAgent, m = ua.match(/Android [\d.]+;\s*([^;)]+)/), installed = matchMedia('(display-mode: standalone)').matches;
+  const info = [`Version : ${VERSION}`, `Appareil : ${m ? m[1].replace(/ Build.*/, '') : (/iPhone|iPad/.test(ua) ? 'iPhone / iPad' : 'ordinateur')}`,
+    `Système : ${(ua.match(/Android [\d.]+|OS [\d_]+/) || ['?'])[0].replace(/_/g, '.')}`, `Navigateur : ${(ua.match(/Chrome\/[\d]+/) || ['?'])[0]}`,
+    `Mode : ${installed ? 'appli installée' : 'navigateur'}`, `Écran : ${screen.width}×${screen.height}`];
+  const body = `${txt}\n\n—\n${info.join('\n')}`;
+  location.href = `mailto:${FB_MAIL}?subject=${encodeURIComponent('Pisteo · ' + fbKind)}&body=${encodeURIComponent(body)}`;
+  setTimeout(() => { $('feedback').hidden = true; $('fbText').value = ''; toast('Merci pour ton retour !', 3500); }, 800);
+};
 
 function openStrava() { stvUI(); $('strava').hidden = false; }
 $('btnStrava').onclick = openStrava;

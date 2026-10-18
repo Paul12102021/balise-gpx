@@ -541,3 +541,7 @@ body.choosing #sheet, body.choosing .fab-col { display: none !important; }
 /* continuité du GPS dans la fiche d'une sortie */
 .so-gps { margin: 4px 0 0; padding: 10px 12px; border-radius: 10px; font-size: 14px; background: var(--line); color: var(--ink); }
 .so-gps.warn { background: var(--warn-bg); color: var(--warn-ink); }
+
+/* donner mon avis */
+.fb-text { width: 100%; box-sizing: border-box; min-height: 130px; padding: 12px; border: 1px solid var(--line); border-radius: 12px; background: var(--panel); color: var(--ink); font: inherit; font-size: 15px; resize: vertical; }
+.fb-text:focus { outline: 2px solid var(--go); outline-offset: 1px; }

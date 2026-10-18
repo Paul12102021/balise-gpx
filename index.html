@@ -8,13 +8,13 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<meta name="balise-version" content="128">
+<meta name="balise-version" content="129">
 <title>Pisteo</title>
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" href="icon.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
 <link rel="stylesheet" href="vendor/maplibre-gl.css">
-<link rel="stylesheet" href="app.css?v=128">
+<link rel="stylesheet" href="app.css?v=129">
 </head>
 <body>
 <div id="map" aria-label="Carte"></div>
@@ -211,6 +211,10 @@
       <span>Sauvegarde<br><small>Tes sorties, traces et réglages dans un fichier</small></span>
       <button id="btnBackup" class="btn">Sauvegarde</button>
     </div>
+    <div class="row">
+      <span>Un souci, une idée ?<br><small>Ton avis aide à améliorer Pisteo</small></span>
+      <button id="btnFeedback" class="btn">Donner mon avis</button>
+    </div>
     <p class="note version-line"><span id="note"></span> · <button id="btnRepair" class="linkbtn" title="Recharge l'appli sans toucher à tes traces ni à tes cartes">Réparer l'appli</button> · <a href="confidentialite.html" target="_blank" rel="noopener" class="linkbtn">Confidentialité</a></p>
   </div>
 </section>
@@ -284,6 +288,18 @@
     <p id="bkMsg" class="fin-msg" role="status" hidden></p>
     <p class="note">La restauration ajoute les sorties et traces du fichier à celles déjà présentes, sans rien effacer. Les cartes hors ligne ne sont pas copiées dans le fichier (trop lourdes), seulement leur liste : après une restauration, « Mes cartes » propose de toutes les retélécharger. La connexion Strava est à refaire.</p>
     <input type="file" id="bkIn" accept=".json,application/json" hidden>
+  </div>
+</div>
+<div id="feedback" class="lib" hidden>
+  <div class="lib-panel" role="dialog" aria-label="Donner mon avis">
+    <div class="lib-head">
+      <b>Donner mon avis</b>
+      <button id="fbClose" class="closebtn" aria-label="Fermer"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></svg>Fermer</button>
+    </div>
+    <div class="seg" id="fbKind"><button data-k="Problème" class="on">Un problème</button><button data-k="Idée">Une idée</button><button data-k="Avis">Un avis</button></div>
+    <textarea id="fbText" class="fb-text" rows="6" placeholder="Raconte ce qui s'est passé : ce que tu faisais, ce que tu attendais, ce que l'appli a fait…"></textarea>
+    <button id="fbSend" class="btn go">Envoyer par e-mail</button>
+    <p class="note">Ton appli de messagerie s'ouvre avec le message prêt. Il contient aussi la version de Pisteo et le modèle de ton téléphone, pour m'aider à reproduire le souci. Rien n'est envoyé sans ton accord.</p>
   </div>
 </div>
 <div id="strava" class="lib" hidden>
@@ -565,6 +581,6 @@
 <div id="toast" class="toast" hidden></div>
 
 <script src="vendor/maplibre-gl.js"></script>
-<script src="app.js?v=128"></script>
+<script src="app.js?v=129"></script>
 </body>
 </html>
