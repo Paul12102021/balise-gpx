@@ -4,7 +4,7 @@
 
 // La page et le code doivent être de la même version. Sinon (page gardée en cache
 // par le téléphone ou par GitHub), on recharge une page fraîche, au plus 3 fois.
-const APP_VERSION = 127;
+const APP_VERSION = 128;
 try {
   const meta = document.querySelector('meta[name="balise-version"]');
   const pageV = meta ? +meta.content : 0;
@@ -611,6 +611,16 @@ function parseRec(text) {
   });
   return out;
 }
+function recGaps(pts) {
+  let n = 0, ms = 0, dist = 0;
+  for (let i = 1; i < pts.length; i++) {
+    const a = pts[i - 1], b = pts[i];
+    if ((a.s || 0) !== (b.s || 0) || !isFinite(a.t) || !isFinite(b.t)) continue; // pause volontaire : pas une coupure
+    const dt = b.t - a.t, d = hav(a, b);
+    if (dt > 45000 && d > 100) { n++; ms += dt; dist += d; }
+  }
+  return { n, ms, dist };
+}
 function recStats(pts) {
   let dist = 0, move = 0, up = 0, down = 0, lo = Infinity, hi = -Infinity, vmax = 0, last = null;
   const segs = [];
@@ -708,6 +718,13 @@ function showSoDetail(it) {
   $('sdMin').textContent = hasE ? fmtM(st.lo) : '–';
   $('sdMaxE').textContent = hasE ? fmtM(st.hi) : '–';
   $('sdProfile').hidden = !hasE;
+  // continuité du GPS : un long silence suivi d'un saut = le téléphone a mis l'appli en pause (écran éteint)
+  const gaps = recGaps(pts);
+  $('sdGps').hidden = false;
+  $('sdGps').className = 'so-gps' + (gaps.n ? ' warn' : '');
+  $('sdGps').textContent = gaps.n
+    ? `⚠️ Enregistrement interrompu ${gaps.n} fois (${fmtDur(gaps.ms / 1000)} sans position, ${fmtDist(gaps.dist)} tracés en ligne droite). Le téléphone a sans doute mis l'appli en pause écran éteint.`
+    : '✓ Enregistrement continu, sans coupure du GPS';
   previewRedraw = () => { drawRecMap($('sdMap'), pts); };
   requestAnimationFrame(() => { previewRedraw && previewRedraw(); if (hasE) drawRecProfile($('sdProfile'), pts); });
   $('sdFollow').onclick = () => { closeSorties(); loadText(it.text, false); store.set('gpx', it.text.length < 4.5e6 ? it.text : ''); setTimeout(() => startNav(), 300); };

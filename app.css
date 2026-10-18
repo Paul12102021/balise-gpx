@@ -537,3 +537,7 @@ body.choosing #sheet, body.choosing .fab-col { display: none !important; }
 /* cartes à retélécharger après une restauration */
 #packRestore { display: flex; flex-direction: column; gap: 10px; }
 #packRestore[hidden] { display: none; }
+
+/* continuité du GPS dans la fiche d'une sortie */
+.so-gps { margin: 4px 0 0; padding: 10px 12px; border-radius: 10px; font-size: 14px; background: var(--line); color: var(--ink); }
+.so-gps.warn { background: var(--warn-bg); color: var(--warn-ink); }
