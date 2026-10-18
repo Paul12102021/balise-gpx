@@ -55,5 +55,11 @@
       ]
     }
   },
-  "id": "./"
+  "id": "./",
+  "categories": [
+    "navigation",
+    "sports",
+    "travel"
+  ],
+  "dir": "ltr"
 }
