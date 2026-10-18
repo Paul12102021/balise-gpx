@@ -4,7 +4,7 @@
 
 // La page et le code doivent être de la même version. Sinon (page gardée en cache
 // par le téléphone ou par GitHub), on recharge une page fraîche, au plus 3 fois.
-const APP_VERSION = 120;
+const APP_VERSION = 121;
 try {
   const meta = document.querySelector('meta[name="balise-version"]');
   const pageV = meta ? +meta.content : 0;
@@ -743,11 +743,12 @@ const bkCount = items => {
   const plural = (n, w) => n + ' ' + w + (n > 1 ? 's' : '');
   return plural(r, 'sortie') + ' et ' + plural(items.length - r, 'trace');
 };
-async function openBackup() {
-  $('backup').hidden = false; $('bkSum').textContent = '…';
+function bkSay(msg) { const m = $('bkMsg'); m.textContent = msg || ''; m.hidden = !msg; }
+async function bkRefresh() {
   const items = await listRecent();
   $('bkSum').textContent = items.length ? 'Sur ce téléphone : ' + bkCount(items) : 'Aucune sortie ni trace sur ce téléphone pour l\'instant.';
 }
+function openBackup() { $('backup').hidden = false; $('bkSum').textContent = '…'; bkSay(''); bkRefresh(); }
 $('btnBackup').onclick = openBackup;
 $('bkClose').onclick = () => { $('backup').hidden = true; };
 $('backup').onclick = e => { if (e.target === $('backup')) $('backup').hidden = true; };
@@ -770,21 +771,29 @@ $('bkSave').onclick = async () => {
 $('bkLoad').onclick = () => { $('bkIn').value = ''; $('bkIn').click(); };
 $('bkIn').onchange = async e => {
   const f = e.target.files && e.target.files[0]; if (!f) return;
+  bkSay('Lecture du fichier…');
   let data;
   try { data = JSON.parse(await f.text()); } catch { data = null; }
-  if (!data || data.app !== 'pisteo' || !Array.isArray(data.tracks)) { toast('Ce fichier n\'est pas une sauvegarde Pisteo', 4000); return; }
+  if (!data || data.app !== 'pisteo' || !Array.isArray(data.tracks)) { bkSay('Ce fichier n\'est pas une sauvegarde Pisteo.'); return; }
   const ok = data.tracks.filter(it => it && typeof it.id === 'string' && typeof it.text === 'string' && /<gpx/i.test(it.text));
   const have = new Set((await listRecent()).map(it => it.id));
   const fresh = ok.filter(it => !have.has(it.id));
+  // tout est déjà là : on ne touche à rien
+  if (!fresh.length) { bkSay('Cette sauvegarde est déjà sur l\'appli : rien à restaurer.'); return; }
   try { for (const it of fresh) await idb('readwrite', st => st.put(it)); }
-  catch { toast('Restauration impossible : stockage plein ou bloqué', 4500); return; }
+  catch { bkSay('Restauration impossible : le stockage du téléphone est plein ou bloqué.'); return; }
   let setChanged = false;
   if (data.settings && typeof data.settings === 'object')
     for (const k of BK_KEYS) if (typeof data.settings[k] === 'string' && store.get(k) !== data.settings[k]) { store.set(k, data.settings[k]); setChanged = true; }
-  const msg = fresh.length ? 'Restauré : ' + bkCount(fresh) : 'Tout était déjà sur ce téléphone';
-  if (setChanged) { toast(msg + ' · réglages appliqués, rechargement…', 3000); setTimeout(() => location.reload(), 2500); }
-  else { toast(msg, 4000); openBackup(); }
+  const msg = 'Restauré : ' + bkCount(fresh) + '.';
+  await bkRefresh();
+  if (setChanged) {
+    bkSay(msg + ' Réglages appliqués, l\'appli redémarre…');
+    try { sessionStorage.setItem('bkDone', msg); } catch {}
+    setTimeout(() => location.reload(), 2500);
+  } else bkSay(msg);
 };
+try { const m = sessionStorage.getItem('bkDone'); if (m) { sessionStorage.removeItem('bkDone'); setTimeout(() => toast(m + ' Réglages appliqués.', 4000), 800); } } catch {}
 
 function openStrava() { stvUI(); $('strava').hidden = false; }
 $('btnStrava').onclick = openStrava;
