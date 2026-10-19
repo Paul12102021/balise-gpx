@@ -4,7 +4,7 @@
 
 // La page et le code doivent être de la même version. Sinon (page gardée en cache
 // par le téléphone ou par GitHub), on recharge une page fraîche, au plus 3 fois.
-const APP_VERSION = 147;
+const APP_VERSION = 148;
 try {
   const meta = document.querySelector('meta[name="balise-version"]');
   const pageV = meta ? +meta.content : 0;
@@ -557,7 +557,10 @@ function boundsOf(ptsList) {
   ptsList.forEach(pts => pts.forEach(p => b.extend([p.lon, p.lat])));
   return b;
 }
+// l'appli montre un autre endroit (trace, carte téléchargée) : on arrête de suivre ma position en aperçu
+function stopFollowOv() { try { if (!nav && followOv) { followOv = false; $('btnCenter').classList.remove('on'); } } catch { /* pas encore initialisé */ } }
 function fitTo(ptsList) {
+  stopFollowOv();
   const sheetH = document.body.classList.contains('nav') ? 110 : $('sheet').offsetHeight;
   const topH = document.body.classList.contains('nav') ? $('navTop').offsetHeight : 64;
   map.fitBounds(boundsOf(ptsList), { padding: { top: topH + 30, bottom: sheetH + 30, left: 40, right: 76 }, bearing: 0, pitch: 0, duration: 700, maxZoom: 16 });
@@ -4672,6 +4675,7 @@ $('zoneGo').onclick = async () => {
   } catch {}
   await downloadPack(pack, z.tiles);
   if ($('zoneGraph').checked && navigator.onLine !== false) await downloadDepGraph(pack, bboxPolys(z.b));
+  stopFollowOv();
   map.fitBounds([[z.b[0], z.b[1]], [z.b[2], z.b[3]]], { padding: 30, duration: 0 });
 };
 
@@ -4777,6 +4781,7 @@ async function renderPacks() {
     const see = document.createElement('button'); see.className = 'btn small'; see.textContent = 'Voir';
     see.onclick = () => {
       $('maps').hidden = true; toggleMore(false, true); // on replie le menu pour voir la carte
+      stopFollowOv();
       if (!$('showPacks').checked) { $('showPacks').checked = true; store.set('showPacks', '1'); drawPacks(); }
       const [w, s, e, n] = p.bbox;
       setTimeout(() => map.fitBounds([[w, s], [e, n]], { padding: { top: 90, bottom: $('sheet').offsetHeight + 20, left: 30, right: 76 }, bearing: 0, pitch: 0, duration: 700 }), 60);
