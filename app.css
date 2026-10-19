@@ -376,7 +376,8 @@ body.zone .hud, body.zone .sheet, body.zone .fab-col { display: none !important;
 .linkbtn { background: none; border: 0; padding: 0; color: var(--muted); font: inherit; text-decoration: underline; cursor: pointer; }
 
 /* réglages ouverts : le panneau monte presque tout en haut pour tout montrer d'un coup */
-body.sheet-open .sheet { max-height: calc(100% - var(--sa-t) - 12px); }
+/* panneau ouvert en grand : il s'arrête sous le bandeau des mesures (pas de chiffres coupés) */
+body.sheet-open .sheet { max-height: calc(100% - var(--hud-h, 0px) - 6px); }
 
 /* ---------- Mes sorties ---------- */
 .lib-panel.tall { max-height: calc(100% - var(--sa-t) - 12px); }

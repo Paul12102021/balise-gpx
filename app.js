@@ -4,7 +4,7 @@
 
 // La page et le code doivent être de la même version. Sinon (page gardée en cache
 // par le téléphone ou par GitHub), on recharge une page fraîche, au plus 3 fois.
-const APP_VERSION = 150;
+const APP_VERSION = 151;
 try {
   const meta = document.querySelector('meta[name="balise-version"]');
   const pageV = meta ? +meta.content : 0;
@@ -5264,6 +5264,7 @@ $('btnDemo').onclick = () => {
 function applyMore(open) {
   $('more').hidden = !open;
   if (!open) $('sheet').scrollTop = 0;
+  try { const h = document.querySelector('.hud').offsetHeight; if (h) document.documentElement.style.setProperty('--hud-h', h + 'px'); } catch {}
   document.body.classList.toggle('sheet-open', open);
   $('btnMore').textContent = open ? 'Réduire' : 'Réglages';
 }
