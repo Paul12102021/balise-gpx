@@ -4,7 +4,7 @@
 
 // La page et le code doivent être de la même version. Sinon (page gardée en cache
 // par le téléphone ou par GitHub), on recharge une page fraîche, au plus 3 fois.
-const APP_VERSION = 151;
+const APP_VERSION = 152;
 try {
   const meta = document.querySelector('meta[name="balise-version"]');
   const pageV = meta ? +meta.content : 0;
@@ -5270,7 +5270,13 @@ function applyMore(open) {
 }
 function moreMotion() {
   return moreMotion.m || (moreMotion.m = sheetMotion($('sheet'), $('more'), applyMore,
-    h => document.documentElement.style.setProperty('--sheet-h', h + 'px')));
+    h => {
+      document.documentElement.style.setProperty('--sheet-h', h + 'px');
+      // assez de place entre le bandeau du haut et le panneau pour la colonne de boutons ?
+      const col = document.querySelector('.fab-col'), hud = document.querySelector('.hud');
+      const room = innerHeight - h - (hud ? hud.offsetHeight : 0) - 24;
+      document.body.classList.toggle('fab-hide', !!col && room < col.offsetHeight);
+    }));
 }
 function toggleMore(open, instant) {
   const want = open === undefined ? $('more').hidden : !!open;
