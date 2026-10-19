@@ -198,7 +198,11 @@
     </div>
     <div class="row">
       <label for="optLang">Langue · Language</label>
-      <select id="optLang"><option value="">Automatique · Auto</option><option value="fr">Français</option><option value="en">English</option></select>
+      <select id="optLang"><option value="">Automatique · Auto</option><option value="fr">Français</option><option value="en">English</option><option value="es">Español</option></select>
+    </div>
+    <div class="row">
+      <label for="optUnits">Unités</label>
+      <select id="optUnits"><option value="">Automatique</option><option value="metric">Kilomètres, mètres</option><option value="imperial">Miles, pieds</option></select>
     </div>
     <div class="row">
       <label for="prof">Je me déplace<br><small>Pour les itinéraires et le temps estimé</small></label>
@@ -528,7 +532,8 @@
       <div class="dl-row"><small id="dlTraceInfo"></small><button id="dlTrace" class="btn">Télécharger</button></div>
     </div>
     <div class="dl-box">
-      <div class="dl-title">Un département entier</div>
+      <div class="dl-title">Un département ou une région</div>
+      <select id="depCountry" aria-label="Pays"></select>
       <select id="depSel" aria-label="Département"><option>Chargement…</option></select>
       <select id="depDetail" aria-label="Niveau de détail">
         <option value="14">Standard (routes, chemins, relief)</option>
@@ -542,7 +547,7 @@
       <small class="note">Cadre la zone voulue sur la carte, puis télécharge-la.</small>
       <div class="row">
         <label for="zoneProv">Carte</label>
-        <select id="zoneProv"><option value="auto">Automatique (IGN en France, Monde ailleurs)</option><option value="ign">IGN (France)</option><option value="ofm">Monde (OpenFreeMap)</option></select>
+        <select id="zoneProv"><option value="auto">Automatique (carte officielle du pays, sinon Monde)</option><option value="ign">IGN (France)</option><option value="ofm">Monde (OpenFreeMap)</option></select>
       </div>
       <label class="dl-check" for="zoneGraph"><input type="checkbox" id="zoneGraph" class="check"><span>Inclure les chemins pour les itinéraires hors connexion</span></label>
       <button id="zoneStart" class="btn">Choisir la zone sur la carte</button>
@@ -555,7 +560,7 @@
     <p id="packEmpty" class="note">Aucune carte téléchargée pour l'instant.</p>
     <div class="row"><label for="showPacks">Montrer ces zones sur la carte</label><input type="checkbox" id="showPacks" class="check"></div>
     <div class="row"><small id="storeInfo"></small><button id="btnClearTiles" class="btn ghost">Tout supprimer</button></div>
-    <p class="note">Carte téléchargée : Plan IGN (France), libre d'utilisation hors ligne. Sans réseau, l'appli passe toute seule sur cette carte. Garde l'écran allumé pendant un téléchargement.</p>
+    <p class="note">Cartes téléchargées : cartes officielles libres (IGN en France, IGN España, basemap.at, IGN Belgique) ou carte Monde ailleurs. Sans réseau, l'appli passe toute seule sur ces cartes. Garde l'écran allumé pendant un téléchargement.</p>
   </div>
 </div>
 
@@ -635,6 +640,7 @@
 
 <script src="vendor/maplibre-gl.js"></script>
 <script src="i18n/en.js?v=134"></script>
+<script src="i18n/es.js?v=134"></script>
 <script src="app.js?v=134"></script>
 </body>
 </html>

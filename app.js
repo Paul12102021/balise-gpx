@@ -47,11 +47,35 @@ function offsetPoint(p, brg, dist) {
 const angDiff = (a, b) => ((b - a + 540) % 360) - 180;
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 const lc = s => s.charAt(0).toLowerCase() + s.slice(1);
-const fmtDist = m => m == null || isNaN(m) ? '–' : (m >= 99950 ? Math.round(m / 1000) + ' km' : m >= 1000 ? (m / 1000).toFixed(m >= 10000 ? 1 : 2).replace('.', ',') + ' km' : (m >= 100 ? Math.round(m / 10) * 10 : Math.round(m)) + ' m');
-const fmtM = m => m == null || isNaN(m) ? '–' : Math.round(m) + ' m';
+// unités : métriques, ou miles / pieds (réglage, ou automatique pour les téléphones réglés en anglais américain)
+const IMP = (() => { let u = null; try { u = localStorage.getItem('units'); } catch {}
+  return u ? u === 'imperial' : /^en-(US|LR)|^my\b/i.test(navigator.language || ''); })();
+const FT = 3.28084, MI = 1609.344;
+const fmtDist = m => m == null || isNaN(m) ? '–' : IMP ? fmtDistImp(m) : (m >= 99950 ? Math.round(m / 1000) + ' km' : m >= 1000 ? (m / 1000).toFixed(m >= 10000 ? 1 : 2).replace('.', ',') + ' km' : (m >= 100 ? Math.round(m / 10) * 10 : Math.round(m)) + ' m');
+function fmtDistImp(m) {
+  const mi = m / MI;
+  if (mi < 0.1) { const f = m * FT; return (f >= 100 ? Math.round(f / 10) * 10 : Math.round(f)) + ' ft'; }
+  return (mi >= 99.95 ? Math.round(mi) : mi.toFixed(mi >= 10 ? 1 : 2).replace('.', ',')) + ' mi';
+}
+const fmtM = m => m == null || isNaN(m) ? '–' : IMP ? Math.round(m * FT) + ' ft' : Math.round(m) + ' m';
+// graduations d'altitude (en mètres) avec leur étiquette dans l'unité choisie
+function eleTicks(lo, hi, steps) {
+  const k = IMP ? FT : 1, st = (IMP ? steps.map(x => x * 5) : steps).find(s => (hi - lo) * k / s <= 4) || 5000, out = [];
+  for (let v = Math.ceil(lo * k / st) * st; v <= hi * k; v += st) out.push([v / k, v + '']);
+  return out;
+}
 const fmtDur = s => { const m = Math.round(s / 60); return m < 60 ? m + ' min' : Math.floor(m / 60) + ' h ' + String(m % 60).padStart(2, '0'); };
 const fmtClock = s => new Date(Date.now() + s * 1000).toLocaleTimeString(LOC, { hour: '2-digit', minute: '2-digit' });
 function speakDist(d) {
+  if (IMP) {
+    const f = d * FT;
+    if (f < 300) return Math.max(30, Math.round(f / 10) * 10) + ' pieds';
+    if (d < 0.2 * MI) return Math.round(f / 50) * 50 + ' pieds';
+    if (d < 0.375 * MI) return 'un quart de mile';
+    const half = d < 10 * MI ? Math.round(d / MI * 2) / 2 : Math.round(d / MI), n = Math.floor(half);
+    if (!n) return 'un demi-mile';
+    return n + (n > 1 ? ' miles' : ' mile') + (half % 1 ? ' et demi' : '');
+  }
   if (d < 100) return Math.max(10, Math.round(d / 10) * 10) + ' mètres';
   if (d < 950) return Math.round(d / 50) * 50 + ' mètres';
   // au-delà : demi-kilomètres, dits comme on les dit (« 1 kilomètre et demi »)
@@ -73,14 +97,16 @@ const store = {
 // Langues : l'appli est écrite en français ; les autres langues traduisent les textes affichés et parlés
 // (dictionnaires dans i18n/<langue>.js : textes exacts, gabarits avec variables, morceaux de phrases)
 // =====================================================================
-const LANGS = { fr: 'Français', en: 'English' };
+const LANGS = { fr: 'Français', en: 'English', es: 'Español' };
 const LANG = (() => {
   const want = store.get('lang');
   if (want && LANGS[want]) return want;
   const nav = (navigator.languages || [navigator.language || 'fr']).map(l => l.slice(0, 2).toLowerCase());
   return nav.find(l => LANGS[l]) || (nav[0] === 'fr' ? 'fr' : 'en');
 })();
-const LOC = { fr: 'fr-FR', en: 'en-GB' }[LANG] || 'fr-FR';
+const NAVL = navigator.language || '';
+const LOC = LANG === 'fr' ? 'fr-FR' : NAVL.slice(0, 2).toLowerCase() === LANG && NAVL.length > 2 ? NAVL : { en: 'en-GB', es: 'es-ES' }[LANG] || 'fr-FR';
+const US = /^en-US/i.test(LOC); // orthographe américaine (meter, color…)
 const DICT = LANG !== 'fr' && window.I18N && window.I18N[LANG] || null;
 const trCache = new Map(), trMiss = new Set();
 function tr(s) {
@@ -97,7 +123,9 @@ function tr(s) {
     if (/[àâçéèêëîïôûùüœ]|\b(le|la|les|des|du|une?|et|pour|sur|avec|sans|dans|ton|ta|tes)\b/i.test(out)) trMiss.add(core);
     else if (!hit && /[a-z]{3}/i.test(core)) trMiss.add(core);
   }
-  out = lead + out.replace(/(\d),(\d{1,2})(?!\d)/g, '$1.$2') + tail;
+  if (DICT.decimal !== ',') out = out.replace(/(\d),(\d{1,2})(?!\d)/g, '$1.$2');
+  if (US) out = out.replace(/metre/g, 'meter').replace(/Metre/g, 'Meter').replace(/colour/g, 'color').replace(/centre/g, 'center').replace(/Licence/g, 'License').replace(/licence/g, 'license');
+  out = lead + out + tail;
   if (trCache.size > 3000) trCache.clear();
   trCache.set(s, out); return out;
 }
@@ -288,8 +316,21 @@ function infoAt(along) {
 const IGN_URL = 'https://data.geopf.fr/wmts?SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0&LAYER=GEOGRAPHICALGRIDSYSTEMS.PLANIGNV2&STYLE=normal&TILEMATRIXSET=PM_0_19&TILEMATRIX={z}&TILEROW={y}&TILECOL={x}&FORMAT=image/png';
 // IGN et Monde : libres de diffusion, utilisables hors ligne.
 // Topo et CyclOSM : serveurs de bénévoles, affichage en ligne seulement, sans garantie de service.
+// Cartes officielles libres et téléchargeables, chacune dans son pays : le premier fond prend celle du pays affiché
+const NAT = {
+  ign: { name: 'IGN', url: IGN_URL, max: 19, kb: 20, attr: '© <a href="https://www.ign.fr">IGN</a> · Plan IGN' },
+  es: { name: 'IGN España', max: 17, kb: 18, attr: 'MTN CC BY 4.0 <a href="https://www.ign.es">ign.es</a>',
+    url: 'https://www.ign.es/wmts/mapa-raster?layer=MTN&style=default&tilematrixset=GoogleMapsCompatible&Service=WMTS&Request=GetTile&Version=1.0.0&Format=image/jpeg&TileMatrix={z}&TileCol={x}&TileRow={y}' },
+  at: { name: 'basemap.at', max: 19, kb: 60, attr: 'Grundkarte <a href="https://basemap.at">basemap.at</a> (CC BY 4.0)',
+    url: 'https://mapsneu.wien.gv.at/basemap/geolandbasemap/normal/google3857/{z}/{y}/{x}.png' },
+  be: { name: 'IGN Belgique', max: 17, kb: 17, attr: '© <a href="https://www.ngi.be">IGN-NGI</a> · CartoWeb',
+    url: 'https://cartoweb.wmts.ngi.be/1.0.0/topo/default/3857/{z}/{y}/{x}.png' },
+};
+let natCur = NAT[store.get('natCur')] ? store.get('natCur') : 'ign', natShapes = null; // dernier pays affiché : bon fond dès l'ouverture
+const natAt = (lon, lat) => { if (!natShapes) return null; for (const k in natShapes) if (inPolys(lon, lat, natShapes[k])) return k; return null; };
+const natTileUrl = prov => (z, x, y) => NAT[prov].url.replace('{z}', z).replace('{x}', x).replace('{y}', y);
 const LAYERS = [
-  { id: 'ign', name: 'IGN', tiles: [IGN_URL], max: 19, attr: '© <a href="https://www.ign.fr">IGN</a> · Plan IGN' },
+  { id: 'ign', get name() { return NAT[natCur].name; }, get tiles() { return [NAT[natCur].url]; }, get max() { return NAT[natCur].max; }, get attr() { return NAT[natCur].attr; } },
   { id: 'monde', name: 'Monde (OpenFreeMap)', vector: true, max: 14 },
   { id: 'topo', name: 'Topo', tiles: ['a', 'b', 'c'].map(s => `https://${s}.tile.opentopomap.org/{z}/{x}/{y}.png`), max: 17, volunteer: true,
     attr: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>, SRTM · © <a href="https://opentopomap.org">OpenTopoMap</a>' },
@@ -338,6 +379,20 @@ const map = new maplibregl.Map({
 map.addControl(new maplibregl.AttributionControl({ compact: true }), 'bottom-left');
 map.on('moveend', () => { const c = map.getCenter(); store.set('view', JSON.stringify({ lat: +c.lat.toFixed(5), lon: +c.lng.toFixed(5), z: +map.getZoom().toFixed(1) })); });
 map.touchZoomRotate.enableRotation();
+// fond officiel : on suit le pays au centre de la carte (IGN en France, IGN España en Espagne…)
+function natFollow() {
+  const c = map.getCenter(), k = natAt(c.lng, c.lat) || (natShapes ? 'ign' : natCur);
+  if (k === natCur) return;
+  const prev = natCur; natCur = k;
+  try {
+    if (layerIdx === 0 && map.getSource('base')) { removeBase(); map.addSource('base', baseSource(LAYERS[0])); map.addLayer({ id: 'base', type: 'raster', source: 'base' }, map.getLayer(baseBefore()) ? baseBefore() : undefined); }
+  } catch (e) { natCur = prev; if (!map.getSource('base')) try { map.addSource('base', baseSource(LAYERS[0])); map.addLayer({ id: 'base', type: 'raster', source: 'base' }); } catch {} throw e; }
+  store.set('natCur', k);
+}
+// sans attendre la fin du chargement des tuiles (l'évènement « load » peut tarder)
+const natTry = (n = 0) => { try { natFollow(); } catch { if (n < 50) setTimeout(() => natTry(n + 1), 200); } };
+fetch('regions/countries.json').then(r => r.json()).then(j => { natShapes = j; natTry(); }).catch(() => {});
+map.on('moveend', () => { if (natShapes) natFollow(); });
 
 const ready = new Promise(res => map.on('load', res));
 const COL = { track: cssVar('--track') || '#E85A0C', done: cssVar('--done') || '#A9B3A5', me: cssVar('--me') || '#1E6FD9', rec: cssVar('--rec') || '#C2410C' };
@@ -720,7 +775,7 @@ function recStats(pts) {
   const ts = pts.map(p => p.t).filter(isFinite);
   return { dist, move, total: ts.length > 1 ? ts[ts.length - 1] - ts[0] : 0, up, down, lo: isFinite(lo) ? lo : null, hi: isFinite(hi) ? hi : null, vmax, start: ts[0] || null };
 }
-const kmh = v => v.toFixed(1).replace('.', ',') + ' km/h';
+const kmh = v => (IMP ? v / 1.609344 : v).toFixed(1).replace('.', ',') + (IMP ? ' mph' : ' km/h');
 // vélo ou à pied : gardé à l'enregistrement ; pour les anciennes sorties, deviné d'après la vitesse
 const ICON_BIKE = '<svg viewBox="0 0 24 24"><circle cx="5.5" cy="16.5" r="3.5"/><circle cx="18.5" cy="16.5" r="3.5"/><path d="M5.5 16.5 9 9h6l3.5 7.5M9 9 12 16.5h1.5L15 9M8 6h3"/></svg>';
 const ICON_FOOT = '<svg viewBox="0 0 24 24"><circle cx="13" cy="4" r="2"/><path d="M8 21l3-7 3 3v4M11 14l1-5-3 2-1 3M12 9l3 3h3"/></svg>';
@@ -863,7 +918,7 @@ $('bkSave').onclick = async () => {
   const items = await listRecent();
   // les cartes : seulement leur description (pas les images), pour pouvoir les retélécharger
   const packs = (await listPacks()).filter(p => Array.isArray(p.tiles) && p.tiles.length).map(p => ({
-    id: p.id, kind: p.kind, name: p.name, detail: p.detail, code: p.code, prov: p.prov, bbox: p.bbox, line: p.line,
+    id: p.id, kind: p.kind, name: p.name, detail: p.detail, code: p.code, cc: p.cc, prov: p.prov, bbox: p.bbox, line: p.line,
     tiles: p.tiles, count: p.tiles.length, graphWanted: !!(p.graph || p.graphWanted) }));
   if (!items.length && !packs.length) { toast('Rien à sauvegarder pour l\'instant'); return; }
   const settings = {};
@@ -1167,9 +1222,8 @@ function drawRecProfile(cv, pts) {
   const pad = Math.max(10, (hi - lo) * .1); lo -= pad; hi += pad;
   const L0 = 36, h = H - 20, w = W - L0 - 4, X = d => L0 + d / tot * w, Y = e => 4 + (1 - (e - lo) / (hi - lo)) * (h - 4);
   ctx.font = '11px system-ui, sans-serif'; ctx.fillStyle = cssVar('--muted'); ctx.strokeStyle = cssVar('--line'); ctx.lineWidth = 1;
-  const step = [10, 20, 50, 100, 200, 500, 1000].find(s => (hi - lo) / s <= 4) || 1000;
   ctx.textAlign = 'right'; ctx.textBaseline = 'middle';
-  for (let v = Math.ceil(lo / step) * step; v <= hi; v += step) { const y = Math.round(Y(v)) + .5; ctx.beginPath(); ctx.moveTo(L0, y); ctx.lineTo(W, y); ctx.stroke(); ctx.fillText(v + '', L0 - 4, y); }
+  for (const [v, lab] of eleTicks(lo, hi, [10, 20, 50, 100, 200, 500, 1000])) { const y = Math.round(Y(v)) + .5; ctx.beginPath(); ctx.moveTo(L0, y); ctx.lineTo(W, y); ctx.stroke(); ctx.fillText(lab, L0 - 4, y); }
   ctx.textBaseline = 'bottom'; ctx.textAlign = 'left'; ctx.fillText('0', L0, H); ctx.textAlign = 'right'; ctx.fillText(fmtDist(tot), W, H);
   const path = new Path2D(); let first = true;
   pts.forEach((p, i) => { if (p.ele == null) return; const x = X(D[i]), y = Y(p.ele); first ? path.moveTo(x, y) : path.lineTo(x, y); first = false; });
@@ -1752,7 +1806,7 @@ const voiceRate = 1, voicePitch = 1.02;
 const frVoices = () => { try { return speechSynthesis.getVoices().filter(v => v.lang.slice(0, 2).toLowerCase() === LANG); } catch { return []; } };
 // la plus naturelle d'abord (voix « neurales » quand le téléphone en a), en France, et toujours utilisable hors ligne
 function pickVoice() {
-  const vs = frVoices(), main = LANG === 'fr' ? /fr[-_]FR/i : /en[-_](GB|US)/i, fr = vs.filter(v => main.test(v.lang));
+  const vs = frVoices(), main = { fr: /fr[-_]FR/i, en: US ? /en[-_]US/i : /en[-_]GB/i, es: /es[-_]ES/i }[LANG] || /./, fr = vs.filter(v => main.test(v.lang));
   const nice = v => /neural|natural|enhanced|premium|wavenet|studio|amélior|naturel/i.test(v.name);
   return fr.find(v => nice(v) && v.localService) || fr.find(v => v.localService && v.default) || fr.find(v => v.localService)
     || fr.find(nice) || fr[0] || vs[0] || null;
@@ -1946,7 +2000,7 @@ $('thr').value = String(threshold);
 $('thr').onchange = e => {
   threshold = +e.target.value; store.set('thr', threshold);
   if (!threshold && isOff) { isOff = false; offCount = 0; clearRejoin(); guidance(); }
-  toast(threshold ? `Alerte au-delà de ${threshold} m de la trace` : 'Alerte hors trace désactivée');
+  toast(threshold ? `Alerte au-delà de ${fmtM(threshold)} de la trace` : 'Alerte hors trace désactivée');
 };
 const thrRef = () => threshold || 50; // distance « sur la trace » quand l'alerte est coupée
 $('prof').value = profile;
@@ -1971,6 +2025,12 @@ function applyTheme(t) {
 $('optTheme').value = store.get('theme') || 'auto';
 $('optLang').value = store.get('lang') || '';
 $('optLang').onchange = e => { store.set('lang', e.target.value); location.reload(); };
+$('optUnits').value = store.get('units') || '';
+$('optUnits').onchange = e => { store.set('units', e.target.value); location.reload(); };
+if (IMP) { // libellés en pieds / mph
+  document.querySelector('#speed span').textContent = 'mph';
+  $('thr').querySelectorAll('option').forEach(o => { if (+o.value) o.textContent = Math.round(o.value * FT / 10) * 10 + ' ft'; });
+}
 $('optTheme').onchange = e => { store.set('theme', e.target.value); applyTheme(e.target.value); };
 try { matchMedia('(prefers-color-scheme: dark)').addEventListener('change', refreshColors); } catch {}
 $('autoRec').checked = store.get('autoRec') === '1';
@@ -2461,10 +2521,11 @@ function lpUI() {
   $('lpFromMe').classList.toggle('on', !loopCfg.from); $('lpFromMap').classList.toggle('on', !!loopCfg.from);
   $('lpFromTxt').textContent = loopCfg.from ? `Point choisi (${loopCfg.from.lat.toFixed(4)}, ${loopCfg.from.lon.toFixed(4)}) · touche « Un point sur la carte » pour en changer` : (me ? 'Position GPS actuelle' : 'La position GPS sera recherchée');
   $('lpByKm').classList.toggle('on', !loopCfg.byTime); $('lpByTime').classList.toggle('on', loopCfg.byTime);
-  $('lpUnit').textContent = loopCfg.byTime ? 'min' : 'km';
-  const def = loopCfg.byTime ? (bike ? 90 : 60) : (bike ? 30 : 8);
+  $('lpUnit').textContent = loopCfg.byTime ? 'min' : IMP ? 'mi' : 'km';
+  const def = loopCfg.byTime ? (bike ? 90 : 60) : IMP ? (bike ? 20 : 5) : (bike ? 30 : 8);
   if (loopCfg.val == null) $('lpVal').value = def;
-  const q = loopCfg.byTime ? [[30, '30 min'], [60, '1 h'], [90, '1 h 30'], [120, '2 h'], [180, '3 h']] : (bike ? [[15, '15 km'], [30, '30 km'], [50, '50 km'], [80, '80 km']] : [[5, '5 km'], [8, '8 km'], [12, '12 km'], [20, '20 km']]);
+  const q = loopCfg.byTime ? [[30, '30 min'], [60, '1 h'], [90, '1 h 30'], [120, '2 h'], [180, '3 h']] : IMP ? (bike ? [[10, '10 mi'], [20, '20 mi'], [30, '30 mi'], [50, '50 mi']] : [[3, '3 mi'], [5, '5 mi'], [8, '8 mi'], [12, '12 mi']])
+    : (bike ? [[15, '15 km'], [30, '30 km'], [50, '50 km'], [80, '80 km']] : [[5, '5 km'], [8, '8 km'], [12, '12 km'], [20, '20 km']]);
   $('lpQuick').innerHTML = '';
   for (const [v, l] of q) { const b = document.createElement('button'); b.textContent = l; b.onclick = () => { $('lpVal').value = v; loopCfg.val = v; }; $('lpQuick').appendChild(b); }
 }
@@ -2551,7 +2612,7 @@ async function makeLoop() {
     if (!pos) { toast('Position GPS introuvable : choisis un point de départ sur la carte.', 5000); openLoop(); return; }
     start = { lat: pos.lat, lon: pos.lon };
   }
-  const sp = lpSpeed(), target = loopCfg.byTime ? loopCfg.val * 60 : loopCfg.val * 1000; // secondes ou mètres
+  const sp = lpSpeed(), target = loopCfg.byTime ? loopCfg.val * 60 : loopCfg.val * (IMP ? MI : 1000); // secondes ou mètres
   const measure = p => loopCfg.byTime ? loopEst(p) : p.total;
   // première estimation du rayon : une boucle routée fait environ 7 fois le rayon
   let dist0 = loopCfg.byTime ? loopCfg.val / 60 * sp.v * 1000 * 0.85 : target;
@@ -2593,7 +2654,7 @@ function showLoop(pts) {
   loadText(text, false); store.set('gpx', text);
   const est = loopEst(p);
   $('lbTitle').textContent = name;
-  $('lbSub').textContent = `${p.hasEle ? 'D+ ' + fmtM(p.totalUp) + ' · ' : ''}environ ${fmtDur(est)}` + (loopCfg.byTime ? ` (demandé : ${fmtDur(loopCfg.val * 60)})` : ` (demandé : ${loopCfg.val} km)`);
+  $('lbSub').textContent = `${p.hasEle ? 'D+ ' + fmtM(p.totalUp) + ' · ' : ''}environ ${fmtDur(est)}` + (loopCfg.byTime ? ` (demandé : ${fmtDur(loopCfg.val * 60)})` : ` (demandé : ${loopCfg.val} ${IMP ? 'mi' : 'km'})`);
   $('lbKeep').textContent = 'Garder'; $('lbKeep').disabled = false;
   $('loopBar').hidden = false;
   // toute la boucle visible au-dessus du panneau et de la barre de proposition
@@ -3439,7 +3500,7 @@ function rtMiniProfile(cv, p) {
   const pad = Math.max(10, (hi - lo) * .1, (40 - (hi - lo)) / 2); const lo2 = lo - pad, hi2 = hi + pad; // au moins 40 m d'échelle
   const L0 = 34, B = 14, w = W - L0 - 2, h = H - B - 2;
   const X = d => L0 + d / p.total * w, Y = e => 2 + (1 - (e - lo2) / (hi2 - lo2)) * h;
-  ctx.textAlign = 'right'; ctx.fillText(Math.round(hi) + ' m', L0 - 4, Y(hi)); if (Y(lo) - Y(hi) > 14) ctx.fillText(Math.round(lo) + ' m', L0 - 4, Y(lo));
+  ctx.textAlign = 'right'; ctx.fillText(fmtM(hi), L0 - 4, Y(hi)); if (Y(lo) - Y(hi) > 14) ctx.fillText(fmtM(lo), L0 - 4, Y(lo));
   ctx.textBaseline = 'bottom'; ctx.textAlign = 'left'; ctx.fillText('0', L0, H); ctx.textAlign = 'right'; ctx.fillText(fmtDist(p.total), W, H);
   const col = cssVar('--go') || '#2f6b4f', path = new Path2D(); let first = true;
   const stride = Math.max(1, Math.floor(n / (w * 2)));
@@ -3877,7 +3938,7 @@ function updateStats() {
     $('nbRem').textContent = fmtDist(freeD); $('nbL2').textContent = 'parcourus';
     $('nbUp').textContent = fmtDur((Date.now() - navStartT) / 1000); $('nbL3').textContent = 'durée';
     $('nbBar').style.width = '0%';
-    const sp = me && me.speed != null && !isNaN(me.speed) ? me.speed * 3.6 : null;
+    const sp = me && me.speed != null && !isNaN(me.speed) ? me.speed * (IMP ? 2.23694 : 3.6) : null;
     $('spVal').textContent = sp == null ? '–' : (sp < 10 ? sp.toFixed(1).replace('.', ',') : Math.round(sp));
   }
   if (nav && info) {
@@ -3888,7 +3949,7 @@ function updateStats() {
     $('nbUp').textContent = track.hasEle ? fmtM(info.up) : '–';
     ['nbEta', 'nbRem', 'nbUp'].forEach(fitStat);
     $('nbBar').style.width = clamp(doneInfo().along / track.total, 0, 1) * 100 + '%';
-    const sp = me && me.speed != null && !isNaN(me.speed) ? me.speed * 3.6 : null;
+    const sp = me && me.speed != null && !isNaN(me.speed) ? me.speed * (IMP ? 2.23694 : 3.6) : null;
     $('spVal').textContent = sp == null ? '–' : (sp < 10 ? sp.toFixed(1).replace('.', ',') : Math.round(sp));
   }
 }
@@ -3913,10 +3974,9 @@ function drawProfileOn(cv) {
   const pad = Math.max(20, (hi - lo) * .08); lo -= pad; hi += pad;
   const L0 = 38, B = 16, w = W - L0 - 4, h = H - B - 4;
   const X = d => L0 + d / track.total * w, Y = e => 4 + (1 - (e - lo) / (hi - lo)) * h;
-  const step = [10, 20, 50, 100, 200, 250, 500, 1000].find(s => (hi - lo) / s <= 4) || 1000;
   ctx.strokeStyle = cssVar('--line'); ctx.lineWidth = 1; ctx.textAlign = 'right'; ctx.textBaseline = 'middle';
-  for (let v = Math.ceil(lo / step) * step; v <= hi; v += step) {
-    const y = Math.round(Y(v)) + .5; ctx.beginPath(); ctx.moveTo(L0, y); ctx.lineTo(W, y); ctx.stroke(); ctx.fillText(v + '', L0 - 4, y);
+  for (const [v, lab] of eleTicks(lo, hi, [10, 20, 50, 100, 200, 250, 500, 1000])) {
+    const y = Math.round(Y(v)) + .5; ctx.beginPath(); ctx.moveTo(L0, y); ctx.lineTo(W, y); ctx.stroke(); ctx.fillText(lab, L0 - 4, y);
   }
   ctx.textBaseline = 'bottom'; ctx.textAlign = 'left'; ctx.fillText('0', L0, H);
   ctx.textAlign = 'right'; ctx.fillText(fmtDist(track.total), W, H);
@@ -3967,7 +4027,7 @@ function updateNavMore() {
     $('npDone').textContent = fmtDist(d);
     $('npTimeL').textContent = rec ? 'Temps (sortie)' : 'Durée';
     $('npTime').textContent = el > 0 ? fmtDur(el) : '–';
-    $('npAvg').textContent = el > 60 ? (d / el * 3.6).toFixed(1).replace('.', ',') + ' km/h' : '–';
+    $('npAvg').textContent = el > 60 ? kmh(d / el * 3.6) : '–';
     $('npEle').textContent = me && me.ele != null ? fmtM(me.ele) : '–';
     return;
   }
@@ -3991,7 +4051,7 @@ function updateNavMore() {
   // temps et vitesse de la sortie enregistrée (hors pauses)
   const el = actState === 'idle' ? 0 : actElapsed() / 1000;
   $('npTime').textContent = el > 0 ? fmtDur(el) : '–';
-  $('npAvg').textContent = el > 60 ? (act.d / el * 3.6).toFixed(1).replace('.', ',') + ' km/h' : '–';
+  $('npAvg').textContent = el > 60 ? kmh(act.d / el * 3.6) : '–';
   $('npEle').textContent = me && me.ele != null ? fmtM(me.ele) : (pr && track.ele[pr.idx] != null ? '≈ ' + fmtM(track.ele[pr.idx]) : '–');
   if (Date.now() - navMoreT > 2000) { navMoreT = Date.now(); drawProfileOn($('navProfile')); }
 }
@@ -4097,7 +4157,7 @@ function addRecPoint(p) {
 if (rec.length) drawRec();
 
 function actName() { const d = new Date(act.start || (rec[0] && rec[0].t) || Date.now()); const day = d.toLocaleDateString(LOC, { day: 'numeric', month: 'long' }), hm = d.toLocaleTimeString(LOC, { hour: '2-digit', minute: '2-digit' });
-  return LANG === 'fr' ? `Sortie du ${day} à ${hm.replace(':', 'h')}` : `Outing on ${day} at ${hm}`; }
+  return LANG === 'fr' ? `Sortie du ${day} à ${hm.replace(':', 'h')}` : LANG === 'es' ? `Salida del ${day} a las ${hm}` : `Outing on ${day} at ${hm}`; }
 function toGPX(name) {
   const esc = s => s.replace(/[<&>]/g, c => ({ '<': '&lt;', '&': '&amp;', '>': '&gt;' }[c]));
   // chaque reprise après une pause devient un segment à part (trkseg) : la pause n'est pas comptée
@@ -4122,7 +4182,7 @@ function openFinish() {
   const el = actElapsed() / 1000;
   $('finDist').textContent = fmtDist(act.d);
   $('finTime').textContent = fmtDur(el);
-  $('finAvg').textContent = el > 30 ? (act.d / el * 3.6).toFixed(1).replace('.', ',') + ' km/h' : '–';
+  $('finAvg').textContent = el > 30 ? kmh(act.d / el * 3.6) : '–';
   $('finUp').textContent = rec.some(p => p.ele != null) ? fmtM(recUp()) : '–';
   $('finTitle').textContent = actName();
   $('finDelete').textContent = 'Supprimer cette sortie'; $('finDelete').dataset.armed = '';
@@ -4203,7 +4263,7 @@ function updateActStats() {
   if (actState === 'idle') return;
   const el = actElapsed() / 1000;
   $('actStats').textContent = actState === 'waiting' ? 'Le chrono démarrera dès que la position est précise'
-    : `${fmtDist(act.d)} · ${fmtDur(el)}` + (el > 60 ? ` · ${(act.d / el * 3.6).toFixed(1).replace('.', ',')} km/h` : '');
+    : `${fmtDist(act.d)} · ${fmtDur(el)}` + (el > 60 ? ` · ${kmh(act.d / el * 3.6)}` : '');
 }
 setInterval(() => { if (actState === 'on') updateActStats(); }, 5000);
 if (actState === 'on') { act.since = act.since || Date.now(); setTimeout(startGPS, 0); }
@@ -4272,26 +4332,54 @@ function polyTiles(polys, zmax) {
   return out;
 }
 
-// ---------- départements ----------
-let deps = null;
+// ---------- départements et régions des pays qui ont une carte officielle libre ----------
+// pour ajouter un pays : sa carte dans NAT, ses régions (code, nom, names, polys) dans regions/<pays>.json
+const COUNTRIES = [
+  { id: 'fr', nat: 'ign', name: 'France', file: 'departements.json' },
+  { id: 'es', nat: 'es', name: 'Espagne', file: 'regions/es.json' },
+  { id: 'at', nat: 'at', name: 'Autriche', file: 'regions/at.json' },
+  { id: 'be', nat: 'be', name: 'Belgique', file: 'regions/be.json' },
+];
+const ccOf = id => COUNTRIES.find(c => c.id === id) || COUNTRIES[0];
+const regCache = {};
+async function loadRegs(cc) {
+  if (!regCache[cc]) regCache[cc] = fetch(ccOf(cc).file).then(r => r.json()).catch(e => { delete regCache[cc]; throw e; });
+  return regCache[cc];
+}
+const regName = d => d.names ? (d.names[LANG] || d.nom) : `${d.code} · ${d.nom}`;
+async function packRegion(p) { try { return (await loadRegs(p.cc || 'fr')).find(x => x.code === p.code) || null; } catch { return null; } }
+let deps = null, regs = null, regCc = 'fr';
 async function loadDeps() {
-  if (deps) return deps;
-  const r = await fetch('departements.json');
-  deps = await r.json();
-  const sel = $('depSel'); sel.innerHTML = '';
-  deps.forEach((d, i) => { const o = document.createElement('option'); o.value = i; o.textContent = `${d.code} · ${d.nom}`; sel.appendChild(o); });
-  // présélection : le département où l'on se trouve, sinon celui au centre de la carte
-  const c = me ? { lon: me.lon, lat: me.lat } : (() => { const m = map.getCenter(); return { lon: m.lng, lat: m.lat }; })();
-  const here = deps.findIndex(d => inPolys(c.lon, c.lat, d.polys));
-  const saved = store.get('depIdx');
-  sel.value = String(here >= 0 ? here : saved != null ? saved : 0);
+  if (!deps) deps = await loadRegs('fr');
+  if (!$('depCountry').options.length) {
+    COUNTRIES.forEach(c => { const o = document.createElement('option'); o.value = c.id; o.textContent = c.name; $('depCountry').appendChild(o); });
+    // présélection : le pays où l'on se trouve (ou au centre de la carte), sinon le dernier choisi
+    const c = me ? { lon: me.lon, lat: me.lat } : (() => { const m = map.getCenter(); return { lon: m.lng, lat: m.lat }; })();
+    const nat = natAt(c.lon, c.lat), here = COUNTRIES.find(x => x.nat === nat);
+    regCc = here ? here.id : ccOf(store.get('depCc') || 'fr').id;
+    $('depCountry').value = regCc;
+    await fillRegs(c);
+  }
   return deps;
+}
+async function fillRegs(c) {
+  regs = await loadRegs(regCc);
+  const sel = $('depSel'); sel.innerHTML = '';
+  const order = regs.map((d, i) => i);
+  if (regCc !== 'fr') order.sort((a, b) => regName(regs[a]).localeCompare(regName(regs[b]), LOC));
+  order.forEach(i => { const o = document.createElement('option'); o.value = i; o.textContent = regName(regs[i]); sel.appendChild(o); });
+  c = c || (me ? { lon: me.lon, lat: me.lat } : (() => { const m = map.getCenter(); return { lon: m.lng, lat: m.lat }; })());
+  const here = regs.findIndex(d => inPolys(c.lon, c.lat, d.polys));
+  const saved = store.get('depIdx:' + regCc) ?? (regCc === 'fr' ? store.get('depIdx') : null);
+  sel.value = String(here >= 0 ? here : saved != null && regs[+saved] ? saved : order[0]);
 }
 
 // ---------- panneau « Cartes hors ligne » ----------
 let depTilesCache = { key: '', tiles: [] };
+const provKB = prov => prov === 'ofm' ? OFM_KB : prov === 'ign' || !NAT[prov] ? tileKB : NAT[prov].kb;
+const provName = prov => prov === 'ofm' ? 'Monde' : NAT[prov] ? NAT[prov].name : 'IGN';
 function currentDepTiles() {
-  const d = deps[+$('depSel').value], z = +$('depDetail').value, key = d.code + ':' + z;
+  const d = regs[+$('depSel').value], z = Math.min(+$('depDetail').value, NAT[ccOf(regCc).nat].max), key = regCc + ':' + d.code + ':' + z;
   if (depTilesCache.key !== key) depTilesCache = { key, tiles: polyTiles(d.polys, z) };
   return { d, z, tiles: depTilesCache.tiles };
 }
@@ -4301,9 +4389,9 @@ function updateOfflineInfo() {
     $('dlTraceInfo').textContent = `${track.name} · ≈ ${n.toLocaleString('fr-FR')} tuiles · ~${fmtMo(n * tileKB)}`;
     $('dlTrace').disabled = false;
   } else { $('dlTraceInfo').textContent = 'Ouvre d\'abord une trace GPX.'; $('dlTrace').disabled = true; }
-  if (deps) {
+  if (regs) {
     const { d, tiles } = currentDepTiles(), gMo = depGraphMo(d.polys);
-    $('dlDepInfo').textContent = `Carte ≈ ${tiles.length.toLocaleString('fr-FR')} tuiles · ~${fmtMo(tiles.length * tileKB)}` + ($('depGraph').checked ? ` · chemins ~${gMo}${MO}` : '');
+    $('dlDepInfo').textContent = `Carte ≈ ${tiles.length.toLocaleString('fr-FR')} tuiles · ~${fmtMo(tiles.length * provKB(ccOf(regCc).nat))}` + ($('depGraph').checked ? ` · chemins ~${gMo}${MO}` : '');
     $('depGraphMo').textContent = `~${gMo}${MO}`;
   }
 }
@@ -4334,7 +4422,11 @@ $('btnRepair').onclick = async () => {
 };
 $('mapsClose').onclick = () => $('maps').hidden = true;
 $('maps').onclick = e => { if (e.target === $('maps')) $('maps').hidden = true; };
-$('depSel').onchange = () => { store.set('depIdx', $('depSel').value); updateOfflineInfo(); };
+$('depSel').onchange = () => { store.set('depIdx:' + regCc, $('depSel').value); updateOfflineInfo(); };
+$('depCountry').onchange = async () => {
+  regCc = $('depCountry').value; store.set('depCc', regCc); $('dlDepInfo').textContent = 'Chargement…';
+  try { await fillRegs(); updateOfflineInfo(); } catch { $('dlDepInfo').textContent = 'Liste des départements indisponible.'; }
+};
 $('depDetail').onchange = updateOfflineInfo;
 $('showPacks').onchange = e => { store.set('showPacks', e.target.checked ? '1' : '0'); drawPacks(); };
 
@@ -4369,7 +4461,7 @@ async function downloadPack(pack, tiles) {
   };
   // une tuile : délai maximal de 20 s, un second essai, sans passer par les secours du service worker
   const prov = pack.prov || 'ign';
-  let tileUrl = ignTileUrl;
+  let tileUrl = NAT[prov] ? natTileUrl(prov) : ignTileUrl;
   if (prov === 'ofm') { const tpl = await getOfmTiles(); tileUrl = (z, x, y) => tpl.replace('{z}', z).replace('{x}', x).replace('{y}', y); await precacheOfm(); }
   const getTile = async (z, x, y) => {
     for (let attempt = 0; attempt < 2; attempt++) {
@@ -4377,9 +4469,9 @@ async function downloadPack(pack, tiles) {
       try {
         const r = await fetch(tileUrl(z, x, y), { mode: 'cors', cache: 'no-store', signal: ctrl.signal });
         if (r.ok) return await r.blob();
-        lastErr = 'le serveur IGN répond ' + r.status;
+        lastErr = 'le serveur de la carte répond ' + r.status;
         if (r.status >= 400 && r.status < 500 && r.status !== 429) return null; // demande refusée : inutile d'insister
-      } catch (e) { lastErr = e.name === 'AbortError' ? 'le serveur IGN ne répond pas' : 'pas de connexion'; }
+      } catch (e) { lastErr = e.name === 'AbortError' ? 'le serveur de la carte ne répond pas' : 'pas de connexion'; }
       finally { clearTimeout(timer); }
       await new Promise(r => setTimeout(r, 1500));
     }
@@ -4395,7 +4487,7 @@ async function downloadPack(pack, tiles) {
           const b = await getTile(z, x, y);
           if (!b) fail++;
           else {
-            await cache.put(key, new Response(b, { headers: { 'content-type': b.type || (prov === 'ofm' ? 'application/x-protobuf' : 'image/png'), 'x-size': String(b.size) } }));
+            await cache.put(key, new Response(b, { headers: { 'content-type': b.type || (prov === 'ofm' ? 'application/x-protobuf' : prov === 'es' ? 'image/jpeg' : 'image/png'), 'x-size': String(b.size) } }));
             bytes += b.size; fetched++; fetchedBytes += b.size;
           }
         }
@@ -4437,7 +4529,10 @@ $('dlTrace').onclick = async () => {
     bbox: [Math.min(...lons), Math.min(...lats), Math.max(...lons), Math.max(...lats)], line: simplifyLine(tr.pts)
   };
   const codes = await depsOfLine(pack.line);
-  if (!codes.length) pack.prov = 'ofm'; // trace à l'étranger : carte Monde
+  if (!codes.length) { // trace à l'étranger : carte officielle du pays si elle y est entière, sinon carte Monde
+    const ks = new Set(pack.line.filter((_, i) => i % Math.max(1, Math.floor(pack.line.length / 40)) === 0).map(([lon, lat]) => natAt(lon, lat)));
+    pack.prov = ks.size === 1 && [...ks][0] && [...ks][0] !== 'ign' ? [...ks][0] : 'ofm';
+  }
   let tiles = pack.prov === 'ofm' ? traceTiles(tr, 14) : traceTiles(tr);
   if (pack.prov === 'ofm' && tiles.length > OFM_MAX) tiles = traceTiles(tr, 13);
   if (pack.prov === 'ofm' && tiles.length > OFM_MAX) { toast('Trace trop longue pour la carte Monde hors ligne : utilise plutôt « Une zone de la carte », en plusieurs morceaux.', 6000); return; }
@@ -4450,15 +4545,17 @@ $('dlTrace').onclick = async () => {
 };
 $('dlDep').onclick = async () => {
   await loadDeps();
-  const { d, z, tiles } = currentDepTiles();
+  const { d, z, tiles } = currentDepTiles(), cc = regCc, prov = ccOf(cc).nat;
   if (tiles.length > 40000) { toast('Zone trop grande.', 4000); return; }
   try {
     const e = navigator.storage && navigator.storage.estimate ? await navigator.storage.estimate() : null;
-    if (e && e.quota && tiles.length * tileKB * 1024 > (e.quota - e.usage) * 0.9) { toast('Pas assez de place sur le téléphone pour cette carte.', 5000); return; }
+    if (e && e.quota && tiles.length * provKB(prov) * 1024 > (e.quota - e.usage) * 0.9) { toast('Pas assez de place sur le téléphone pour cette carte.', 5000); return; }
   } catch {}
-  const pack = { id: `dep:${d.code}:${z}`, kind: 'dep', code: d.code, name: `${d.code} · ${d.nom}`, detail: z >= 15 ? 'détaillé' : 'standard', bbox: polysBBox(d.polys) };
+  const pack = cc === 'fr'
+    ? { id: `dep:${d.code}:${z}`, kind: 'dep', code: d.code, name: `${d.code} · ${d.nom}`, detail: z >= 15 ? 'détaillé' : 'standard', bbox: polysBBox(d.polys) }
+    : { id: `dep:${cc}:${d.code}:${z}`, kind: 'dep', cc, prov, code: d.code, name: regName(d), detail: z >= 15 ? 'détaillé' : 'standard', bbox: polysBBox(d.polys) };
   await downloadPack(pack, tiles);
-  downloadPlaces([d.code]);
+  if (cc === 'fr') downloadPlaces([d.code]); else if (navigator.onLine !== false) downloadOsmPlaces(pack, [(b => [b[1], b[0], b[3], b[2]])(pack.bbox)]);
   if ($('depGraph').checked && navigator.onLine !== false) await downloadDepGraph(pack, d.polys);
 };
 $('depGraph').checked = store.get('depGraph') !== '0';
@@ -4492,9 +4589,9 @@ function zoneInFrance(b) {
   return deps.some(d => inPolys(cx, cy, d.polys));
 }
 function zonePlan() {
-  const b = zoneBBox(), prov = $('zoneProv').value === 'auto' ? (zoneInFrance(b) ? 'ign' : 'ofm') : $('zoneProv').value;
+  const b = zoneBBox(), prov = $('zoneProv').value === 'auto' ? (natAt((b[0] + b[2]) / 2, (b[1] + b[3]) / 2) || 'ofm') : $('zoneProv').value;
   const tiles = prov === 'ofm' ? zoneTiles(b, 0, 14) : zoneTiles(b, 8, 14);
-  const km2 = bboxKm2(b), mapKB = tiles.length * (prov === 'ofm' ? OFM_KB : tileKB), gKB = $('zoneGraph').checked ? km2 * 8 : 0;
+  const km2 = bboxKm2(b), mapKB = tiles.length * provKB(prov), gKB = $('zoneGraph').checked ? km2 * 8 : 0;
   return { b, prov, tiles, km2, mapKB, gKB };
 }
 function updateZoneInfo() {
@@ -4502,7 +4599,7 @@ function updateZoneInfo() {
   const z = zonePlan(), tooBig = z.tiles.length > (z.prov === 'ofm' ? OFM_MAX : 25000) || (z.prov === 'ofm' && z.mapKB > 50 * 1024);
   $('zoneInfo').textContent = tooBig
     ? `Zone trop grande (${Math.round(z.km2).toLocaleString('fr-FR')} km²) : zoome un peu`
-    : `${Math.round(z.km2).toLocaleString('fr-FR')} km² · carte ${z.prov === 'ofm' ? 'Monde' : 'IGN'} ~${fmtMo(z.mapKB)}` + (z.gKB ? ` · chemins ~${fmtMo(z.gKB)}` : '');
+    : `${Math.round(z.km2).toLocaleString('fr-FR')} km² · carte ${provName(z.prov)} ~${fmtMo(z.mapKB)}` + (z.gKB ? ` · chemins ~${fmtMo(z.gKB)}` : '');
   $('zoneGo').disabled = tooBig;
 }
 $('zoneStart').onclick = async () => {
@@ -4575,7 +4672,7 @@ $('packRestoreBtn').onclick = async () => {
       await idb('readwrite', st => st.put(now), 'packs').catch(() => {}); renderPacks();
       if (navigator.onLine !== false) {
         try {
-          if (p.kind === 'dep') { downloadPlaces([p.code]); if (wantGraph) { await loadDeps(); const d = deps.find(x => x.code === p.code); if (d) await downloadDepGraph(p, d.polys); } }
+          if (p.kind === 'dep') { if (p.cc && p.cc !== 'fr') await downloadOsmPlaces(p, [[p.bbox[1], p.bbox[0], p.bbox[3], p.bbox[2]]]); else downloadPlaces([p.code]); if (wantGraph) { const d = await packRegion(p); if (d) await downloadDepGraph(p, d.polys); } }
           else if (p.kind === 'zone') { await downloadOsmPlaces(p, [[p.bbox[1], p.bbox[0], p.bbox[3], p.bbox[2]]]); if (wantGraph) await downloadDepGraph(p, bboxPolys(p.bbox)); }
           else if (p.kind === 'trace' && p.line) {
             const lp = makePath(p.line.map(([lon, lat]) => ({ lat, lon, ele: null })), p.name), codes = await depsOfLine(p.line);
@@ -4593,7 +4690,7 @@ async function renderPacks() {
   const todo = packs.filter(p => p.restored && !p.complete);
   $('packRestore').hidden = !todo.length || !!restoreRun;
   if (todo.length) {
-    const kb = todo.reduce((s, p) => s + (p.missing || p.count || 0) * (p.prov === 'ofm' ? OFM_KB : tileKB), 0);
+    const kb = todo.reduce((s, p) => s + (p.missing || p.count || 0) * provKB(p.prov || 'ign'), 0);
     $('packRestoreTxt').textContent = `${bkMaps(todo.length)} de ta sauvegarde ${todo.length > 1 ? 'sont' : 'est'} à retélécharger (~${fmtMo(kb)}). Mieux vaut être en Wi-Fi.`;
   }
   for (const p of packs) {
@@ -4601,7 +4698,7 @@ async function renderPacks() {
     const info = document.createElement('div'); info.className = 'lib-item';
     info.innerHTML = '<b></b><span></span>';
     info.querySelector('b').textContent = p.name;
-    info.querySelector('span').textContent = `${p.kind === 'trace' ? 'Le long de la trace' : p.kind === 'zone' ? `Zone de ${Math.round(bboxKm2(p.bbox)).toLocaleString('fr-FR')} km²` : 'Département, ' + p.detail} · carte ${p.prov === 'ofm' ? 'Monde' : 'IGN'} · ${fmtMo(p.bytes / 1024)} · ${fmtDate(p.date)}` + (p.complete ? '' : p.restored ? ' · à retélécharger' : ` · incomplet`) + (p.graph ? (p.graph.partial ? ` · chemins incomplets (${p.graph.km} km)` : ` · itinéraires hors connexion ✓ (${p.graph.km} km de chemins)`) : '');
+    info.querySelector('span').textContent = `${p.kind === 'trace' ? 'Le long de la trace' : p.kind === 'zone' ? `Zone de ${Math.round(bboxKm2(p.bbox)).toLocaleString('fr-FR')} km²` : (p.cc && p.cc !== 'fr' ? ccOf(p.cc).name : 'Département') + ', ' + p.detail} · carte ${provName(p.prov || 'ign')} · ${fmtMo(p.bytes / 1024)} · ${fmtDate(p.date)}` + (p.complete ? '' : p.restored ? ' · à retélécharger' : ` · incomplet`) + (p.graph ? (p.graph.partial ? ` · chemins incomplets (${p.graph.km} km)` : ` · itinéraires hors connexion ✓ (${p.graph.km} km de chemins)`) : '');
     if (dl && dl.packId === p.id) { const live = document.createElement('span'); live.className = 'dl-live'; live.dataset.pack = p.id; live.textContent = 'En cours…'; info.appendChild(live); }
     const acts = document.createElement('div'); acts.className = 'pack-acts';
     if (!p.complete) {
@@ -4619,7 +4716,7 @@ async function renderPacks() {
       gb.title = 'Télécharger les chemins du département pour les itinéraires hors connexion';
       gb.onclick = async () => {
         gb.disabled = true;
-        await loadDeps(); const d = deps.find(x => x.code === p.code);
+        const d = await packRegion(p);
         if (d) await downloadDepGraph(p, d.polys);
       };
       acts.appendChild(gb);
@@ -4683,8 +4780,7 @@ async function drawPacks() {
     if (p.kind === 'trace' && p.line) feats.push({ type: 'Feature', properties: {}, geometry: { type: 'LineString', coordinates: p.line } });
     if (p.kind === 'zone') feats.push({ type: 'Feature', properties: {}, geometry: { type: 'Polygon', coordinates: bboxPolys(p.bbox)[0] } });
     if (p.kind === 'dep') {
-      try { await loadDeps(); } catch { continue; }
-      const d = deps.find(x => x.code === p.code);
+      const d = await packRegion(p);
       if (d) d.polys.forEach(poly => feats.push({ type: 'Feature', properties: {}, geometry: { type: 'Polygon', coordinates: poly } }));
     }
   }

@@ -1,7 +1,7 @@
 /* Service worker : appli disponible hors ligne + tuiles de carte en cache */
 const APP = 'app-v134', TILES = 'tiles-v2';
-const SHELL = ['./', 'index.html', 'app.css?v=134', 'app.js?v=134', 'i18n/en.js?v=134', 'vendor/maplibre-gl.js', 'vendor/maplibre-gl.css',
-  'departements.json', 'manifest.webmanifest', 'icon.svg', 'icon-192.png', 'icon-512.png', 'icon-maskable-512.png', 'apple-touch-icon.png'];
+const SHELL = ['./', 'index.html', 'app.css?v=134', 'app.js?v=134', 'i18n/en.js?v=134', 'i18n/es.js?v=134', 'vendor/maplibre-gl.js', 'vendor/maplibre-gl.css',
+  'departements.json', 'regions/countries.json', 'manifest.webmanifest', 'icon.svg', 'icon-192.png', 'icon-512.png', 'icon-maskable-512.png', 'apple-touch-icon.png'];
 
 // Clé de cache commune avec la page : https://tiles.balise/<fond>/<z>/<x>/<y>
 const tileKey = (prov, z, x, y) => `https://tiles.balise/${prov}/${z}/${x}/${y}`;
@@ -15,6 +15,12 @@ function parseTile(url) {
     return { prov: 'osm', z: +m[1], x: +m[2], y: +m[3] };
   if (url.hostname === 'tiles.openfreemap.org' && (m = url.pathname.match(/^\/planet\/[^/]+\/(\d+)\/(\d+)\/(\d+)\.pbf$/)))
     return { prov: 'ofm', z: +m[1], x: +m[2], y: +m[3] };
+  if (url.hostname === 'www.ign.es' && url.pathname === '/wmts/mapa-raster' && url.searchParams.get('TileMatrix'))
+    return { prov: 'es', z: +url.searchParams.get('TileMatrix'), x: +url.searchParams.get('TileCol'), y: +url.searchParams.get('TileRow') };
+  if (url.hostname === 'mapsneu.wien.gv.at' && (m = url.pathname.match(/^\/basemap\/geolandbasemap\/normal\/google3857\/(\d+)\/(\d+)\/(\d+)\.png$/)))
+    return { prov: 'at', z: +m[1], x: +m[3], y: +m[2] };
+  if (url.hostname === 'cartoweb.wmts.ngi.be' && (m = url.pathname.match(/^\/1\.0\.0\/topo\/default\/3857\/(\d+)\/(\d+)\/(\d+)\.png$/)))
+    return { prov: 'be', z: +m[1], x: +m[3], y: +m[2] };
   if (url.hostname === 'data.geopf.fr' && /GetTile/i.test(url.searchParams.get('REQUEST') || ''))
     return { prov: 'ign', z: +url.searchParams.get('TILEMATRIX'), x: +url.searchParams.get('TILECOL'), y: +url.searchParams.get('TILEROW') };
   return null;
