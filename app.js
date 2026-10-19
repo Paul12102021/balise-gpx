@@ -4,7 +4,7 @@
 
 // La page et le code doivent être de la même version. Sinon (page gardée en cache
 // par le téléphone ou par GitHub), on recharge une page fraîche, au plus 3 fois.
-const APP_VERSION = 142;
+const APP_VERSION = 143;
 try {
   const meta = document.querySelector('meta[name="balise-version"]');
   const pageV = meta ? +meta.content : 0;
@@ -5382,3 +5382,6 @@ if (AND) {
 }
 window.__balise = { onPos, get state() { return { nav, isOff, rejoin: !!rejoin, straight: rejoin && rejoin.straight, progress, act: Object.assign({ elapsed: actElapsed(), state: actState, points: rec.length }, act) }; } };
 })();
+
+// au doigt, une liste ou une case garde le cadre bleu de sélection après le choix : on le retire une fois la valeur choisie
+document.addEventListener('change', e => { const t = e.target; if (t && (t.tagName === 'SELECT' || t.type === 'checkbox')) setTimeout(() => t.blur(), 400); }, true);
