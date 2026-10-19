@@ -4,7 +4,7 @@
 
 // La page et le code doivent être de la même version. Sinon (page gardée en cache
 // par le téléphone ou par GitHub), on recharge une page fraîche, au plus 3 fois.
-const APP_VERSION = 139;
+const APP_VERSION = 140;
 try {
   const meta = document.querySelector('meta[name="balise-version"]');
   const pageV = meta ? +meta.content : 0;
@@ -901,7 +901,7 @@ function stvUI() {
   $('stvBlockedMsg').hidden = !bl; $('stvRetryBtn').hidden = !bl;
   $('stvAutoL').textContent = bl ? 'Proposer de mettre sur Strava chaque sortie gardée' : 'Envoyer automatiquement chaque sortie gardée';
   $('stvAutoS').textContent = bl ? 'Un message « Strava » apparaît à la fin de la sortie' : 'Sinon : bouton « Mettre sur Strava » dans la fiche de la sortie';
-  $('stvStatus').textContent = !on ? 'Non connecté · import manuel possible' : bl ? 'Import manuel (envoi direct refusé sans abonnement)' : 'Connecté' + (store.get('stvAuto') === '1' ? ' · envoi automatique' : ' · envoi à la demande');
+  $('stvStatus').textContent = !on ? 'Non connecté' : bl ? 'Import manuel' : store.get('stvAuto') === '1' ? 'Envoi automatique' : 'Connecté';
 }
 // ---------- Sauvegarde : sorties, traces et réglages dans un fichier, et restauration ----------
 // réglages choisis par l'utilisateur (pas l'état en cours, ni les caches, ni la connexion Strava)
@@ -1795,6 +1795,7 @@ function syncAlertUI() {
   $('btnVoice').classList.toggle('muted', !voiceOn);
   $('btnVibFab').classList.toggle('muted', !vibOn);
   $('optVoice').checked = voiceOn; $('optVib').checked = vibOn;
+  $('rowVStyle').hidden = !voiceOn;
   $('npVoice').classList.toggle('off', !voiceOn); $('npVoice').textContent = voiceOn ? 'Son activé' : 'Son coupé';
   $('npVib').classList.toggle('off', !vibOn); $('npVib').textContent = vibOn ? 'Vibrations activées' : 'Vibrations coupées';
 }

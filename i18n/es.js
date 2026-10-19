@@ -55,6 +55,8 @@ const exact = {
   'en savoir plus': 'más información', 'Indications en navigation': 'Indicaciones al navegar',
   'Toucher le bandeau le réduit ou l\'agrandit': 'Tocar el banner lo reduce o lo amplía',
   'Grandes': 'Grandes', 'Réduites': 'Reducidas', 'Masquées': 'Ocultas', 'Thème': 'Tema', 'Automatique': 'Automático', 'Clair': 'Claro', 'Sombre': 'Oscuro',
+  "Mon avis": "Mi opinión", "Alerte hors trace": "Alerta fuera del track", "Au-delà de cette distance": "Más allá de esta distancia", "Indications": "Indicaciones", "Taille du bandeau de direction": "Tamaño del banner de dirección", "Enregistrer automatiquement": "Grabar automáticamente", "Dès que la navigation démarre": "En cuanto empieza la navegación", "Économie de batterie": "Ahorro de batería", "Vibrations": "Vibraciones", "Virages, sortie de trace": "Giros, salida del track", "Langue": "Idioma", "Language · Idioma": "Langue · Language",
+  'Hors ligne': 'Sin conexión', 'Sorties et traces': 'Salidas y tracks', 'Navigation': 'Navegación', 'Voix et vibrations': 'Voz y vibración', 'Affichage': 'Pantalla', 'Import manuel': 'Importación manual', 'Envoi automatique': 'Envío automático',
   'Je me déplace': 'Me desplazo', 'Pour les itinéraires et le temps estimé': 'Para las rutas y el tiempo estimado', 'À pied': 'A pie', 'À vélo': 'En bici',
   'Cartes hors ligne': 'Mapas sin conexión', 'Trace, département ou zone': 'Track, región o zona', 'Mes cartes': 'Mis mapas',
   'Non connecté': 'No conectado', 'Sauvegarde': 'Copia de seguridad', 'Tes sorties, traces et réglages dans un fichier': 'Tus salidas, tracks y ajustes en un archivo',

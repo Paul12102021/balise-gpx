@@ -100,6 +100,34 @@ body { font: 15px/1.35 var(--font); color: var(--ink); background: var(--paper);
 button:focus-visible, .btn:focus-visible, select:focus-visible { outline: 3px solid var(--me); outline-offset: 2px; }
 
 .more { display: flex; flex-direction: column; gap: 10px; margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--line); }
+/* Réglages : 4 raccourcis en tuiles, puis des groupes de réglages façon liste */
+.set-tiles { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.set-tile { display: grid; grid-template-columns: 22px 1fr; column-gap: 10px; align-items: center; text-align: left;
+  min-height: 60px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 12px; background: var(--paper); color: var(--ink); font: inherit; cursor: pointer; }
+.set-tile svg { grid-row: span 2; width: 22px; height: 22px; fill: none; stroke: var(--go-ink); stroke-width: 1.9; stroke-linecap: round; stroke-linejoin: round; }
+.set-tile b { font-weight: 600; font-size: 14.5px; line-height: 1.2; }
+.set-tile small { grid-column: 2; color: var(--muted); font-size: 12px; line-height: 1.25; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+.set-tile:active { background: var(--line); }
+.set-tile:has(#mapsStatus:not([hidden])) #mapsSub { display: none; }
+.set-tile .dl-live { color: var(--go-ink); white-space: normal; }
+.set-h { margin: 10px 4px -4px; font-size: 12px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
+.set-group { border: 1px solid var(--line); border-radius: 12px; background: var(--paper); padding: 0 12px; }
+.set-group > .row { min-height: 52px; padding: 8px 0; }
+.set-group > .row + .row { border-top: 1px solid var(--line); }
+.set-group label small, .set-group label { line-height: 1.3; }
+.set-group small { font-size: 12.5px; }
+/* listes déroulantes discrètes : la valeur à droite, avec une flèche */
+.set-group select { flex: none; max-width: 52%; min-height: 36px; border: 0; background: transparent; color: var(--go-ink); font-weight: 600; text-align: right; text-align-last: right;
+  -webkit-appearance: none; appearance: none; padding: 0 18px 0 4px;
+  background-image: linear-gradient(45deg, transparent 50%, currentColor 50%), linear-gradient(-45deg, transparent 50%, currentColor 50%);
+  background-size: 5px 5px; background-position: right 7px center, right 2px center; background-repeat: no-repeat; }
+.set-group select option { color: var(--ink); background: var(--panel); text-align: left; }
+/* cases à cocher en interrupteurs */
+.set-group .check { -webkit-appearance: none; appearance: none; width: 44px; height: 26px; border-radius: 13px; background: var(--line); position: relative; cursor: pointer; transition: background .15s; }
+.set-group .check::after { content: ""; position: absolute; top: 3px; left: 3px; width: 20px; height: 20px; border-radius: 50%; background: #fff; box-shadow: 0 1px 2px rgba(0,0,0,.25); transition: transform .15s; }
+.set-group .check:checked { background: var(--go); }
+.set-group .check:checked::after { transform: translateX(18px); }
+.version-line { text-align: center; margin-top: 4px; }
 .row { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
 .row > span, .row > label { min-width: 0; }
 .row small { color: var(--muted); }

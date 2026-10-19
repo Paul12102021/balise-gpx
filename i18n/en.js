@@ -55,6 +55,8 @@ const exact = {
   'en savoir plus': 'learn more', 'Indications en navigation': 'Directions while navigating',
   'Toucher le bandeau le réduit ou l\'agrandit': 'Tap the banner to shrink or enlarge it',
   'Grandes': 'Large', 'Réduites': 'Small', 'Masquées': 'Hidden', 'Thème': 'Theme', 'Automatique': 'Automatic', 'Clair': 'Light', 'Sombre': 'Dark',
+  "Mon avis": "Feedback", "Alerte hors trace": "Off-track alert", "Au-delà de cette distance": "Beyond this distance", "Indications": "Directions", "Taille du bandeau de direction": "Size of the direction banner", "Enregistrer automatiquement": "Record automatically", "Dès que la navigation démarre": "As soon as navigation starts", "Économie de batterie": "Battery saver", "Vibrations": "Vibration", "Virages, sortie de trace": "Turns, leaving the track", "Langue": "Language", "Language · Idioma": "Langue · Idioma",
+  'Hors ligne': 'Offline', 'Sorties et traces': 'Outings and tracks', 'Navigation': 'Navigation', 'Voix et vibrations': 'Voice and vibration', 'Affichage': 'Display', 'Import manuel': 'Manual import', 'Envoi automatique': 'Auto upload',
   'Je me déplace': 'I travel', 'Pour les itinéraires et le temps estimé': 'For routes and estimated time', 'À pied': 'On foot', 'À vélo': 'By bike',
   'Cartes hors ligne': 'Offline maps', 'Trace, département ou zone': 'Track, French département or area', 'Mes cartes': 'My maps',
   'Non connecté': 'Not connected', 'Sauvegarde': 'Backup', 'Tes sorties, traces et réglages dans un fichier': 'Your outings, tracks and settings in one file',

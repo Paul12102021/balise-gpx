@@ -14,7 +14,7 @@
 <link rel="icon" href="icon.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
 <link rel="stylesheet" href="vendor/maplibre-gl.css">
-<link rel="stylesheet" href="app.css?v=139">
+<link rel="stylesheet" href="app.css?v=140">
 </head>
 <body>
 <div id="map" aria-label="Carte"></div>
@@ -159,73 +159,74 @@
   </div>
 
   <div id="more" class="more" hidden>
-    <div class="row">
-      <label for="thr">Alerte hors trace au-delà de</label>
-      <select id="thr">
-        <option value="25">25 m</option><option value="50">50 m</option>
-        <option value="100">100 m</option><option value="200">200 m</option>
-        <option value="500">500 m</option><option value="0">Aucune</option>
-      </select>
-    </div>
-    <div class="row">
-      <label for="optVoice">Guidage vocal et bips<br><small><button id="voiceTest" class="linkbtn">écouter</button></small></label>
-      <input type="checkbox" id="optVoice" class="check">
-    </div>
-    <div class="row">
-      <label for="optVStyle">Voix<br><small id="voiceHelpRow">Robotique ? <button id="voiceHelp" class="linkbtn">une voix plus naturelle</button></small><small id="voiceCredit">Voix UPMC, licence <a href="voice/LICENSE.txt" target="_blank" rel="noopener">CC BY-SA</a></small></label>
-      <select id="optVStyle"><option value="system">Voix du téléphone</option><option value="pisteo">Jessica (enregistrée)</option></select>
+    <div class="set-tiles">
+      <button id="btnMaps" class="set-tile"><svg viewBox="0 0 24 24"><path d="M9 4 3 6v14l6-2 6 2 6-2V4l-6 2-6-2Z"/><path d="M9 4v14M15 6v14"/></svg><b>Mes cartes</b><small id="mapsSub">Hors ligne</small><small id="mapsStatus" class="dl-live" hidden></small></button>
+      <button id="btnStrava" class="set-tile"><svg viewBox="0 0 24 24"><path d="m10 3-6 12h4l2-4 2 4h4L10 3Z"/><path d="m15 15-2 4h4l-2-4"/></svg><b>Strava</b><small id="stvStatus">Non connecté</small></button>
+      <button id="btnBackup" class="set-tile"><svg viewBox="0 0 24 24"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M4 17v3h16v-3"/></svg><b>Sauvegarde</b><small>Sorties et traces</small></button>
+      <button id="btnFeedback" class="set-tile"><svg viewBox="0 0 24 24"><path d="M4 5h16v11H9l-5 4V5Z"/></svg><b>Mon avis</b><small>Un souci, une idée ?</small></button>
     </div>
 
-    <div class="row">
-      <label for="optVib">Vibrations (virages, sortie de trace)</label>
-      <input type="checkbox" id="optVib" class="check">
+    <h3 class="set-h">Navigation</h3>
+    <div class="set-group">
+      <div class="row">
+        <label for="prof">Je me déplace<br><small>Pour les itinéraires et le temps estimé</small></label>
+        <select id="prof">
+          <option value="hiking-mountain">À pied</option>
+          <option value="trekking">À vélo</option>
+        </select>
+      </div>
+      <div class="row">
+        <label for="thr">Alerte hors trace<br><small>Au-delà de cette distance</small></label>
+        <select id="thr">
+          <option value="25">25 m</option><option value="50">50 m</option>
+          <option value="100">100 m</option><option value="200">200 m</option>
+          <option value="500">500 m</option><option value="0">Aucune</option>
+        </select>
+      </div>
+      <div class="row">
+        <label for="optBanner">Indications<br><small>Taille du bandeau de direction</small></label>
+        <select id="optBanner"><option value="normal">Grandes</option><option value="compact">Réduites</option><option value="hidden">Masquées</option></select>
+      </div>
+      <div class="row">
+        <label for="autoRec">Enregistrer automatiquement<br><small>Dès que la navigation démarre</small></label>
+        <input type="checkbox" id="autoRec" class="check">
+      </div>
+      <div class="row">
+        <label for="optEco">Économie de batterie<br><small>Écran noir entre les virages · <button id="ecoInfoLink" class="linkbtn">en savoir plus</button></small></label>
+        <input type="checkbox" id="optEco" class="check">
+      </div>
     </div>
-    <div class="row">
-      <label for="autoRec">Enregistrer la sortie dès que la navigation démarre</label>
-      <input type="checkbox" id="autoRec" class="check">
+
+    <h3 class="set-h">Voix et vibrations</h3>
+    <div class="set-group">
+      <div class="row">
+        <label for="optVoice">Guidage vocal et bips<br><small><button id="voiceTest" class="linkbtn">écouter</button></small></label>
+        <input type="checkbox" id="optVoice" class="check">
+      </div>
+      <div class="row" id="rowVStyle">
+        <label for="optVStyle">Voix<br><small id="voiceHelpRow">Robotique ? <button id="voiceHelp" class="linkbtn">une voix plus naturelle</button></small><small id="voiceCredit">Voix UPMC, licence <a href="voice/LICENSE.txt" target="_blank" rel="noopener">CC BY-SA</a></small></label>
+        <select id="optVStyle"><option value="system">Voix du téléphone</option><option value="pisteo">Jessica (enregistrée)</option></select>
+      </div>
+      <div class="row">
+        <label for="optVib">Vibrations<br><small>Virages, sortie de trace</small></label>
+        <input type="checkbox" id="optVib" class="check">
+      </div>
     </div>
-    <div class="row">
-      <label for="optEco">Économie de batterie en navigation<br><small>Écran noir entre les virages · <button id="ecoInfoLink" class="linkbtn">en savoir plus</button></small></label>
-      <input type="checkbox" id="optEco" class="check">
-    </div>
-    <div class="row">
-      <label for="optBanner">Indications en navigation<br><small>Toucher le bandeau le réduit ou l'agrandit</small></label>
-      <select id="optBanner"><option value="normal">Grandes</option><option value="compact">Réduites</option><option value="hidden">Masquées</option></select>
-    </div>
-    <div class="row">
-      <label for="optTheme">Thème</label>
-      <select id="optTheme"><option value="auto">Automatique</option><option value="light">Clair</option><option value="dark">Sombre</option></select>
-    </div>
-    <div class="row">
-      <label for="optLang">Langue · Language</label>
-      <select id="optLang"><option value="">Automatique · Auto</option><option value="fr">Français</option><option value="en">English</option><option value="es">Español</option></select>
-    </div>
-    <div class="row">
-      <label for="optUnits">Unités</label>
-      <select id="optUnits"><option value="">Automatique</option><option value="metric">Kilomètres, mètres</option><option value="imperial">Miles, pieds</option></select>
-    </div>
-    <div class="row">
-      <label for="prof">Je me déplace<br><small>Pour les itinéraires et le temps estimé</small></label>
-      <select id="prof">
-        <option value="hiking-mountain">À pied</option>
-        <option value="trekking">À vélo</option>
-      </select>
-    </div>
-    <div class="row">
-      <span>Cartes hors ligne<br><small>Trace, département ou zone</small><br><small id="mapsStatus" class="dl-live" hidden></small></span>
-      <button id="btnMaps" class="btn">Mes cartes</button>
-    </div>
-    <div class="row">
-      <span>Strava<br><small id="stvStatus">Non connecté</small></span>
-      <button id="btnStrava" class="btn">Strava</button>
-    </div>
-    <div class="row">
-      <span>Sauvegarde<br><small>Tes sorties, traces et réglages dans un fichier</small></span>
-      <button id="btnBackup" class="btn">Sauvegarde</button>
-    </div>
-    <div class="row">
-      <span>Un souci, une idée ?<br><small>Ton avis aide à améliorer Pisteo</small></span>
-      <button id="btnFeedback" class="btn">Donner mon avis</button>
+
+    <h3 class="set-h">Affichage</h3>
+    <div class="set-group">
+      <div class="row">
+        <label for="optTheme">Thème</label>
+        <select id="optTheme"><option value="auto">Automatique</option><option value="light">Clair</option><option value="dark">Sombre</option></select>
+      </div>
+      <div class="row">
+        <label for="optLang">Langue<br><small>Language · Idioma</small></label>
+        <select id="optLang"><option value="">Automatique · Auto</option><option value="fr">Français</option><option value="en">English</option><option value="es">Español</option></select>
+      </div>
+      <div class="row">
+        <label for="optUnits">Unités</label>
+        <select id="optUnits"><option value="">Automatique</option><option value="metric">Kilomètres, mètres</option><option value="imperial">Miles, pieds</option></select>
+      </div>
     </div>
     <p class="note version-line"><span id="note"></span> · <button id="btnRepair" class="linkbtn" title="Recharge l'appli sans toucher à tes traces ni à tes cartes">Réparer l'appli</button> · <a href="confidentialite.html" target="_blank" rel="noopener" class="linkbtn">Confidentialité</a></p>
   </div>
@@ -350,7 +351,7 @@
 <div id="feedback" class="lib" hidden>
   <div class="lib-panel" role="dialog" aria-label="Donner mon avis">
     <div class="lib-head">
-      <b>Donner mon avis</b>
+      <b>Mon avis</b>
       <button id="fbClose" class="closebtn" aria-label="Fermer"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></svg>Fermer</button>
     </div>
     <div class="seg" id="fbKind"><button data-k="Problème" class="on">Un problème</button><button data-k="Idée">Une idée</button><button data-k="Avis">Un avis</button></div>
@@ -639,8 +640,8 @@
 <div id="toast" class="toast" hidden></div>
 
 <script src="vendor/maplibre-gl.js"></script>
-<script src="i18n/en.js?v=139"></script>
-<script src="i18n/es.js?v=139"></script>
-<script src="app.js?v=139"></script>
+<script src="i18n/en.js?v=140"></script>
+<script src="i18n/es.js?v=140"></script>
+<script src="app.js?v=140"></script>
 </body>
 </html>
