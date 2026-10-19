@@ -4,7 +4,7 @@
 
 // La page et le code doivent être de la même version. Sinon (page gardée en cache
 // par le téléphone ou par GitHub), on recharge une page fraîche, au plus 3 fois.
-const APP_VERSION = 140;
+const APP_VERSION = 141;
 try {
   const meta = document.querySelector('meta[name="balise-version"]');
   const pageV = meta ? +meta.content : 0;
@@ -968,16 +968,22 @@ $('bkIn').onchange = async e => {
     for (const k of BK_KEYS) if (typeof data.settings[k] === 'string' && store.get(k) !== data.settings[k]) { store.set(k, data.settings[k]); setChanged = true; }
   const parts = [];
   if (fresh.length) parts.push(bkCount(fresh));
-  if (freshPacks.length) parts.push(bkMaps(freshPacks.length) + ' à retélécharger dans Réglages → Mes cartes');
+  if (freshPacks.length) parts.push('la liste de ' + bkMaps(freshPacks.length));
   const msg = 'Restauré : ' + parts.join(', et ') + '.';
   await bkRefresh();
   if (setChanged) {
     bkSay(msg + ' Réglages appliqués, l\'appli redémarre…');
-    try { sessionStorage.setItem('bkDone', msg); } catch {}
+    try { sessionStorage.setItem('bkDone', msg); if (freshPacks.length) sessionStorage.setItem('bkMaps', '1'); } catch {}
     setTimeout(() => location.reload(), 2500);
-  } else bkSay(msg);
+  } else {
+    bkSay(msg);
+    // les cartes ne sont pas dans le fichier : on ouvre « Mes cartes », où « Tout retélécharger » attend
+    if (freshPacks.length) setTimeout(() => { $('backup').hidden = true; openMaps(); }, 1800);
+  }
 };
-try { const m = sessionStorage.getItem('bkDone'); if (m) { sessionStorage.removeItem('bkDone'); setTimeout(() => toast(m + ' Réglages appliqués.', 4000), 800); } } catch {}
+try { const m = sessionStorage.getItem('bkDone'), mp = sessionStorage.getItem('bkMaps'); sessionStorage.removeItem('bkMaps');
+  if (m) { sessionStorage.removeItem('bkDone'); setTimeout(() => toast(m + ' Réglages appliqués.', 4000), 800); }
+  if (mp) setTimeout(() => openMaps(), 1500); } catch {}
 
 // ---------- écouter la voix, et comment en avoir une plus naturelle ----------
 function voiceSample() {
