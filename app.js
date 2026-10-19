@@ -4,7 +4,7 @@
 
 // La page et le code doivent être de la même version. Sinon (page gardée en cache
 // par le téléphone ou par GitHub), on recharge une page fraîche, au plus 3 fois.
-const APP_VERSION = 149;
+const APP_VERSION = 150;
 try {
   const meta = document.querySelector('meta[name="balise-version"]');
   const pageV = meta ? +meta.content : 0;
@@ -1042,7 +1042,11 @@ $('stvConnect').onclick = () => {
   if (!STRAVA_RELAY) return;
   const q = `client_id=${STRAVA_CLIENT_ID}&response_type=code&approval_prompt=auto&scope=read,activity:write`;
   // appli Android : connexion dans l'appli Strava ou le navigateur (Google refuse les WebView), puis le lien de retour rouvre Pisteo
-  if (AND && AND.openExternal) { AND.openExternal(`https://www.strava.com/oauth/mobile/authorize?${q}&redirect_uri=${encodeURIComponent(stvBack() + 'retour-strava/?strava=1')}`); return; }
+  if (AND && AND.openExternal) {
+    const u = `https://www.strava.com/oauth/authorize?${q}&redirect_uri=${encodeURIComponent(stvBack() + 'retour-strava/?strava=1')}`;
+    try { AND.openExternal(u, true); } catch { AND.openExternal(u); } // appli 2.0.1 : pas encore le choix « navigateur »
+    return;
+  }
   location.href = `https://www.strava.com/oauth/authorize?${q}&redirect_uri=${encodeURIComponent(stvBack() + '?strava=1')}`;
 };
 async function stvTokenReq(params) {
@@ -5307,7 +5311,8 @@ function sheetMotion(panel, content, apply, report, after, steps) {
     drag: { start() { cancelAnimationFrame(raf); const was = !content.hidden; if (!was) apply(true); const G = gap(); const base = was ? y : G; setY(base); return { was, G, base }; },
             move(st, dy) { let v = st.base + dy; if (v < 0) v *= 0.3; else if (v > st.G) v = st.G + (v - st.G) * 0.3; setY(v); },
             end(st, dy, vy) {
-              const goOpen = st.was ? !(dy > 50 || vy > 0.5) : (dy < -40 || vy < -0.5);
+              // un petit glissé rapide (doigt qui bouge en touchant un bouton) ne compte pas : il faut au moins ~24 px
+              const goOpen = st.was ? !(dy > 50 || (vy > 0.5 && dy > 24)) : (dy < -40 || (vy < -0.5 && dy < -24));
               // panneau à étages : glisser vers le bas passe d'abord à la vue réduite, vers le haut revient à la vue complète
               if (st.was && steps) {
                 const reduced = steps.reduced();
@@ -5315,7 +5320,7 @@ function sheetMotion(panel, content, apply, report, after, steps) {
                   const h0 = panel.offsetHeight; steps.set(true); const d = h0 - panel.offsetHeight; steps.set(false);
                   animate(Math.max(0, d), () => { steps.set(true); setY(0); }); return;
                 }
-                if (goOpen && reduced && (dy < -40 || vy < -0.5)) { // vue réduite → tout : le reste apparaît en glissant vers le haut
+                if (goOpen && reduced && (dy < -40 || (vy < -0.5 && dy < -24))) { // vue réduite → tout : le reste apparaît en glissant vers le haut
                   const h0 = panel.offsetHeight; steps.set(false); setY(y + panel.offsetHeight - h0); animate(0); return;
                 }
               }
@@ -5342,7 +5347,7 @@ function attachSwipe(panel, motion) {
     const cx = e.touches[0].clientX, cy = e.touches[0].clientY, dx = cx - x0;
     dy = cy - y0;
     const now = performance.now(); if (now > lastT) { vy = vy * 0.6 + (cy - lastY) / (now - lastT) * 0.4; lastY = cy; lastT = now; }
-    if (!decided && (Math.abs(dx) > 8 || Math.abs(dy) > 8)) {
+    if (!decided && (Math.abs(dx) > 10 || Math.abs(dy) > 10)) {
       decided = true;
       swiping = Math.abs(dy) > Math.abs(dx) * 1.2;
       // contenu qui défile : on le laisse défiler, dans les deux sens ; le panneau ne se réduit

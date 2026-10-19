@@ -376,10 +376,23 @@ public class MainActivity extends Activity {
     /** Ce que la page peut demander au téléphone (window.PisteoAndroid). */
     private class Bridge {
         @JavascriptInterface
-        public void openExternal(String url) {
+        public void openExternal(String url) { openExternal(url, false); }
+
+        // browser = true : dans le navigateur, même si une autre appli (ex. Strava) sait ouvrir ce lien
+        @JavascriptInterface
+        public void openExternal(String url, boolean browser) {
             runOnUiThread(() -> {
-                try { startActivity(new Intent(Intent.ACTION_VIEW, Uri.parse(url))); }
-                catch (Exception e) { Toast.makeText(MainActivity.this, "Aucune appli pour ouvrir ce lien", Toast.LENGTH_SHORT).show(); }
+                Intent i = new Intent(Intent.ACTION_VIEW, Uri.parse(url));
+                if (browser) {
+                    android.content.pm.ResolveInfo ri = getPackageManager().resolveActivity(
+                            new Intent(Intent.ACTION_VIEW, Uri.parse("https://example.com/")), PackageManager.MATCH_DEFAULT_ONLY);
+                    if (ri != null && ri.activityInfo != null && !"android".equals(ri.activityInfo.packageName)) i.setPackage(ri.activityInfo.packageName);
+                }
+                try { startActivity(i); }
+                catch (Exception e) {
+                    try { startActivity(new Intent(Intent.ACTION_VIEW, Uri.parse(url))); }
+                    catch (Exception e2) { Toast.makeText(MainActivity.this, "Aucune appli pour ouvrir ce lien", Toast.LENGTH_SHORT).show(); }
+                }
             });
         }
 
