@@ -4,7 +4,7 @@
 
 // La page et le code doivent être de la même version. Sinon (page gardée en cache
 // par le téléphone ou par GitHub), on recharge une page fraîche, au plus 3 fois.
-const APP_VERSION = 146;
+const APP_VERSION = 147;
 try {
   const meta = document.querySelector('meta[name="balise-version"]');
   const pageV = meta ? +meta.content : 0;
@@ -4624,8 +4624,15 @@ function zoneInFrance(b) {
   const cx = (b[0] + b[2]) / 2, cy = (b[1] + b[3]) / 2;
   return deps.some(d => inPolys(cx, cy, d.polys));
 }
+// carte officielle de la zone : la mer et les points hors des pays couverts ne comptent pas (zone sur la côte) ;
+// si la zone touche deux pays, carte Monde
+function zoneNat(b) {
+  const ks = new Set();
+  for (let i = 0; i <= 6; i++) for (let j = 0; j <= 6; j++) { const k = natAt(b[0] + (b[2] - b[0]) * i / 6, b[1] + (b[3] - b[1]) * j / 6); if (k) ks.add(k); }
+  return ks.size === 1 ? [...ks][0] : 'ofm';
+}
 function zonePlan() {
-  const b = zoneBBox(), prov = $('zoneProv').value === 'auto' ? (natAt((b[0] + b[2]) / 2, (b[1] + b[3]) / 2) || 'ofm') : $('zoneProv').value;
+  const b = zoneBBox(), prov = $('zoneProv').value === 'auto' ? zoneNat(b) : $('zoneProv').value;
   const tiles = prov === 'ofm' ? zoneTiles(b, 0, 14) : zoneTiles(b, 8, 14);
   const km2 = bboxKm2(b), mapKB = tiles.length * provKB(prov), gKB = $('zoneGraph').checked ? km2 * 8 : 0;
   return { b, prov, tiles, km2, mapKB, gKB };
