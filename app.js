@@ -4,7 +4,7 @@
 
 // La page et le code doivent être de la même version. Sinon (page gardée en cache
 // par le téléphone ou par GitHub), on recharge une page fraîche, au plus 3 fois.
-const APP_VERSION = 136;
+const APP_VERSION = 137;
 try {
   const meta = document.querySelector('meta[name="balise-version"]');
   const pageV = meta ? +meta.content : 0;
@@ -5275,12 +5275,12 @@ function sheetMotion(panel, content, apply, report, after) {
 // Le geste part de n'importe où, boutons compris : un toucher reste un clic,
 // un mouvement vertical devient un glissement (et le clic est alors annulé).
 function attachSwipe(panel, motion) {
-  let x0 = null, y0 = 0, dy = 0, decided = false, swiping = false, st = null, lastY = 0, lastT = 0, vy = 0;
+  let x0 = null, y0 = 0, dy = 0, decided = false, swiping = false, st = null, lastY = 0, lastT = 0, vy = 0, top0 = 0;
   const scrollable = () => panel.scrollHeight > panel.clientHeight + 2;
   panel.addEventListener('touchstart', e => {
     if (e.touches.length > 1 || e.target.closest('select, textarea, input[type=search], input[type=text]')) { x0 = null; return; }
     x0 = e.touches[0].clientX; y0 = lastY = e.touches[0].clientY; lastT = performance.now(); dy = vy = 0;
-    decided = swiping = false;
+    decided = swiping = false; top0 = panel.scrollTop;
   }, { passive: true });
   panel.addEventListener('touchmove', e => {
     if (x0 == null) return;
@@ -5290,8 +5290,9 @@ function attachSwipe(panel, motion) {
     if (!decided && (Math.abs(dx) > 8 || Math.abs(dy) > 8)) {
       decided = true;
       swiping = Math.abs(dy) > Math.abs(dx) * 1.2;
-      // contenu qui défile : on le laisse défiler vers le bas de la liste
-      if (swiping && motion.isOpen() && scrollable() && dy < 0) swiping = false;
+      // contenu qui défile : on le laisse défiler, dans les deux sens ; le panneau ne se réduit
+      // en glissant vers le bas que si la liste était déjà tout en haut au début du geste
+      if (swiping && motion.isOpen() && scrollable() && (dy < 0 || top0 > 2 || panel.scrollTop > 2)) swiping = false;
       if (swiping) { st = motion.drag.start(); y0 = cy; dy = 0; }
     }
     if (!swiping) return;
@@ -5324,7 +5325,7 @@ if (saved) { try { showTrack(parseGPX(saved)); } catch { drawProfile(); } } else
 checkShared();
 stvReturn(); setTimeout(stvRetry, 8000);
 stvUI();
-const VERSION = APP_VERSION + ' · 18 oct. 2026';
+const VERSION = APP_VERSION + ' · 19 oct. 2026';
 $('note').textContent = (window.isSecureContext ? '' : 'Attention : le GPS ne fonctionne qu\'en HTTPS. ') + 'Version ' + VERSION;
 // Mises à jour : on vérifie à chaque ouverture et on recharge dès qu'une nouvelle version est prête
 // (jamais pendant une navigation ou un enregistrement : on attend la fin)
