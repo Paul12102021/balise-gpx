@@ -4,7 +4,7 @@
 
 // La page et le code doivent être de la même version. Sinon (page gardée en cache
 // par le téléphone ou par GitHub), on recharge une page fraîche, au plus 3 fois.
-const APP_VERSION = 148;
+const APP_VERSION = 149;
 try {
   const meta = document.querySelector('meta[name="balise-version"]');
   const pageV = meta ? +meta.content : 0;
@@ -4048,8 +4048,7 @@ function navMotion() {
   return navMotion.m || (navMotion.m = sheetMotion($('navBottom'), $('navMore'), applyNavMore,
     h => { if (h) document.documentElement.style.setProperty('--nav-h', h + 'px'); },
     () => { if (nav && follow) navCamera(400); },
-    { down: () => { if ($('navMore').classList.contains('prof-only')) return false; setProfOnly(true); return true; },
-      up: () => { if (!$('navMore').classList.contains('prof-only')) return false; setProfOnly(false); return true; } }));
+    { reduced: () => $('navMore').classList.contains('prof-only'), set: v => setProfOnly(v) }));
 }
 function toggleNavMore(open, instant) {
   const want = open === undefined ? $('navMore').hidden : !!open;
@@ -5310,7 +5309,16 @@ function sheetMotion(panel, content, apply, report, after, steps) {
             end(st, dy, vy) {
               const goOpen = st.was ? !(dy > 50 || vy > 0.5) : (dy < -40 || vy < -0.5);
               // panneau à étages : glisser vers le bas passe d'abord à la vue réduite, vers le haut revient à la vue complète
-              if (st.was && steps && (goOpen ? (dy < -40 || vy < -0.5) && steps.up() : steps.down())) { animate(0); return; }
+              if (st.was && steps) {
+                const reduced = steps.reduced();
+                if (!goOpen && !reduced) { // tout → vue réduite : le haut du panneau descend en douceur, puis on retire le reste
+                  const h0 = panel.offsetHeight; steps.set(true); const d = h0 - panel.offsetHeight; steps.set(false);
+                  animate(Math.max(0, d), () => { steps.set(true); setY(0); }); return;
+                }
+                if (goOpen && reduced && (dy < -40 || vy < -0.5)) { // vue réduite → tout : le reste apparaît en glissant vers le haut
+                  const h0 = panel.offsetHeight; steps.set(false); setY(y + panel.offsetHeight - h0); animate(0); return;
+                }
+              }
               goOpen ? animate(0) : animate(st.G, () => { setY(0); apply(false); report(vis()); });
             } }
   };
