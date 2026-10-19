@@ -4,7 +4,7 @@
 
 // La page et le code doivent être de la même version. Sinon (page gardée en cache
 // par le téléphone ou par GitHub), on recharge une page fraîche, au plus 3 fois.
-const APP_VERSION = 144;
+const APP_VERSION = 145;
 try {
   const meta = document.querySelector('meta[name="balise-version"]');
   const pageV = meta ? +meta.content : 0;
@@ -91,6 +91,7 @@ function spokenTurn(txt) {
 const pick = a => a[Math.floor(Math.random() * a.length)];
 // Appli Android (WebView) : le téléphone fournit la voix, l'écran allumé, les fichiers et le partage
 const AND = window.PisteoAndroid || null;
+if (AND) document.documentElement.classList.add('and');
 const store = {
   get(k) { try { return localStorage.getItem(k); } catch { return null; } },
   set(k, v) { try { localStorage.setItem(k, v); } catch { /* stockage plein ou bloqué */ } }
