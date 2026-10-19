@@ -2,7 +2,7 @@ plugins {
     id 'com.android.application'
 }
 
-// Signature de la version publiée : clé d'importation fournie par les secrets GitHub (jamais dans le dépôt)
+// Signature de la version publiée : clé d'importation fournie par les secrets GitHub (jamais dans le dépôt).
 def ks = System.getenv('KEYSTORE_FILE')
 
 android {
