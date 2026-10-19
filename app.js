@@ -4,7 +4,7 @@
 
 // La page et le code doivent être de la même version. Sinon (page gardée en cache
 // par le téléphone ou par GitHub), on recharge une page fraîche, au plus 3 fois.
-const APP_VERSION = 132;
+const APP_VERSION = 133;
 try {
   const meta = document.querySelector('meta[name="balise-version"]');
   const pageV = meta ? +meta.content : 0;
@@ -1708,12 +1708,12 @@ try {
 // ---------- voix enregistrée « Jessica » : les phrases sont assemblées à partir de fragments audio ----------
 // (dossier voice/ : index.json associe chaque fragment de texte à un petit mp3 ; voix de synthèse du téléphone en secours)
 let voiceLib = null;
-const voiceStyle = () => store.get('vstyle') || 'pisteo';
+const voiceStyle = () => store.get('vstyle') || 'system'; // voix du téléphone par défaut, Jessica en option
 const vNorm = t => t.normalize('NFC').toLowerCase().replace(/[’]/g, "'").replace(/[^\p{L}\p{N}' -]+/gu, ' ').trim().split(/\s+/).join(' ');
 fetch('voice/index.json?v=' + APP_VERSION).then(r => r.ok ? r.json() : null).then(j => {
   voiceLib = j;
   // tous les fragments en cache pour le hors ligne, sans gêner le démarrage
-  if (j && 'caches' in window) setTimeout(() => caches.open('voice-v1').then(c => c.addAll([...new Set(Object.values(j))].map(n => `voice/${n}.mp3`))).catch(() => {}), 8000);
+  if (j && 'caches' in window && voiceStyle() === 'pisteo') setTimeout(() => caches.open('voice-v1').then(c => c.addAll([...new Set(Object.values(j))].map(n => `voice/${n}.mp3`))).catch(() => {}), 8000);
 }).catch(() => {});
 function voiceParts(text) {
   if (!voiceLib) return null;
