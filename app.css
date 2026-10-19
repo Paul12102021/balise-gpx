@@ -146,6 +146,7 @@ select { min-height: 40px; border-radius: 8px; border: 1px solid var(--line); ba
 /* les boutons suivent le haut du panneau ; plus de place au-dessus : ils s'effacent */
 .fab-col { transition: opacity .15s; }
 body.fab-hide:not(.nav) .fab-col { opacity: 0; pointer-events: none; }
+body.nav.fab-hide-nav .fab-col { opacity: 0; pointer-events: none; }
 body.nav .fab-col { bottom: calc(var(--nav-h, 92px) + 12px); top: auto; }
 .fab {
   width: 50px; height: 50px; border-radius: 50%; border: 1px solid var(--line);

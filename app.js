@@ -4,7 +4,7 @@
 
 // La page et le code doivent être de la même version. Sinon (page gardée en cache
 // par le téléphone ou par GitHub), on recharge une page fraîche, au plus 3 fois.
-const APP_VERSION = 152;
+const APP_VERSION = 153;
 try {
   const meta = document.querySelector('meta[name="balise-version"]');
   const pageV = meta ? +meta.content : 0;
@@ -4050,7 +4050,14 @@ function applyNavMore(open) {
 }
 function navMotion() {
   return navMotion.m || (navMotion.m = sheetMotion($('navBottom'), $('navMore'), applyNavMore,
-    h => { if (h) document.documentElement.style.setProperty('--nav-h', h + 'px'); },
+    h => {
+      if (!h) return;
+      document.documentElement.style.setProperty('--nav-h', h + 'px');
+      // boutons ronds : ils suivent le panneau, et s'effacent sous le bandeau de direction s'il n'y a plus de place
+      const col = document.querySelector('.fab-col'), top = document.querySelector('.navtop');
+      const room = innerHeight - h - (top ? top.offsetHeight : 0) - 24;
+      document.body.classList.toggle('fab-hide-nav', !!col && !$('navMore').hidden && !$('navMore').classList.contains('prof-only') && room < col.offsetHeight);
+    },
     () => { if (nav && follow) navCamera(400); },
     { reduced: () => $('navMore').classList.contains('prof-only'), set: v => setProfOnly(v) }));
 }
@@ -5275,7 +5282,7 @@ function moreMotion() {
       // assez de place entre le bandeau du haut et le panneau pour la colonne de boutons ?
       const col = document.querySelector('.fab-col'), hud = document.querySelector('.hud');
       const room = innerHeight - h - (hud ? hud.offsetHeight : 0) - 24;
-      document.body.classList.toggle('fab-hide', !!col && room < col.offsetHeight);
+      document.body.classList.toggle('fab-hide', !!col && !$('more').hidden && room < col.offsetHeight);
     }));
 }
 function toggleMore(open, instant) {
