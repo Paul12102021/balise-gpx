@@ -1,6 +1,6 @@
 /* Service worker : appli disponible hors ligne + tuiles de carte en cache */
-const APP = 'app-v131', TILES = 'tiles-v2';
-const SHELL = ['./', 'index.html', 'app.css?v=131', 'app.js?v=131', 'vendor/maplibre-gl.js', 'vendor/maplibre-gl.css',
+const APP = 'app-v132', TILES = 'tiles-v2';
+const SHELL = ['./', 'index.html', 'app.css?v=132', 'app.js?v=132', 'vendor/maplibre-gl.js', 'vendor/maplibre-gl.css',
   'departements.json', 'manifest.webmanifest', 'icon.svg', 'icon-192.png', 'icon-512.png', 'icon-maskable-512.png', 'apple-touch-icon.png'];
 
 // Clé de cache commune avec la page : https://tiles.balise/<fond>/<z>/<x>/<y>
@@ -24,7 +24,7 @@ self.addEventListener('install', e => {
   e.waitUntil(caches.open(APP).then(c => c.addAll(SHELL.map(u => new Request(u, { cache: 'reload' })))).then(() => self.skipWaiting()));
 });
 self.addEventListener('activate', e => {
-  e.waitUntil(caches.keys().then(ks => Promise.all(ks.filter(k => k !== APP && k !== TILES && k !== 'shared' && k !== 'ofm-assets' && k !== 'rt-geo' && k !== 'rt-tiles').map(k => caches.delete(k))))
+  e.waitUntil(caches.keys().then(ks => Promise.all(ks.filter(k => k !== APP && k !== TILES && k !== 'shared' && k !== 'ofm-assets' && k !== 'rt-geo' && k !== 'rt-tiles' && !k.startsWith('voice-')).map(k => caches.delete(k))))
     .then(() => self.clients.claim()));
 });
 
@@ -102,6 +102,11 @@ self.addEventListener('fetch', e => {
     return;
   }
 
+  // Voix enregistrée : les fragments ne changent jamais, on les sert depuis le cache (hors ligne)
+  if (url.origin === location.origin && /\/voice\/\d+\.mp3$/.test(url.pathname)) {
+    e.respondWith(caches.open('voice-v1').then(async c => (await c.match(req)) || fetch(req).then(r => { if (r.ok) c.put(req, r.clone()); return r; })));
+    return;
+  }
   // Fichiers de l'appli : réseau d'abord (pour recevoir les mises à jour), cache si hors ligne
   if (url.origin === location.origin) {
     // une page ouverte (navigation) est redemandée par son adresse : certains navigateurs refusent

@@ -8,13 +8,13 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<meta name="balise-version" content="131">
+<meta name="balise-version" content="132">
 <title>Pisteo</title>
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" href="icon.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
 <link rel="stylesheet" href="vendor/maplibre-gl.css">
-<link rel="stylesheet" href="app.css?v=131">
+<link rel="stylesheet" href="app.css?v=132">
 </head>
 <body>
 <div id="map" aria-label="Carte"></div>
@@ -168,8 +168,12 @@
       </select>
     </div>
     <div class="row">
-      <label for="optVoice">Guidage vocal et bips<br><small><button id="voiceTest" class="linkbtn">écouter</button> · <button id="voiceHelp" class="linkbtn">une voix plus naturelle</button></small></label>
+      <label for="optVoice">Guidage vocal et bips<br><small><button id="voiceTest" class="linkbtn">écouter</button></small></label>
       <input type="checkbox" id="optVoice" class="check">
+    </div>
+    <div class="row">
+      <label for="optVStyle">Voix<br><small id="voiceHelpRow">Robotique ? <button id="voiceHelp" class="linkbtn">une voix plus naturelle</button></small><small id="voiceCredit">Voix UPMC, licence <a href="voice/LICENSE.txt" target="_blank" rel="noopener">CC BY-SA</a></small></label>
+      <select id="optVStyle"><option value="pisteo">Jessica (enregistrée)</option><option value="system">Voix du téléphone</option></select>
     </div>
 
     <div class="row">
@@ -626,6 +630,6 @@
 <div id="toast" class="toast" hidden></div>
 
 <script src="vendor/maplibre-gl.js"></script>
-<script src="app.js?v=131"></script>
+<script src="app.js?v=132"></script>
 </body>
 </html>

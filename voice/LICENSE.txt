@@ -1,0 +1,4 @@
+Voix du guidage de Pisteo
+Fichiers audio générés avec Piper (https://github.com/rhasspy/piper), modèle fr_FR-upmc-medium, voix « jessica ».
+Données vocales : UPMC / MaryTTS (https://github.com/marytts/upmc-pierre-data), licence Creative Commons BY-SA 4.0.
+Ces fichiers audio sont diffusés sous la même licence : CC BY-SA 4.0 (https://creativecommons.org/licenses/by-sa/4.0/deed.fr).

@@ -4,7 +4,7 @@
 
 // La page et le code doivent être de la même version. Sinon (page gardée en cache
 // par le téléphone ou par GitHub), on recharge une page fraîche, au plus 3 fois.
-const APP_VERSION = 131;
+const APP_VERSION = 132;
 try {
   const meta = document.querySelector('meta[name="balise-version"]');
   const pageV = meta ? +meta.content : 0;
@@ -856,6 +856,8 @@ function voiceSample() {
   unlockAudio(); say('Dans 200 mètres, tourne à gauche, puis tout de suite à droite.');
 }
 $('voiceTest').onclick = e => { e.preventDefault(); voiceSample(); };
+$('optVStyle').onchange = e => { store.set('vstyle', e.target.value); $('voiceHelpRow').hidden = e.target.value === 'pisteo'; $('voiceCredit').hidden = e.target.value !== 'pisteo'; voiceSample(); };
+setTimeout(() => { $('optVStyle').value = voiceStyle(); $('voiceHelpRow').hidden = voiceStyle() === 'pisteo'; $('voiceCredit').hidden = voiceStyle() !== 'pisteo'; }, 0); // après l'initialisation de la voix
 $('voiceHelp').onclick = e => { e.preventDefault(); $('voiceInfo').hidden = false; };
 $('viClose').onclick = () => { $('voiceInfo').hidden = true; };
 $('voiceInfo').onclick = e => { if (e.target === $('voiceInfo')) $('voiceInfo').hidden = true; };
@@ -1703,9 +1705,61 @@ try {
   };
   document.addEventListener('visibilitychange', hello); window.addEventListener('focus', hello); hello();
 } catch { /* navigateur sans BroadcastChannel */ }
+// ---------- voix enregistrée « Jessica » : les phrases sont assemblées à partir de fragments audio ----------
+// (dossier voice/ : index.json associe chaque fragment de texte à un petit mp3 ; voix de synthèse du téléphone en secours)
+let voiceLib = null;
+const voiceStyle = () => store.get('vstyle') || 'pisteo';
+const vNorm = t => t.normalize('NFC').toLowerCase().replace(/[’]/g, "'").replace(/[^\p{L}\p{N}' -]+/gu, ' ').trim().split(/\s+/).join(' ');
+fetch('voice/index.json?v=' + APP_VERSION).then(r => r.ok ? r.json() : null).then(j => {
+  voiceLib = j;
+  // tous les fragments en cache pour le hors ligne, sans gêner le démarrage
+  if (j && 'caches' in window) setTimeout(() => caches.open('voice-v1').then(c => c.addAll([...new Set(Object.values(j))].map(n => `voice/${n}.mp3`))).catch(() => {}), 8000);
+}).catch(() => {});
+function voiceParts(text) {
+  if (!voiceLib) return null;
+  const n = vNorm(text); if (!n) return null;
+  if (voiceLib['short ' + n]) return [voiceLib['short ' + n]]; // « À droite. » seul : intonation de fin de phrase
+  const parts = [], w = n.split(' ');
+  for (let i = 0; i < w.length;) {
+    let j = Math.min(w.length, i + 24), hit = null;
+    for (; j > i; j--) { const k = w.slice(i, j).join(' '); if (voiceLib[k]) { hit = voiceLib[k]; break; } }
+    if (!hit) return null; // un morceau inconnu : la voix du téléphone prendra le relais
+    parts.push(hit); i = j;
+  }
+  return parts;
+}
+const voiceBuf = new Map();
+let voiceSrc = [], voiceEnd = 0, voiceSeq = 0;
+async function voiceBuffer(n) {
+  if (voiceBuf.has(n)) return voiceBuf.get(n);
+  const b = await audioCtx.decodeAudioData(await (await fetch(`voice/${n}.mp3`)).arrayBuffer());
+  voiceBuf.set(n, b); return b;
+}
+async function playParts(parts, queue) {
+  unlockAudio(); if (!audioCtx) throw new Error('audio');
+  const seq = ++voiceSeq;
+  if (!queue) { voiceSrc.forEach(s => { try { s.stop(); } catch {} }); voiceSrc = []; voiceEnd = 0; try { speechSynthesis.cancel(); } catch {} }
+  const bufs = await Promise.all(parts.map(voiceBuffer));
+  if (!queue && seq !== voiceSeq) return; // une phrase plus récente a pris la place
+  let t = Math.max(audioCtx.currentTime + 0.05, queue ? voiceEnd + 0.25 : 0);
+  bufs.forEach((b, i) => {
+    const s = audioCtx.createBufferSource(); s.buffer = b; s.connect(audioCtx.destination); s.start(t);
+    s.onended = () => { voiceSrc = voiceSrc.filter(x => x !== s); };
+    voiceSrc.push(s); t += b.duration + (i < bufs.length - 1 ? 0.07 : 0);
+  });
+  voiceEnd = t;
+}
 // queue : la phrase attend la fin de celle en cours au lieu de la couper (pour enchaîner sans hachage)
 function say(text, queue = false) {
-  if (!voiceOn || otherActive || !('speechSynthesis' in window)) return;
+  if (!voiceOn || otherActive) return;
+  if (voiceStyle() === 'pisteo') {
+    const parts = voiceParts(text);
+    if (parts) { playParts(parts, queue).catch(() => sayTTS(text, queue)); return; }
+  }
+  sayTTS(text, queue);
+}
+function sayTTS(text, queue = false) {
+  if (!('speechSynthesis' in window)) return;
   try {
     const u = new SpeechSynthesisUtterance(text);
     u.lang = 'fr-FR'; u.rate = voiceRate; u.pitch = voicePitch;
