@@ -4,7 +4,7 @@
 
 // La page et le code doivent être de la même version. Sinon (page gardée en cache
 // par le téléphone ou par GitHub), on recharge une page fraîche, au plus 3 fois.
-const APP_VERSION = 135;
+const APP_VERSION = 136;
 try {
   const meta = document.querySelector('meta[name="balise-version"]');
   const pageV = meta ? +meta.content : 0;
@@ -325,6 +325,8 @@ const NAT = {
     url: 'https://mapsneu.wien.gv.at/basemap/geolandbasemap/normal/google3857/{z}/{y}/{x}.png' },
   be: { name: 'IGN Belgique', max: 17, kb: 17, attr: '© <a href="https://www.ngi.be">IGN-NGI</a> · CartoWeb',
     url: 'https://cartoweb.wmts.ngi.be/1.0.0/topo/default/3857/{z}/{y}/{x}.png' },
+  us: { name: 'USGS Topo', max: 16, kb: 22, attr: '<a href="https://www.usgs.gov/programs/national-geospatial-program/national-map">USGS The National Map</a>',
+    url: 'https://basemap.nationalmap.gov/arcgis/rest/services/USGSTopo/MapServer/tile/{z}/{y}/{x}' },
 };
 let natCur = NAT[store.get('natCur')] ? store.get('natCur') : 'ign', natShapes = null; // dernier pays affiché : bon fond dès l'ouverture
 const natAt = (lon, lat) => { if (!natShapes) return null; for (const k in natShapes) if (inPolys(lon, lat, natShapes[k])) return k; return null; };
@@ -4339,6 +4341,7 @@ const COUNTRIES = [
   { id: 'es', nat: 'es', name: 'Espagne', file: 'regions/es.json' },
   { id: 'at', nat: 'at', name: 'Autriche', file: 'regions/at.json' },
   { id: 'be', nat: 'be', name: 'Belgique', file: 'regions/be.json' },
+  { id: 'us', nat: 'us', name: 'États-Unis', file: 'regions/us.json' }, // parcs nationaux : un État entier serait trop lourd
 ];
 const ccOf = id => COUNTRIES.find(c => c.id === id) || COUNTRIES[0];
 const regCache = {};
@@ -4386,12 +4389,12 @@ function currentDepTiles() {
 function updateOfflineInfo() {
   if (track) {
     const n = traceTiles(track).length;
-    $('dlTraceInfo').textContent = `${track.name} · ≈ ${n.toLocaleString('fr-FR')} tuiles · ~${fmtMo(n * tileKB)}`;
+    $('dlTraceInfo').textContent = `${track.name} · ≈ ${n.toLocaleString(LOC)} tuiles · ~${fmtMo(n * tileKB)}`;
     $('dlTrace').disabled = false;
   } else { $('dlTraceInfo').textContent = 'Ouvre d\'abord une trace GPX.'; $('dlTrace').disabled = true; }
   if (regs) {
     const { d, tiles } = currentDepTiles(), gMo = depGraphMo(d.polys);
-    $('dlDepInfo').textContent = `Carte ≈ ${tiles.length.toLocaleString('fr-FR')} tuiles · ~${fmtMo(tiles.length * provKB(ccOf(regCc).nat))}` + ($('depGraph').checked ? ` · chemins ~${gMo}${MO}` : '');
+    $('dlDepInfo').textContent = `Carte ≈ ${tiles.length.toLocaleString(LOC)} tuiles · ~${fmtMo(tiles.length * provKB(ccOf(regCc).nat))}` + ($('depGraph').checked ? ` · chemins ~${gMo}${MO}` : '');
     $('depGraphMo').textContent = `~${gMo}${MO}`;
   }
 }
@@ -4453,7 +4456,7 @@ async function downloadPack(pack, tiles) {
     const secs = (Date.now() - t0) / 1000, rate = done / Math.max(secs, 1), left = (total - done) / Math.max(rate, 0.1);
     const pct = Math.floor(done / total * 100), rest = done > 20 && done < total ? ` · reste ${left < 60 ? 'moins d’1 min' : '~' + fmtDur(left)}` : '';
     $('offBar').style.width = (done / total * 100) + '%';
-    $('offTxt').textContent = `${pct} % · ${done.toLocaleString('fr-FR')} / ${total.toLocaleString('fr-FR')}` + rest + (fail ? ` · ${fail} erreurs` : '');
+    $('offTxt').textContent = `${pct} % · ${done.toLocaleString(LOC)} / ${total.toLocaleString(LOC)}` + rest + (fail ? ` · ${fail} erreurs` : '');
     // aussi visible hors de la fenêtre des cartes : dans les réglages et sur la ligne de la carte
     $('mapsStatus').textContent = `${pack.name} : ${pct} %${rest}`; $('mapsStatus').hidden = false;
     const row = document.querySelector(`[data-pack="${CSS.escape(pack.id)}"]`);
@@ -4507,7 +4510,7 @@ async function downloadPack(pack, tiles) {
   await save(!stopped && fail === 0);
   $('dlStop').hidden = true; $('dlTrace').disabled = !track; $('dlDep').disabled = false; $('mapsStatus').hidden = true;
   if (reason) $('offTxt').textContent = `Téléchargement impossible : ${reason}.`;
-  else $('offTxt').textContent = pack.complete ? `${pack.name} : disponible hors ligne ✓` : `${pack.name} : ${pack.missing.toLocaleString('fr-FR')} tuiles manquantes · touche « Reprendre »`;
+  else $('offTxt').textContent = pack.complete ? `${pack.name} : disponible hors ligne ✓` : `${pack.name} : ${pack.missing.toLocaleString(LOC)} tuiles manquantes · touche « Reprendre »`;
   toast(reason ? 'Téléchargement impossible : ' + reason : pack.complete ? 'Carte téléchargée ✓' : 'Téléchargement incomplet, tu peux le reprendre.', 5000);
   renderPacks(); updateStorageInfo(); updateOfflineInfo(); drawPacks();
 }
@@ -4598,8 +4601,8 @@ function updateZoneInfo() {
   if (!zoneMode) return;
   const z = zonePlan(), tooBig = z.tiles.length > (z.prov === 'ofm' ? OFM_MAX : 25000) || (z.prov === 'ofm' && z.mapKB > 50 * 1024);
   $('zoneInfo').textContent = tooBig
-    ? `Zone trop grande (${Math.round(z.km2).toLocaleString('fr-FR')} km²) : zoome un peu`
-    : `${Math.round(z.km2).toLocaleString('fr-FR')} km² · carte ${provName(z.prov)} ~${fmtMo(z.mapKB)}` + (z.gKB ? ` · chemins ~${fmtMo(z.gKB)}` : '');
+    ? `Zone trop grande (${Math.round(z.km2).toLocaleString(LOC)} km²) : zoome un peu`
+    : `${Math.round(z.km2).toLocaleString(LOC)} km² · carte ${provName(z.prov)} ~${fmtMo(z.mapKB)}` + (z.gKB ? ` · chemins ~${fmtMo(z.gKB)}` : '');
   $('zoneGo').disabled = tooBig;
 }
 $('zoneStart').onclick = async () => {
@@ -4698,7 +4701,7 @@ async function renderPacks() {
     const info = document.createElement('div'); info.className = 'lib-item';
     info.innerHTML = '<b></b><span></span>';
     info.querySelector('b').textContent = p.name;
-    info.querySelector('span').textContent = `${p.kind === 'trace' ? 'Le long de la trace' : p.kind === 'zone' ? `Zone de ${Math.round(bboxKm2(p.bbox)).toLocaleString('fr-FR')} km²` : (p.cc && p.cc !== 'fr' ? ccOf(p.cc).name : 'Département') + ', ' + p.detail} · carte ${provName(p.prov || 'ign')} · ${fmtMo(p.bytes / 1024)} · ${fmtDate(p.date)}` + (p.complete ? '' : p.restored ? ' · à retélécharger' : ` · incomplet`) + (p.graph ? (p.graph.partial ? ` · chemins incomplets (${p.graph.km} km)` : ` · itinéraires hors connexion ✓ (${p.graph.km} km de chemins)`) : '');
+    info.querySelector('span').textContent = `${p.kind === 'trace' ? 'Le long de la trace' : p.kind === 'zone' ? `Zone de ${Math.round(bboxKm2(p.bbox)).toLocaleString(LOC)} km²` : (p.cc && p.cc !== 'fr' ? ccOf(p.cc).name : 'Département') + ', ' + p.detail} · carte ${provName(p.prov || 'ign')} · ${fmtMo(p.bytes / 1024)} · ${fmtDate(p.date)}` + (p.complete ? '' : p.restored ? ' · à retélécharger' : ` · incomplet`) + (p.graph ? (p.graph.partial ? ` · chemins incomplets (${p.graph.km} km)` : ` · itinéraires hors connexion ✓ (${p.graph.km} km de chemins)`) : '');
     if (dl && dl.packId === p.id) { const live = document.createElement('span'); live.className = 'dl-live'; live.dataset.pack = p.id; live.textContent = 'En cours…'; info.appendChild(live); }
     const acts = document.createElement('div'); acts.className = 'pack-acts';
     if (!p.complete) {

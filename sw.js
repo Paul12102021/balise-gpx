@@ -1,6 +1,6 @@
 /* Service worker : appli disponible hors ligne + tuiles de carte en cache */
-const APP = 'app-v135', TILES = 'tiles-v2';
-const SHELL = ['./', 'index.html', 'app.css?v=135', 'app.js?v=135', 'i18n/en.js?v=135', 'i18n/es.js?v=135', 'vendor/maplibre-gl.js', 'vendor/maplibre-gl.css',
+const APP = 'app-v136', TILES = 'tiles-v2';
+const SHELL = ['./', 'index.html', 'app.css?v=136', 'app.js?v=136', 'i18n/en.js?v=136', 'i18n/es.js?v=136', 'vendor/maplibre-gl.js', 'vendor/maplibre-gl.css',
   'departements.json', 'regions/countries.json', 'manifest.webmanifest', 'icon.svg', 'icon-192.png', 'icon-512.png', 'icon-maskable-512.png', 'apple-touch-icon.png'];
 
 // Clé de cache commune avec la page : https://tiles.balise/<fond>/<z>/<x>/<y>
@@ -21,6 +21,8 @@ function parseTile(url) {
     return { prov: 'at', z: +m[1], x: +m[3], y: +m[2] };
   if (url.hostname === 'cartoweb.wmts.ngi.be' && (m = url.pathname.match(/^\/1\.0\.0\/topo\/default\/3857\/(\d+)\/(\d+)\/(\d+)\.png$/)))
     return { prov: 'be', z: +m[1], x: +m[3], y: +m[2] };
+  if (url.hostname === 'basemap.nationalmap.gov' && (m = url.pathname.match(/^\/arcgis\/rest\/services\/USGSTopo\/MapServer\/tile\/(\d+)\/(\d+)\/(\d+)$/)))
+    return { prov: 'us', z: +m[1], x: +m[3], y: +m[2] };
   if (url.hostname === 'data.geopf.fr' && /GetTile/i.test(url.searchParams.get('REQUEST') || ''))
     return { prov: 'ign', z: +url.searchParams.get('TILEMATRIX'), x: +url.searchParams.get('TILECOL'), y: +url.searchParams.get('TILEROW') };
   return null;
