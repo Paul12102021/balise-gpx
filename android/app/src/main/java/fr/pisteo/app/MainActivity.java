@@ -170,9 +170,11 @@ public class MainActivity extends Activity {
             if (p != null) runOnUiThread(p);
         });
 
-        readShared(getIntent());
+        String back = appLink(getIntent());
+        if (back == null) readShared(getIntent());
         if (state != null) web.restoreState(state);
-        if (web.getUrl() == null) web.loadUrl(HOME);
+        if (back != null) web.loadUrl(back);
+        else if (web.getUrl() == null) web.loadUrl(HOME);
     }
 
     @Override
@@ -185,6 +187,8 @@ public class MainActivity extends Activity {
     protected void onNewIntent(Intent intent) {
         super.onNewIntent(intent);
         setIntent(intent);
+        String back = appLink(intent);
+        if (back != null) { web.loadUrl(back); return; }
         if (readShared(intent)) web.evaluateJavascript("window.pisteoCheckShared && window.pisteoCheckShared()", null);
     }
 
@@ -215,12 +219,13 @@ public class MainActivity extends Activity {
         });
     }
 
-    // liens : l'appli et la connexion Strava restent dans Pisteo, le reste s'ouvre dans l'appli adaptée
+    // liens : l'appli reste dans Pisteo, le reste s'ouvre dans l'appli adaptée
     private boolean openOutside(Uri u) {
         String scheme = u.getScheme() == null ? "" : u.getScheme().toLowerCase(Locale.ROOT);
         String host = u.getHost() == null ? "" : u.getHost().toLowerCase(Locale.ROOT);
-        if ((scheme.equals("https") || scheme.equals("http"))
-                && (host.equals(HOST) || host.equals("strava.com") || host.endsWith(".strava.com"))) return false;
+        // la connexion Strava (et Google) se fait dans le navigateur ou l'appli Strava : Google refuse les WebView
+        if ((scheme.equals("https") || scheme.equals("http")) && host.equals(HOST)
+                && !String.valueOf(u.getPath()).startsWith("/balise-gpx/retour-strava")) return false;
         try {
             Intent i = scheme.equals("intent") ? Intent.parseUri(u.toString(), Intent.URI_INTENT_SCHEME) : new Intent(Intent.ACTION_VIEW, u);
             if (scheme.equals("intent")) { i.addCategory(Intent.CATEGORY_BROWSABLE); i.setComponent(null); i.setSelector(null); }
@@ -260,6 +265,16 @@ public class MainActivity extends Activity {
             fileCb.onReceiveValue(uris);
             fileCb = null;
         }
+    }
+
+    // lien vers le site qui ouvre l'appli (retour de la connexion Strava) : la page à charger, ou null
+    private String appLink(Intent intent) {
+        if (intent == null || !Intent.ACTION_VIEW.equals(intent.getAction()) || intent.getData() == null) return null;
+        Uri u = intent.getData();
+        String scheme = u.getScheme() == null ? "" : u.getScheme().toLowerCase(Locale.ROOT);
+        if (!scheme.equals("https") || !HOST.equalsIgnoreCase(u.getHost())) return null;
+        String q = u.getEncodedQuery();
+        return HOME + (q == null ? "" : "?" + q);
     }
 
     // GPX reçu par « Partager » ou « Ouvrir avec » : gardé de côté, la page vient le chercher
@@ -360,6 +375,14 @@ public class MainActivity extends Activity {
 
     /** Ce que la page peut demander au téléphone (window.PisteoAndroid). */
     private class Bridge {
+        @JavascriptInterface
+        public void openExternal(String url) {
+            runOnUiThread(() -> {
+                try { startActivity(new Intent(Intent.ACTION_VIEW, Uri.parse(url))); }
+                catch (Exception e) { Toast.makeText(MainActivity.this, "Aucune appli pour ouvrir ce lien", Toast.LENGTH_SHORT).show(); }
+            });
+        }
+
         @JavascriptInterface
         public void speak(String text, String lang, double rate, double pitch, boolean queue) {
             runOnUiThread(() -> speakNow(text, lang, (float) rate, (float) pitch, queue));

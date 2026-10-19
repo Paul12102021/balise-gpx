@@ -1,0 +1,22 @@
+<!doctype html>
+<html lang="fr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Retour à Pisteo</title>
+<style>body{margin:0;min-height:100vh;display:grid;place-items:center;font:16px system-ui,sans-serif;background:#EEF1E8;color:#17201c;padding:16px;box-sizing:border-box}
+main{max-width:340px;text-align:center}a{display:block;margin:12px 0;padding:14px;border-radius:12px;text-decoration:none;font-weight:600}
+.go{background:#2F5E45;color:#fff}.web{color:#2F5E45;border:1px solid #c9d2c0}</style>
+</head><body>
+<main><p id="t">Retour à Pisteo…</p>
+<a id="app" class="go" hidden>Revenir dans l'appli Pisteo</a>
+<a id="web" class="web" href="../">Continuer sur le site</a></main>
+<script>
+// retour de la connexion Strava. Normalement l'appli Android s'ouvre directement sur ce lien ;
+// sinon : sur Android, bouton pour revenir dans l'appli ; ailleurs, retour automatique dans Pisteo sur le site
+var q = location.search, site = '../' + q;
+document.getElementById('web').href = site;
+if (/Android/i.test(navigator.userAgent)) {
+  var a = document.getElementById('app');
+  a.href = 'intent://paul12102021.github.io/balise-gpx/retour-strava/' + q + '#Intent;scheme=https;package=fr.pisteo.app;S.browser_fallback_url=' + encodeURIComponent(new URL(site, location.href).href) + ';end';
+  a.hidden = false; document.getElementById('t').textContent = 'Connexion à Strava terminée.';
+} else location.replace(site);
+</script>
+</body></html>

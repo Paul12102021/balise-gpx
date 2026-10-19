@@ -4,7 +4,7 @@
 
 // La page et le code doivent être de la même version. Sinon (page gardée en cache
 // par le téléphone ou par GitHub), on recharge une page fraîche, au plus 3 fois.
-const APP_VERSION = 145;
+const APP_VERSION = 146;
 try {
   const meta = document.querySelector('meta[name="balise-version"]');
   const pageV = meta ? +meta.content : 0;
@@ -1037,7 +1037,10 @@ $('stvRetryBtn').onclick = () => { store.set('stvInactive', ''); stvUI(); toast(
 $('stvOff').onclick = () => { store.set('stvTok', ''); stvUI(); toast('Strava déconnecté'); };
 $('stvConnect').onclick = () => {
   if (!STRAVA_RELAY) return;
-  location.href = `https://www.strava.com/oauth/authorize?client_id=${STRAVA_CLIENT_ID}&response_type=code&approval_prompt=auto&scope=read,activity:write&redirect_uri=${encodeURIComponent(stvBack() + '?strava=1')}`;
+  const q = `client_id=${STRAVA_CLIENT_ID}&response_type=code&approval_prompt=auto&scope=read,activity:write`;
+  // appli Android : connexion dans l'appli Strava ou le navigateur (Google refuse les WebView), puis le lien de retour rouvre Pisteo
+  if (AND && AND.openExternal) { AND.openExternal(`https://www.strava.com/oauth/mobile/authorize?${q}&redirect_uri=${encodeURIComponent(stvBack() + 'retour-strava/?strava=1')}`); return; }
+  location.href = `https://www.strava.com/oauth/authorize?${q}&redirect_uri=${encodeURIComponent(stvBack() + '?strava=1')}`;
 };
 async function stvTokenReq(params) {
   const r = await fetch(STRAVA_RELAY + '/token', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(params) });
