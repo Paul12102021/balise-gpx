@@ -1,0 +1,53 @@
+plugins {
+    id 'com.android.application'
+}
+
+// Signature de la version publiée : clé d'importation fournie par les secrets GitHub (jamais dans le dépôt)
+def ks = System.getenv('KEYSTORE_FILE')
+
+android {
+    namespace 'fr.pisteo.app'
+    compileSdk 36
+
+    defaultConfig {
+        applicationId 'fr.pisteo.app'
+        minSdk 26
+        targetSdk 36
+        versionCode 10
+        versionName '2.0.0'
+    }
+
+    signingConfigs {
+        release {
+            if (ks) {
+                storeFile file(ks)
+                storePassword System.getenv('KEYSTORE_PASSWORD')
+                keyAlias System.getenv('KEY_ALIAS')
+                keyPassword System.getenv('KEY_PASSWORD') ?: System.getenv('KEYSTORE_PASSWORD')
+            }
+        }
+    }
+
+    buildTypes {
+        release {
+            minifyEnabled false
+            if (ks) signingConfig signingConfigs.release
+            resValue 'string', 'app_name', 'Pisteo'
+        }
+        debug {
+            // version d'essai installable à côté de celle du Play Store
+            applicationIdSuffix '.dev'
+            versionNameSuffix '-dev'
+            resValue 'string', 'app_name', 'Pisteo (essai)'
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+}
+
+dependencies {
+    implementation 'androidx.core:core:1.13.1'
+}

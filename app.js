@@ -4,7 +4,7 @@
 
 // La page et le code doivent être de la même version. Sinon (page gardée en cache
 // par le téléphone ou par GitHub), on recharge une page fraîche, au plus 3 fois.
-const APP_VERSION = 138;
+const APP_VERSION = 139;
 try {
   const meta = document.querySelector('meta[name="balise-version"]');
   const pageV = meta ? +meta.content : 0;
@@ -89,6 +89,8 @@ function spokenTurn(txt) {
     .replace(/^Légèrement/, 'prends légèrement').replace(/^Rejoignez la trace/, 'rejoins la trace');
 }
 const pick = a => a[Math.floor(Math.random() * a.length)];
+// Appli Android (WebView) : le téléphone fournit la voix, l'écran allumé, les fichiers et le partage
+const AND = window.PisteoAndroid || null;
 const store = {
   get(k) { try { return localStorage.getItem(k); } catch { return null; } },
   set(k, v) { try { localStorage.setItem(k, v); } catch { /* stockage plein ou bloqué */ } }
@@ -932,6 +934,7 @@ $('bkSave').onclick = async () => {
   const data = { app: 'pisteo', format: 1, version: APP_VERSION, date: new Date().toISOString(), settings, tracks: items, packs };
   const d = new Date(), pad = n => String(n).padStart(2, '0');
   const fname = `pisteo-sauvegarde-${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}.json`;
+  if (AND) { try { AND.shareFile(fname, 'application/json', JSON.stringify(data)); store.set('bkDate', String(Date.now())); } catch {} return; }
   const file = new File([JSON.stringify(data)], fname, { type: 'application/json' });
   try { if (navigator.canShare && navigator.canShare({ files: [file] })) { await navigator.share({ files: [file], title: 'Sauvegarde Pisteo' }); store.set('bkDate', String(Date.now())); return; } }
   catch (e) { if (e.name === 'AbortError') return; }
@@ -1104,6 +1107,7 @@ function gpxForStrava(it) {
   return t;
 }
 function saveFile(text, fname) {
+  if (AND) { try { AND.saveDownload(fname, 'application/gpx+xml', text); } catch {} return; }
   const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([text], { type: 'application/gpx+xml' })); a.download = fname;
   document.body.appendChild(a); a.click(); setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 1500);
 }
@@ -1245,6 +1249,7 @@ $('libBrowse').onclick = () => { closeLib(); $('fileIn').click(); };
 
 // ---------- GPX partagé depuis une autre appli (gestionnaire de fichiers, mail…) ----------
 async function checkShared() {
+  if (AND) { try { const t = AND.takeShared(); if (t) loadText(t); } catch {} return; }
   if (!/[?&]shared=1/.test(location.search)) return;
   history.replaceState(null, '', location.pathname);
   try {
@@ -1272,6 +1277,7 @@ let watchId = null, me = null, prevFix = null, moveRef = null, moveBearing = nul
 let speedEma = null, speedSamples = 0, heading = null, compass = null, wakeLock = null;
 
 async function keepAwake() {
+  if (AND) { try { AND.keepAwake(true); } catch {} return; }
   try { if ('wakeLock' in navigator && document.visibilityState === 'visible' && !wakeLock) { wakeLock = await navigator.wakeLock.request('screen'); wakeLock.addEventListener('release', () => wakeLock = null); } } catch { /* refusé */ }
 }
 document.addEventListener('visibilitychange', () => { if ((nav || recording) && document.visibilityState === 'visible') keepAwake(); });
@@ -1295,6 +1301,7 @@ function stopGPS() {
   if (watchId != null) navigator.geolocation.clearWatch(watchId);
   watchId = null;
   if (wakeLock) { wakeLock.release().catch(() => {}); wakeLock = null; }
+  if (AND) try { AND.keepAwake(false); } catch {}
 }
 
 // Boussole : sert de cap quand on avance lentement (à pied, le cap GPS est instable)
@@ -1455,7 +1462,7 @@ async function startNav(free = false) {
 function stopNav() {
   stopPip(); nav = false; document.body.classList.remove('nav', 'free'); applyEco(); toggleNavMore(false, true);
   stopSim(); clearRejoin(); isOff = false;
-  try { speechSynthesis.cancel(); } catch {}
+  ttsCancel();
   setSrc('turn', EMPTY);
   map.easeTo({ pitch: 0, bearing: 0, padding: { top: 0, bottom: 0, left: 0, right: 0 }, duration: 600 });
   if (!recording) stopGPS();
@@ -1793,7 +1800,7 @@ function syncAlertUI() {
 }
 function setVoice(on) {
   voiceOn = on; store.set('voice', on ? '1' : '0'); syncAlertUI();
-  if (on) say('Guidage vocal activé'); else { try { speechSynthesis.cancel(); } catch {} toast('Son coupé'); }
+  if (on) say('Guidage vocal activé'); else { ttsCancel(); toast('Son coupé'); }
 }
 function setVib(on) {
   vibOn = on; store.set('vib', on ? '1' : '0'); syncAlertUI();
@@ -1826,7 +1833,7 @@ try {
   bc.onmessage = e => {
     if (e.data !== 'active' || document.visibilityState === 'visible') return;
     otherActive = true;
-    try { speechSynthesis.cancel(); } catch {}
+    ttsCancel();
     if (nav && actState !== 'on' && actState !== 'paused') stopNav(); // pas de sortie enregistrée en cours : on arrête tout
   };
   document.addEventListener('visibilitychange', hello); window.addEventListener('focus', hello); hello();
@@ -1864,7 +1871,7 @@ async function voiceBuffer(n) {
 async function playParts(parts, queue) {
   unlockAudio(); if (!audioCtx) throw new Error('audio');
   const seq = ++voiceSeq;
-  if (!queue) { voiceSrc.forEach(s => { try { s.stop(); } catch {} }); voiceSrc = []; voiceEnd = 0; try { speechSynthesis.cancel(); } catch {} }
+  if (!queue) { voiceSrc.forEach(s => { try { s.stop(); } catch {} }); voiceSrc = []; voiceEnd = 0; ttsCancel(); }
   const bufs = await Promise.all(parts.map(voiceBuffer));
   if (!queue && seq !== voiceSeq) return; // une phrase plus récente a pris la place
   let t = Math.max(audioCtx.currentTime + 0.05, queue ? voiceEnd + 0.25 : 0);
@@ -1885,7 +1892,9 @@ function say(text, queue = false) {
   }
   sayTTS(text, queue);
 }
+function ttsCancel() { try { if (AND) AND.stopSpeaking(); else speechSynthesis.cancel(); } catch {} }
 function sayTTS(text, queue = false) {
+  if (AND) { try { AND.speak(String(text), LOC, voiceRate, voicePitch, !!queue); } catch {} return; }
   if (!('speechSynthesis' in window)) return;
   try {
     const u = new SpeechSynthesisUtterance(text);
@@ -4174,6 +4183,7 @@ function toGPX(name) {
 }
 async function shareGPX(text, name) {
   const fname = name.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') + '.gpx';
+  if (AND) { try { AND.shareFile(fname, 'application/gpx+xml', text); } catch {} return; }
   const file = new File([text], fname, { type: 'application/gpx+xml' });
   try { if (navigator.canShare && navigator.canShare({ files: [file] })) { await navigator.share({ files: [file], title: name }); return; } }
   catch (e) { if (e.name === 'AbortError') return; }
@@ -5346,6 +5356,17 @@ if ('serviceWorker' in navigator) {
     reloading = true; location.reload();
   };
   navigator.serviceWorker.addEventListener('controllerchange', () => { if (hadController) tryReload(); hadController = true; });
+}
+// Appli Android : bouton retour (ferme d'abord le panneau ouvert) et GPX reçu d'une autre appli
+if (AND) {
+  $('btnPip').style.display = 'none'; // fenêtre réduite : pas encore dans l'appli Android
+  window.pisteoBack = () => {
+    const open = [...document.querySelectorAll('.lib')].filter(x => !x.hidden);
+    if (open.length) { open[open.length - 1].hidden = true; return true; }
+    if (!$('more').hidden) { toggleMore(false); return true; }
+    return false;
+  };
+  window.pisteoCheckShared = checkShared;
 }
 window.__balise = { onPos, get state() { return { nav, isOff, rejoin: !!rejoin, straight: rejoin && rejoin.straight, progress, act: Object.assign({ elapsed: actElapsed(), state: actState, points: rec.length }, act) }; } };
 })();
