@@ -8,13 +8,13 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<meta name="balise-version" content="133">
+<meta name="balise-version" content="134">
 <title>Pisteo</title>
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" href="icon.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
 <link rel="stylesheet" href="vendor/maplibre-gl.css">
-<link rel="stylesheet" href="app.css?v=133">
+<link rel="stylesheet" href="app.css?v=134">
 </head>
 <body>
 <div id="map" aria-label="Carte"></div>
@@ -195,6 +195,10 @@
     <div class="row">
       <label for="optTheme">Thème</label>
       <select id="optTheme"><option value="auto">Automatique</option><option value="light">Clair</option><option value="dark">Sombre</option></select>
+    </div>
+    <div class="row">
+      <label for="optLang">Langue · Language</label>
+      <select id="optLang"><option value="">Automatique · Auto</option><option value="fr">Français</option><option value="en">English</option></select>
     </div>
     <div class="row">
       <label for="prof">Je me déplace<br><small>Pour les itinéraires et le temps estimé</small></label>
@@ -630,6 +634,7 @@
 <div id="toast" class="toast" hidden></div>
 
 <script src="vendor/maplibre-gl.js"></script>
-<script src="app.js?v=133"></script>
+<script src="i18n/en.js?v=134"></script>
+<script src="app.js?v=134"></script>
 </body>
 </html>

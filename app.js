@@ -4,7 +4,7 @@
 
 // La page et le code doivent être de la même version. Sinon (page gardée en cache
 // par le téléphone ou par GitHub), on recharge une page fraîche, au plus 3 fois.
-const APP_VERSION = 133;
+const APP_VERSION = 134;
 try {
   const meta = document.querySelector('meta[name="balise-version"]');
   const pageV = meta ? +meta.content : 0;
@@ -50,7 +50,7 @@ const lc = s => s.charAt(0).toLowerCase() + s.slice(1);
 const fmtDist = m => m == null || isNaN(m) ? '–' : (m >= 99950 ? Math.round(m / 1000) + ' km' : m >= 1000 ? (m / 1000).toFixed(m >= 10000 ? 1 : 2).replace('.', ',') + ' km' : (m >= 100 ? Math.round(m / 10) * 10 : Math.round(m)) + ' m');
 const fmtM = m => m == null || isNaN(m) ? '–' : Math.round(m) + ' m';
 const fmtDur = s => { const m = Math.round(s / 60); return m < 60 ? m + ' min' : Math.floor(m / 60) + ' h ' + String(m % 60).padStart(2, '0'); };
-const fmtClock = s => new Date(Date.now() + s * 1000).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
+const fmtClock = s => new Date(Date.now() + s * 1000).toLocaleTimeString(LOC, { hour: '2-digit', minute: '2-digit' });
 function speakDist(d) {
   if (d < 100) return Math.max(10, Math.round(d / 10) * 10) + ' mètres';
   if (d < 950) return Math.round(d / 50) * 50 + ' mètres';
@@ -69,6 +69,71 @@ const store = {
   get(k) { try { return localStorage.getItem(k); } catch { return null; } },
   set(k, v) { try { localStorage.setItem(k, v); } catch { /* stockage plein ou bloqué */ } }
 };
+// =====================================================================
+// Langues : l'appli est écrite en français ; les autres langues traduisent les textes affichés et parlés
+// (dictionnaires dans i18n/<langue>.js : textes exacts, gabarits avec variables, morceaux de phrases)
+// =====================================================================
+const LANGS = { fr: 'Français', en: 'English' };
+const LANG = (() => {
+  const want = store.get('lang');
+  if (want && LANGS[want]) return want;
+  const nav = (navigator.languages || [navigator.language || 'fr']).map(l => l.slice(0, 2).toLowerCase());
+  return nav.find(l => LANGS[l]) || (nav[0] === 'fr' ? 'fr' : 'en');
+})();
+const LOC = { fr: 'fr-FR', en: 'en-GB' }[LANG] || 'fr-FR';
+const DICT = LANG !== 'fr' && window.I18N && window.I18N[LANG] || null;
+const trCache = new Map(), trMiss = new Set();
+function tr(s) {
+  if (!DICT || s == null) return s;
+  s = String(s);
+  const core = s.trim(); if (!core || !/\p{L}/u.test(core)) return s;
+  if (trCache.has(s)) return trCache.get(s);
+  const lead = s.slice(0, s.indexOf(core)), tail = s.slice(s.indexOf(core) + core.length);
+  let out = trCore(core);
+  if (out == null) {
+    // morceaux connus remplacés dans la phrase, sinon texte laissé tel quel (et noté pour le compléter)
+    out = core; let hit = false;
+    for (const [fr, en] of DICT.bits) if (out.includes(fr)) { out = out.split(fr).join(en); hit = true; }
+    if (/[àâçéèêëîïôûùüœ]|\b(le|la|les|des|du|une?|et|pour|sur|avec|sans|dans|ton|ta|tes)\b/i.test(out)) trMiss.add(core);
+    else if (!hit && /[a-z]{3}/i.test(core)) trMiss.add(core);
+  }
+  out = lead + out.replace(/(\d),(\d{1,2})(?!\d)/g, '$1.$2') + tail;
+  if (trCache.size > 3000) trCache.clear();
+  trCache.set(s, out); return out;
+}
+function trCore(core) {
+  const ex = DICT.exact[core];
+  if (ex != null) return ex;
+  for (const [re, rep] of DICT.patterns) {
+    const m = core.match(re);
+    if (m) return typeof rep === 'function' ? rep(m, tr) : rep.replace(/\$(\d)/g, (_, i) => tr(m[+i] || ''));
+  }
+  return null;
+}
+// tout texte qui apparaît à l'écran (ou change) est traduit au vol
+function trNode(n) {
+  if (n.nodeType === 3) {
+    if (n.__tr === n.data) return;
+    const p = n.parentNode; if (p && /^(SCRIPT|STYLE|TEXTAREA)$/.test(p.nodeName)) return;
+    const t = tr(n.data); n.__tr = t; if (t !== n.data) n.data = t;
+  } else if (n.nodeType === 1) {
+    for (const a of ['placeholder', 'title', 'aria-label', 'alt']) {
+      const v = n.getAttribute && n.getAttribute(a);
+      if (v && n['__tr_' + a] !== v) { const t = tr(v); n['__tr_' + a] = t; if (t !== v) n.setAttribute(a, t); }
+    }
+    if (n.nodeName === 'OPTION' || n.childNodes.length) n.childNodes.forEach(trNode);
+  }
+}
+if (DICT) {
+  document.documentElement.lang = LANG;
+  trNode(document.body);
+  new MutationObserver(ms => { for (const m of ms) {
+    if (m.type === 'characterData') trNode(m.target);
+    else if (m.type === 'attributes') trNode(m.target);
+    else m.addedNodes.forEach(trNode);
+  } }).observe(document.body, { subtree: true, childList: true, characterData: true, attributes: true, attributeFilter: ['placeholder', 'title', 'aria-label', 'alt'] });
+  window.__trMiss = trMiss; // pour compléter les dictionnaires
+}
 const cssVar = v => getComputedStyle(document.documentElement).getPropertyValue(v).trim();
 let toastT;
 function toast(msg, ms = 2800, action) {
@@ -569,7 +634,7 @@ async function saveRecent(p, text, mustSucceed = false, extra = null) {
     return true;
   } catch (e) { if (mustSucceed) throw e; return false; }
 }
-const fmtDate = t => new Date(t).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' });
+const fmtDate = t => new Date(t).toLocaleDateString(LOC, { day: 'numeric', month: 'short' });
 // durée en mouvement d'une ancienne sortie (sans durée enregistrée) : d'après les heures du GPX, pauses exclues
 function recDuration(text) {
   let ms = 0;
@@ -687,7 +752,7 @@ async function showSoList() {
   let month = '';
   for (const it of items) {
     const when = it.start || it.date;
-    const m = new Date(when).toLocaleDateString('fr-FR', { month: 'long', year: 'numeric' });
+    const m = new Date(when).toLocaleDateString(LOC, { month: 'long', year: 'numeric' });
     if (m !== month) { month = m; const h = document.createElement('li'); h.className = 'lib-month'; h.textContent = m; list.appendChild(h); }
     const li = document.createElement('li');
     const open = document.createElement('button'); open.className = 'lib-item';
@@ -695,7 +760,7 @@ async function showSoList() {
     li.classList.add('so-li');
     const ic = document.createElement('span'); ic.className = 'so-ic ' + md; ic.innerHTML = modeIcon(md); ic.title = modeLabel(md);
     open.innerHTML = '<b></b><span></span>';
-    open.querySelector('b').textContent = it.title || new Date(when).toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long' }) + ' · ' + new Date(when).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' }).replace(':', 'h');
+    open.querySelector('b').textContent = it.title || new Date(when).toLocaleDateString(LOC, { weekday: 'long', day: 'numeric', month: 'long' }) + ' · ' + new Date(when).toLocaleTimeString(LOC, { hour: '2-digit', minute: '2-digit' }).replace(':', LANG === 'fr' ? 'h' : ':');
     const sp = it.ms > 60000 ? ' · ' + kmh(it.dist / (it.ms / 1000) * 3.6) : '';
     open.querySelector('span').textContent = `${fmtDist(it.dist)}${it.ms ? ' · ' + fmtDur(it.ms / 1000) : ''}${it.up != null ? ' · D+ ' + fmtM(it.up) : ''}${sp}`;
     open.onclick = () => showSoDetail(it);
@@ -715,7 +780,7 @@ function showSoDetail(it) {
   setMode(recMode(it));
   // si l'appli s'est trompée (ancienne sortie), on corrige d'un toucher
   $('sdMode').onclick = async () => { it.mode = recMode(it) === 'bike' ? 'foot' : 'bike'; setMode(it.mode); await idb('readwrite', s => s.put(it)).catch(() => {}); };
-  $('sdDate').textContent = new Date(when).toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }) + ' · départ ' + new Date(when).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' }).replace(':', 'h');
+  $('sdDate').textContent = new Date(when).toLocaleDateString(LOC, { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }) + tr(' · départ ') + new Date(when).toLocaleTimeString(LOC, { hour: '2-digit', minute: '2-digit' }).replace(':', 'h');
   const move = st.move || it.ms, hasE = st.lo != null;
   $('sdDist').textContent = fmtDist(st.dist);
   $('sdMove').textContent = move ? fmtDur(move / 1000) : '–';
@@ -740,7 +805,7 @@ function showSoDetail(it) {
   $('sdExport').onclick = () => shareGPX(it.text, it.title || it.name);
   stvButton(it);
   $('sdRename').onclick = async () => {
-    const t = prompt('Nom de la sortie', it.title || '');
+    const t = prompt(tr('Nom de la sortie'), it.title || '');
     if (t == null) return;
     it.title = t.trim() || undefined; await idb('readwrite', s => s.put(it)).catch(() => {});
     $('sdName').textContent = recTitle(it);
@@ -857,7 +922,8 @@ function voiceSample() {
 }
 $('voiceTest').onclick = e => { e.preventDefault(); voiceSample(); };
 $('optVStyle').onchange = e => { store.set('vstyle', e.target.value); $('voiceHelpRow').hidden = e.target.value === 'pisteo'; $('voiceCredit').hidden = e.target.value !== 'pisteo'; voiceSample(); };
-setTimeout(() => { $('optVStyle').value = voiceStyle(); $('voiceHelpRow').hidden = voiceStyle() === 'pisteo'; $('voiceCredit').hidden = voiceStyle() !== 'pisteo'; }, 0); // après l'initialisation de la voix
+if (LANG !== 'fr') { const o = $('optVStyle').querySelector('[value="pisteo"]'); if (o) o.remove(); } // la voix enregistrée n'existe qu'en français
+setTimeout(() => { $('optVStyle').value = LANG === 'fr' ? voiceStyle() : 'system'; $('voiceHelpRow').hidden = voiceStyle() === 'pisteo'; $('voiceCredit').hidden = voiceStyle() !== 'pisteo'; }, 0); // après l'initialisation de la voix
 $('voiceHelp').onclick = e => { e.preventDefault(); $('voiceInfo').hidden = false; };
 $('viClose').onclick = () => { $('voiceInfo').hidden = true; };
 $('voiceInfo').onclick = e => { if (e.target === $('voiceInfo')) $('voiceInfo').hidden = true; };
@@ -1541,7 +1607,7 @@ function drawPip() {
   ctx.fillStyle = cssVar('--hud') || '#1F2B25'; ctx.fillRect(0, H - BOT, W, BOT);
   ctx.fillStyle = '#fff'; ctx.font = '700 25px system-ui, sans-serif'; ctx.textAlign = 'center';
   const a = $('nbEta').textContent, b = $('nbRem').textContent, l2 = $('nbL2').textContent;
-  ctx.fillText(track ? `Arrivée ${a}  ·  ${b}` : `${b} ${l2}  ·  ${$('nbUp').textContent}`, W / 2, H - 20);
+  ctx.fillText(track ? `${tr('Arrivée')} ${a}  ·  ${b}` : `${b} ${l2}  ·  ${$('nbUp').textContent}`, W / 2, H - 20);
   ctx.textAlign = 'left';
 }
 // dessin groupé (au plus 4 fois par seconde), après la mise à jour des chiffres
@@ -1683,10 +1749,10 @@ setTimeout(syncAlertUI, 0);
 // ---------- voix du guidage : celles installées sur le téléphone ----------
 // voix : celle du téléphone par défaut, en français (le choix de voix pourra revenir si besoin)
 const voiceRate = 1, voicePitch = 1.02;
-const frVoices = () => { try { return speechSynthesis.getVoices().filter(v => /^fr/i.test(v.lang)); } catch { return []; } };
+const frVoices = () => { try { return speechSynthesis.getVoices().filter(v => v.lang.slice(0, 2).toLowerCase() === LANG); } catch { return []; } };
 // la plus naturelle d'abord (voix « neurales » quand le téléphone en a), en France, et toujours utilisable hors ligne
 function pickVoice() {
-  const vs = frVoices(), fr = vs.filter(v => /fr[-_]FR/i.test(v.lang));
+  const vs = frVoices(), main = LANG === 'fr' ? /fr[-_]FR/i : /en[-_](GB|US)/i, fr = vs.filter(v => main.test(v.lang));
   const nice = v => /neural|natural|enhanced|premium|wavenet|studio|amélior|naturel/i.test(v.name);
   return fr.find(v => nice(v) && v.localService) || fr.find(v => v.localService && v.default) || fr.find(v => v.localService)
     || fr.find(nice) || fr[0] || vs[0] || null;
@@ -1708,7 +1774,7 @@ try {
 // ---------- voix enregistrée « Jessica » : les phrases sont assemblées à partir de fragments audio ----------
 // (dossier voice/ : index.json associe chaque fragment de texte à un petit mp3 ; voix de synthèse du téléphone en secours)
 let voiceLib = null;
-const voiceStyle = () => store.get('vstyle') || 'system'; // voix du téléphone par défaut, Jessica en option
+const voiceStyle = () => LANG === 'fr' && store.get('vstyle') || 'system'; // voix du téléphone par défaut, Jessica en option
 const vNorm = t => t.normalize('NFC').toLowerCase().replace(/[’]/g, "'").replace(/[^\p{L}\p{N}' -]+/gu, ' ').trim().split(/\s+/).join(' ');
 fetch('voice/index.json?v=' + APP_VERSION).then(r => r.ok ? r.json() : null).then(j => {
   voiceLib = j;
@@ -1752,6 +1818,7 @@ async function playParts(parts, queue) {
 // queue : la phrase attend la fin de celle en cours au lieu de la couper (pour enchaîner sans hachage)
 function say(text, queue = false) {
   if (!voiceOn || otherActive) return;
+  if (LANG !== 'fr') { sayTTS(tr(text), queue); return; } // voix enregistrée : en français seulement
   if (voiceStyle() === 'pisteo') {
     const parts = voiceParts(text);
     if (parts) { playParts(parts, queue).catch(() => sayTTS(text, queue)); return; }
@@ -1762,7 +1829,7 @@ function sayTTS(text, queue = false) {
   if (!('speechSynthesis' in window)) return;
   try {
     const u = new SpeechSynthesisUtterance(text);
-    u.lang = 'fr-FR'; u.rate = voiceRate; u.pitch = voicePitch;
+    u.lang = LOC; u.rate = voiceRate; u.pitch = voicePitch;
     const v = pickVoice(); if (v) { u.voice = v; u.lang = v.lang; }
     if (!queue && (speechSynthesis.speaking || speechSynthesis.pending)) speechSynthesis.cancel();
     speechSynthesis.speak(u);
@@ -1902,6 +1969,8 @@ function applyTheme(t) {
   refreshColors();
 }
 $('optTheme').value = store.get('theme') || 'auto';
+$('optLang').value = store.get('lang') || '';
+$('optLang').onchange = e => { store.set('lang', e.target.value); location.reload(); };
 $('optTheme').onchange = e => { store.set('theme', e.target.value); applyTheme(e.target.value); };
 try { matchMedia('(prefers-color-scheme: dark)').addEventListener('change', refreshColors); } catch {}
 $('autoRec').checked = store.get('autoRec') === '1';
@@ -2588,7 +2657,7 @@ function rtListFrom(json, at) {
     }
     out.push({ id: e.id, tags: t, cat, name: rtName(t), dist: rtTagDist(t), near, big, bounds: b, at });
   }
-  out.sort((a, b) => RT_CAT[a.cat].rank - RT_CAT[b.cat].rank || (a.near ?? 1e9) - (b.near ?? 1e9) || a.name.localeCompare(b.name, 'fr'));
+  out.sort((a, b) => RT_CAT[a.cat].rank - RT_CAT[b.cat].rank || (a.near ?? 1e9) - (b.near ?? 1e9) || a.name.localeCompare(b.name, LANG));
   return out;
 }
 // Les chemins d'une relation (dans le désordre, parfois coupés au bord de la zone) → une trace continue.
@@ -2810,7 +2879,7 @@ async function rtdList(at) {
     const big = hav({ lat: b.minlat, lon: b.minlon }, { lat: b.maxlat, lon: b.maxlon }) > 40000;
     out.push({ id: r.id, tags: t, cat: rtCat(t), name: rtName(t), dist: r.len, near: near < 300 ? 0 : near, big, bounds: b, at, src: 'd' });
   }
-  out.sort((a, b) => RT_CAT[a.cat].rank - RT_CAT[b.cat].rank || a.near - b.near || a.name.localeCompare(b.name, 'fr'));
+  out.sort((a, b) => RT_CAT[a.cat].rank - RT_CAT[b.cat].rank || a.near - b.near || a.name.localeCompare(b.name, LANG));
   return out;
 }
 // tracé d'un parcours depuis les tuiles : tout le parcours s'il est petit, la portion autour du point sinon
@@ -3364,7 +3433,7 @@ function rtMiniProfile(cv, p) {
   cv.width = W * dpr; cv.height = H * dpr;
   const ctx = cv.getContext('2d'); ctx.setTransform(dpr, 0, 0, dpr, 0, 0); ctx.clearRect(0, 0, W, H);
   ctx.font = '11px system-ui, sans-serif'; ctx.fillStyle = cssVar('--muted'); ctx.textBaseline = 'middle';
-  if (!p || !p.hasEle) { ctx.fillText(p ? 'Calcul du profil…' : '', 0, H / 2); return; }
+  if (!p || !p.hasEle) { ctx.fillText(p ? tr('Calcul du profil…') : '', 0, H / 2); return; }
   const E = p.ele, C = p.cum, n = E.length;
   let lo = Infinity, hi = -Infinity; E.forEach(e => { if (e != null) { lo = Math.min(lo, e); hi = Math.max(hi, e); } });
   const pad = Math.max(10, (hi - lo) * .1, (40 - (hi - lo)) / 2); const lo2 = lo - pad, hi2 = hi + pad; // au moins 40 m d'échelle
@@ -3702,7 +3771,7 @@ $('ptDone').onclick = async () => {
   if (plan.go) { planGo(); return; }
   const pts = removeSpurs(planAll()), pth = makePath(pts, '');
   const def = `Itinéraire ${profile === 'trekking' ? 'à vélo' : 'à pied'} de ${fmtDist(pth.total)}`;
-  const name = (prompt('Nom de l\'itinéraire', def) || def).trim();
+  const name = (prompt(tr('Nom de l\'itinéraire'), def) || def).trim();
   const text = loopGPX(pts, name);
   closePlan();
   loadText(text); // affiché, et gardé dans « Mes traces »
@@ -3837,8 +3906,8 @@ function drawProfileOn(cv) {
   cv.width = W * dpr; cv.height = H * dpr;
   const ctx = cv.getContext('2d'); ctx.setTransform(dpr, 0, 0, dpr, 0, 0); ctx.clearRect(0, 0, W, H);
   ctx.font = '11px system-ui, sans-serif'; ctx.fillStyle = cssVar('--muted');
-  if (!track) { ctx.fillText('Ouvre un fichier GPX : le profil altimétrique apparaîtra ici.', 0, H / 2); return; }
-  if (!track.hasEle) { ctx.fillText('Ce GPX ne contient pas d\'altitudes.', 0, H / 2); return; }
+  if (!track) { ctx.fillText(tr('Ouvre un fichier GPX : le profil altimétrique apparaîtra ici.'), 0, H / 2); return; }
+  if (!track.hasEle) { ctx.fillText(tr('Ce GPX ne contient pas d\'altitudes.'), 0, H / 2); return; }
   const E = track.ele, C = track.cum, n = E.length;
   let lo = Infinity, hi = -Infinity; E.forEach(e => { if (e != null) { lo = Math.min(lo, e); hi = Math.max(hi, e); } });
   const pad = Math.max(20, (hi - lo) * .08); lo -= pad; hi += pad;
@@ -4027,7 +4096,8 @@ function addRecPoint(p) {
 }
 if (rec.length) drawRec();
 
-function actName() { const d = new Date(act.start || (rec[0] && rec[0].t) || Date.now()); return 'Sortie du ' + d.toLocaleDateString('fr-FR', { day: 'numeric', month: 'long' }) + ' à ' + d.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' }).replace(':', 'h'); }
+function actName() { const d = new Date(act.start || (rec[0] && rec[0].t) || Date.now()); const day = d.toLocaleDateString(LOC, { day: 'numeric', month: 'long' }), hm = d.toLocaleTimeString(LOC, { hour: '2-digit', minute: '2-digit' });
+  return LANG === 'fr' ? `Sortie du ${day} à ${hm.replace(':', 'h')}` : `Outing on ${day} at ${hm}`; }
 function toGPX(name) {
   const esc = s => s.replace(/[<&>]/g, c => ({ '<': '&lt;', '&': '&amp;', '>': '&gt;' }[c]));
   // chaque reprise après une pause devient un segment à part (trkseg) : la pause n'est pas comptée
@@ -4156,7 +4226,8 @@ function tileXY(lat, lon, z) {
 }
 const tile2lon = (x, z) => x / 2 ** z * 360 - 180;
 const tile2lat = (y, z) => deg(Math.atan(Math.sinh(Math.PI - 2 * Math.PI * y / 2 ** z)));
-const fmtMo = kb => { const mb = kb / 1024; return mb < 10 ? mb.toFixed(1).replace('.', ',') + ' Mo' : mb < 1000 ? Math.round(mb) + ' Mo' : (mb / 1024).toFixed(1).replace('.', ',') + ' Go'; };
+const [MO, GO] = LANG === 'fr' ? [' Mo', ' Go'] : [' MB', ' GB'];
+const fmtMo = kb => { const mb = kb / 1024; return mb < 10 ? mb.toFixed(1).replace('.', ',') + MO : mb < 1000 ? Math.round(mb) + MO : (mb / 1024).toFixed(1).replace('.', ',') + GO; };
 
 // Le long d'une trace : la tuile traversée et ses voisines, zooms 10 à 16 (bande d'environ 1 km)
 function traceTiles(p, zmax = 16) {
@@ -4232,8 +4303,8 @@ function updateOfflineInfo() {
   } else { $('dlTraceInfo').textContent = 'Ouvre d\'abord une trace GPX.'; $('dlTrace').disabled = true; }
   if (deps) {
     const { d, tiles } = currentDepTiles(), gMo = depGraphMo(d.polys);
-    $('dlDepInfo').textContent = `Carte ≈ ${tiles.length.toLocaleString('fr-FR')} tuiles · ~${fmtMo(tiles.length * tileKB)}` + ($('depGraph').checked ? ` · chemins ~${gMo} Mo` : '');
-    $('depGraphMo').textContent = `~${gMo} Mo`;
+    $('dlDepInfo').textContent = `Carte ≈ ${tiles.length.toLocaleString('fr-FR')} tuiles · ~${fmtMo(tiles.length * tileKB)}` + ($('depGraph').checked ? ` · chemins ~${gMo}${MO}` : '');
+    $('depGraphMo').textContent = `~${gMo}${MO}`;
   }
 }
 async function updateStorageInfo() {
