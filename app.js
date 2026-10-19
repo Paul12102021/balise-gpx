@@ -4,7 +4,7 @@
 
 // La page et le code doivent être de la même version. Sinon (page gardée en cache
 // par le téléphone ou par GitHub), on recharge une page fraîche, au plus 3 fois.
-const APP_VERSION = 130;
+const APP_VERSION = 131;
 try {
   const meta = document.querySelector('meta[name="balise-version"]');
   const pageV = meta ? +meta.content : 0;
@@ -53,9 +53,18 @@ const fmtDur = s => { const m = Math.round(s / 60); return m < 60 ? m + ' min' :
 const fmtClock = s => new Date(Date.now() + s * 1000).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
 function speakDist(d) {
   if (d < 100) return Math.max(10, Math.round(d / 10) * 10) + ' mètres';
-  if (d < 1000) return Math.round(d / 50) * 50 + ' mètres';
-  return (d / 1000).toFixed(1).replace('.', ',').replace(',0', '') + ' kilomètres';
+  if (d < 950) return Math.round(d / 50) * 50 + ' mètres';
+  // au-delà : demi-kilomètres, dits comme on les dit (« 1 kilomètre et demi »)
+  const half = d < 10000 ? Math.round(d / 500) / 2 : Math.round(d / 1000), n = Math.floor(half);
+  const km = n + (n > 1 ? ' kilomètres' : ' kilomètre');
+  return half % 1 ? (n ? km + ' et demi' : '500 mètres') : km;
 }
+// consigne affichée (« Tournez à gauche ») → consigne parlée, tutoyée comme le reste de l'appli
+function spokenTurn(txt) {
+  return txt.replace(/^Faites demi-tour/, 'fais demi-tour').replace(/^Tournez/, 'tourne')
+    .replace(/^Légèrement/, 'prends légèrement').replace(/^Rejoignez la trace/, 'rejoins la trace');
+}
+const pick = a => a[Math.floor(Math.random() * a.length)];
 const store = {
   get(k) { try { return localStorage.getItem(k); } catch { return null; } },
   set(k, v) { try { localStorage.setItem(k, v); } catch { /* stockage plein ou bloqué */ } }
@@ -841,6 +850,17 @@ $('bkIn').onchange = async e => {
 };
 try { const m = sessionStorage.getItem('bkDone'); if (m) { sessionStorage.removeItem('bkDone'); setTimeout(() => toast(m + ' Réglages appliqués.', 4000), 800); } } catch {}
 
+// ---------- écouter la voix, et comment en avoir une plus naturelle ----------
+function voiceSample() {
+  if (!voiceOn) { toast('Active d\'abord le guidage vocal'); return; }
+  unlockAudio(); say('Dans 200 mètres, tourne à gauche, puis tout de suite à droite.');
+}
+$('voiceTest').onclick = e => { e.preventDefault(); voiceSample(); };
+$('voiceHelp').onclick = e => { e.preventDefault(); $('voiceInfo').hidden = false; };
+$('viClose').onclick = () => { $('voiceInfo').hidden = true; };
+$('voiceInfo').onclick = e => { if (e.target === $('voiceInfo')) $('voiceInfo').hidden = true; };
+$('viTest').onclick = voiceSample;
+
 // ---------- Donner mon avis : un e-mail prérempli (pas de serveur) ----------
 const FB_MAIL = 'pisteo.app@gmail.com';
 let fbKind = 'Problème';
@@ -1240,7 +1260,7 @@ function onPos(pos) {
     offTrackLogic();
     if (rejoin && progress && progress.dist < Math.min(thrRef() * 0.7, 30) && !isOff && rightPart()) clearRejoin();
     if (!rejoin && progress && done && progress.remain < 25 && track.total - done.along < 25 && !arrived) {
-      arrived = true; say('Vous êtes arrivé'); vibrate([200, 100, 200]);
+      arrived = true; say(pick(['Tu es arrivé. Bravo, belle sortie !', 'Et voilà, tu es arrivé ! Bien joué.'])); vibrate([200, 100, 200]);
     }
     guidance();
     if (follow) navCamera(1000);
@@ -1287,14 +1307,14 @@ async function startNav(free = false) {
   // en navigation, la carte ne montre que ta trace : les parcours balisés sont retirés
   if (rtMapOn) { rtHideMap(); closeRoutes(); }
   if (!startGPS()) return;
-  nav = true; arrived = false; isOff = false; offCount = 0;
+  nav = true; arrived = false; isOff = false; offCount = 0; milestones = {};
   navTrackId = track ? track.id : null;
   navStartT = Date.now(); freeD = 0; freeRef = null;
   if (track && done && track.total - done.along < 25) { resetDone(); setDone(0, true); } // trace déjà finie : on repart de zéro
   document.body.classList.add('nav'); document.body.classList.toggle('free', !track); toggleMore(false, true);
   setFollow(true);
   unlockAudio(); enableCompass(); keepAwake();
-  say(me ? 'C\'est parti' : 'Navigation démarrée. Recherche du signal GPS.');
+  say(me ? (profile === 'trekking' ? pick(['C\'est parti, bonne route !', 'En route, bonne balade à vélo !']) : pick(['C\'est parti, bonne balade !', 'En route, bonne rando !'])) : 'C\'est parti. Je cherche le signal GPS.');
   if (actState === 'idle') {
     if (store.get('autoRec') === '1') startActivity();
     else { const n = +(store.get('recHint') || 0); if (n < 3) { store.set('recHint', n + 1); setTimeout(() => toast('Touche ● pour enregistrer ta sortie', 4000), 1500); } }
@@ -1555,6 +1575,7 @@ function stopPip() {
 }
 $('btnPip').onclick = () => document.pictureInPictureElement ? stopPip() : startPip();
 
+let milestones = {};
 let lastTurnKey = '';
 const spoken = new Map();
 var nextDist = Infinity; // distance jusqu'au prochain virage (pour l'économie de batterie)
@@ -1595,15 +1616,41 @@ function guidance() {
   if (key !== lastTurnKey) {
     // virage passé : la carte reste encore 20 s, le temps de vérifier qu'on part dans la bonne direction
     if (lastTurnKey && nav && eco === 'max') ecoWake(20000);
+    // longue ligne droite après un virage : on rassure (« Continue tout droit pendant 2 kilomètres »)
+    if (lastTurnKey && nav && !next.arrive && dTo > 700 && spoken.get(lastTurnKey) === 2) {
+      const d = speakDist(dTo);
+      setTimeout(() => say(pick(rejoin ? [`Continue vers la trace pendant ${d}.`] : track.route
+        ? [`Continue tout droit pendant ${d}.`, `Ensuite, tout droit pendant ${d}.`]
+        : [`Suis la trace pendant ${d}.`, `Ensuite, tout droit sur la trace pendant ${d}.`]), true), 1800);
+    }
     lastTurnKey = key; setSrc('turn', next.arrive ? EMPTY : pointFeature(pointAt(path, next.along))); }
 
   // annonces vocales : une à l'approche, une au moment de tourner
   const s = Math.max(speedEma || 1.2, 1);
   const far = clamp(s * 30, 60, 400), near = clamp(s * 7, 15, 60);
   const lvl = spoken.get(key) || 0;
-  const what = next.arrive ? (rejoin ? 'vous rejoindrez la trace' : 'vous serez arrivé') : lc(info.txt);
-  if (lvl < 1 && dTo <= far && dTo > near * 1.6) { say(`Dans ${speakDist(dTo)}, ${what}`); spoken.set(key, 1); }
-  else if (lvl < 2 && dTo <= near) { if (!next.arrive) say(info.txt); spoken.set(key, 2); }
+  const what = next.arrive ? (rejoin ? 'tu rejoindras la trace' : 'tu seras arrivé') : spokenTurn(info.txt);
+  // virage suivant tout proche : on annonce les deux d'un coup, comme un copilote
+  const after = !next.arrive && path.turns.find(t => t.along > next.along + 3);
+  // (seulement un vrai virage, pas une courbe, et vraiment proche : sinon ça devient bavard dans les lacets)
+  const chain = after && !after.arrive && Math.abs(after.ang) >= 60 && after.along - next.along < Math.max(near * 2.5, 40);
+  const then = chain ? `, puis tout de suite ${spokenTurn(turnInfo(after.ang).txt).replace(/^tourne |^prends /, '')}` : '';
+  const afterKey = chain ? path.id + ':' + Math.round(after.along) : null;
+  const cap = t => t.charAt(0).toUpperCase() + t.slice(1);
+  if (lvl < 1 && dTo <= far && dTo > near * 1.6) { say(`Dans ${speakDist(dTo)}, ${what}${then}.`); spoken.set(key, 1); }
+  else if (lvl === 3 && dTo <= near) { if (!next.arrive) say(cap(spokenTurn(info.txt).replace(/^tourne |^prends /, '')) + '.', true); spoken.set(key, 2); }
+  else if (lvl < 2 && dTo <= near) {
+    if (!next.arrive) { const t = spokenTurn(info.txt); say((lvl === 1 && Math.random() < .35 ? pick(['Maintenant, ', 'C\'est ici, ']) + t : cap(t)) + then + '.'); }
+    spoken.set(key, 2);
+    // le virage enchaîné a déjà été annoncé : au moment de le prendre, juste « À droite. »
+    if (afterKey && !spoken.get(afterKey)) spoken.set(afterKey, 3);
+  }
+  // repères de progression sur une trace : mi-parcours et dernier kilomètre
+  if (!rejoin && !track.route && progress && track.total > 4000) {
+    const ratio = 1 - progress.remain / track.total;
+    if (!milestones.half && ratio >= .5 && ratio < .6) { milestones.half = 1; say(pick(['Mi-parcours, bravo !', 'Tu as fait la moitié du parcours !']) + ` Encore ${speakDist(progress.remain)}.`, true); }
+    if (!milestones.last && progress.remain < 1000 && progress.remain > 600) { milestones.last = 1; say(pick(['Plus qu\'un kilomètre !', 'Dernier kilomètre, courage !']), true); }
+  }
 }
 
 // ---------- voix, son, vibration ----------
@@ -1633,11 +1680,14 @@ $('npVib').onclick = () => setVib(!vibOn);
 setTimeout(syncAlertUI, 0);
 // ---------- voix du guidage : celles installées sur le téléphone ----------
 // voix : celle du téléphone par défaut, en français (le choix de voix pourra revenir si besoin)
-const voiceRate = 1.05;
+const voiceRate = 1, voicePitch = 1.02;
 const frVoices = () => { try { return speechSynthesis.getVoices().filter(v => /^fr/i.test(v.lang)); } catch { return []; } };
+// la plus naturelle d'abord (voix « neurales » quand le téléphone en a), en France, et toujours utilisable hors ligne
 function pickVoice() {
-  const vs = frVoices();
-  return vs.find(v => /fr[-_]FR/i.test(v.lang) && v.localService) || vs.find(v => /fr[-_]FR/i.test(v.lang)) || vs[0] || null;
+  const vs = frVoices(), fr = vs.filter(v => /fr[-_]FR/i.test(v.lang));
+  const nice = v => /neural|natural|enhanced|premium|wavenet|studio|amélior|naturel/i.test(v.name);
+  return fr.find(v => nice(v) && v.localService) || fr.find(v => v.localService && v.default) || fr.find(v => v.localService)
+    || fr.find(nice) || fr[0] || vs[0] || null;
 }
 // Plusieurs Pisteo ouverts (onglet Chrome + appli installée) : seul celui qu'on regarde a le droit de parler.
 // Une copie oubliée en navigation dans un autre onglet se tait, et sa navigation est arrêtée.
@@ -1653,13 +1703,14 @@ try {
   };
   document.addEventListener('visibilitychange', hello); window.addEventListener('focus', hello); hello();
 } catch { /* navigateur sans BroadcastChannel */ }
-function say(text) {
+// queue : la phrase attend la fin de celle en cours au lieu de la couper (pour enchaîner sans hachage)
+function say(text, queue = false) {
   if (!voiceOn || otherActive || !('speechSynthesis' in window)) return;
   try {
     const u = new SpeechSynthesisUtterance(text);
-    u.lang = 'fr-FR'; u.rate = voiceRate;
+    u.lang = 'fr-FR'; u.rate = voiceRate; u.pitch = voicePitch;
     const v = pickVoice(); if (v) { u.voice = v; u.lang = v.lang; }
-    if (speechSynthesis.speaking) speechSynthesis.cancel();
+    if (!queue && (speechSynthesis.speaking || speechSynthesis.pending)) speechSynthesis.cancel();
     speechSynthesis.speak(u);
   } catch { /* synthèse vocale indisponible */ }
 }
@@ -1900,11 +1951,11 @@ function offTrackLogic() {
   if (progress.dist > tol && acc < 100) offCount++; else if (progress.dist <= tol) offCount = 0;
   if (!isOff && offCount >= 2) {
     isOff = true;
-    if (threshold) { alertOff(); say('Vous avez quitté la trace. Calcul d\'un itinéraire de retour.'); }
+    if (threshold) { alertOff(); say(pick(['Oups, tu sors de la trace. Je cherche le chemin pour la rejoindre.', 'Attention, tu t\'éloignes de la trace. Je calcule le retour.'])); }
     requestRejoin(false);
   } else if (isOff && progress.dist < thr * 0.7 && rightPart()) {
     isOff = false; offCount = 0; clearRejoin();
-    vibrate(150); say('Vous avez rejoint la trace'); toast('De retour sur la trace');
+    vibrate(150); say(pick(['Te revoilà sur la trace !', 'Parfait, tu es de nouveau sur la trace.'])); toast('De retour sur la trace');
   } else if (isOff) {
     // on s'écarte de l'itinéraire de retour : on recalcule
     if (rejoin && !rejoin.straight && rejoinProg && rejoinProg.dist > 40) {
@@ -1999,13 +2050,13 @@ async function requestRejoin(manual) {
     best.pts.push({ lat: best.target.lat, lon: best.target.lon, ele: null });
     setRejoinPath(best.pts, best.target, false);
     const msg = `Itinéraire de retour : ${fmtDist(rejoin.total)} par le chemin`;
-    if (nav) say(`Itinéraire de retour calculé${best.local ? ' hors connexion' : ''}, ${speakDist(rejoin.total)}`); else { toast(msg + (best.local ? ' (calculé hors connexion)' : ''), 4000); fitTo([rejoin.pts, [me]]); }
+    if (nav) say(rejoin.total < 40 ? 'La trace est juste à côté.' : `C'est bon : la trace est à ${speakDist(rejoin.total)} par le chemin${best.local ? ', calculé sans réseau' : ''}.`, true); else { toast(msg + (best.local ? ' (calculé hors connexion)' : ''), 4000); fitTo([rejoin.pts, [me]]); }
   } else {
     const c = cands[0];
     setRejoinPath([{ lat: me.lat, lon: me.lon }, c], c, true);
     rejoin.why = 'pas de réseau, ' + whyNoLocal(me);
     const msg = `Ligne droite : ${rejoin.why}. Trace à ${fmtDist(c.dist)}, cap ${Math.round(bearing(me, c))}°`;
-    if (nav) say(`Pas de réseau. Rejoignez la trace à ${speakDist(c.dist)}, à vol d'oiseau.`); else { toast(msg, 5000); fitTo([rejoin.pts]); }
+    if (nav) say(`Pas de réseau pour calculer le chemin. La trace est à ${speakDist(c.dist)}, à vol d'oiseau.`, true); else { toast(msg, 5000); fitTo([rejoin.pts]); }
   }
   guidance();
 }
@@ -3642,7 +3693,7 @@ async function goTo(dest) {
   if (!track) document.body.classList.remove('free');
   await showTrack({ name: 'Vers ' + dest.label, pts: r.pts, signals: r.signals }, false);
   track.route = dest; track.style = profile === 'trekking' ? bikeStyle : null;
-  arrived = false; guidance(); say(`Itinéraire calculé, ${speakDist(track.total)}`);
+  arrived = false; guidance(); say(`Itinéraire prêt : ${speakDist(track.total)}. Allons-y !`);
 }
 async function reroute() {
   if (routing || !me || !track || !track.route) return;
@@ -3655,7 +3706,7 @@ async function reroute() {
     r.pts.push({ lat: dest.lat, lon: dest.lon, ele: null });
     await showTrack({ name: 'Vers ' + dest.label, pts: r.pts, signals: r.signals }, false);
     track.route = dest; track.style = style; isOff = false; offCount = 0; arrived = false;
-    say('Itinéraire recalculé');
+    say('J\'ai recalculé l\'itinéraire.');
   } catch { /* pas de réseau : nouvel essai automatique dans 30 s */ }
   routing = false; $('btnRejoin').classList.remove('busy'); guidance();
 }
@@ -3871,7 +3922,7 @@ function startActivity() {
 function beginRecording(pos) {
   act.since = Date.now(); act.start = act.start || Date.now(); saveAct();
   actRef = pos; addRecPoint(pos);
-  setActState('on'); vibrate(120); say('Enregistrement démarré');
+  setActState('on'); vibrate(120); say(pick(['Enregistrement lancé, bonne sortie !', 'C\'est enregistré, profite bien !']));
 }
 // appelée à chaque position GPS
 function onActFix(pos) {
@@ -3889,13 +3940,13 @@ function pauseActivity() {
   act.ms += Date.now() - act.since; act.since = null; actRef = null; saveAct(); saveRec();
   setActState('paused');
   if (!nav) stopGPS();
-  say('Pause');
+  say('Pause. Prends ton temps.');
 }
 function resumeActivity() {
   if (actState !== 'paused') return;
   if (!startGPS()) return;
   act.since = Date.now(); actRef = null; recSeg++; saveAct();
-  setActState('on'); say('C\'est reparti');
+  setActState('on'); say(pick(['C\'est reparti !', 'On repart !']));
 }
 function cancelWaiting() { setActState('idle'); if (!nav) stopGPS(); toast('Enregistrement annulé'); }
 function togglePause() { if (actState === 'on') pauseActivity(); else if (actState === 'paused') resumeActivity(); }

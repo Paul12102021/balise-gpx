@@ -8,13 +8,13 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<meta name="balise-version" content="130">
+<meta name="balise-version" content="131">
 <title>Pisteo</title>
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" href="icon.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
 <link rel="stylesheet" href="vendor/maplibre-gl.css">
-<link rel="stylesheet" href="app.css?v=130">
+<link rel="stylesheet" href="app.css?v=131">
 </head>
 <body>
 <div id="map" aria-label="Carte"></div>
@@ -168,7 +168,7 @@
       </select>
     </div>
     <div class="row">
-      <label for="optVoice">Guidage vocal et bips</label>
+      <label for="optVoice">Guidage vocal et bips<br><small><button id="voiceTest" class="linkbtn">écouter</button> · <button id="voiceHelp" class="linkbtn">une voix plus naturelle</button></small></label>
       <input type="checkbox" id="optVoice" class="check">
     </div>
 
@@ -316,6 +316,23 @@
     </div>
     <div class="onb-dots"><i class="on"></i><i></i><i></i><i></i></div>
     <div class="onb-acts"><button id="onbSkip" class="btn ghost">Passer</button><button id="onbNext" class="btn go">Suivant</button></div>
+  </div>
+</div>
+<div id="voiceInfo" class="lib" hidden>
+  <div class="lib-panel" role="dialog" aria-label="Une voix plus naturelle">
+    <div class="lib-head">
+      <b>Une voix plus naturelle</b>
+      <button id="viClose" class="closebtn" aria-label="Fermer"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></svg>Fermer</button>
+    </div>
+    <p class="note">Pisteo parle avec la voix de synthèse de ton téléphone. Android en propose souvent de bien plus naturelles que celle réglée par défaut, et elles marchent aussi sans réseau une fois téléchargées.</p>
+    <ol class="sm-steps">
+      <li>Ouvre les <b>Paramètres</b> du téléphone et cherche <b>« Synthèse vocale »</b> (ou Langue et saisie › Sortie de synthèse vocale).</li>
+      <li>Choisis le moteur <b>Google</b> (Services Google de reconnaissance vocale), plus naturel que celui du fabricant.</li>
+      <li>Touche ⚙️ à côté › <b>Installer les données vocales</b> › <b>Français (France)</b>.</li>
+      <li>Écoute les voix proposées et choisis celle qui te plaît, puis télécharge-la pour le hors ligne.</li>
+      <li>Reviens ici et touche <b>Écouter</b>.</li>
+    </ol>
+    <button id="viTest" class="btn go">Écouter</button>
   </div>
 </div>
 <div id="feedback" class="lib" hidden>
@@ -609,6 +626,6 @@
 <div id="toast" class="toast" hidden></div>
 
 <script src="vendor/maplibre-gl.js"></script>
-<script src="app.js?v=130"></script>
+<script src="app.js?v=131"></script>
 </body>
 </html>
