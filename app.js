@@ -4,7 +4,7 @@
 
 // La page et le code doivent être de la même version. Sinon (page gardée en cache
 // par le téléphone ou par GitHub), on recharge une page fraîche, au plus 3 fois.
-const APP_VERSION = 143;
+const APP_VERSION = 144;
 try {
   const meta = document.querySelector('meta[name="balise-version"]');
   const pageV = meta ? +meta.content : 0;
@@ -4040,7 +4040,9 @@ function applyNavMore(open) {
 function navMotion() {
   return navMotion.m || (navMotion.m = sheetMotion($('navBottom'), $('navMore'), applyNavMore,
     h => { if (h) document.documentElement.style.setProperty('--nav-h', h + 'px'); },
-    () => { if (nav && follow) navCamera(400); }));
+    () => { if (nav && follow) navCamera(400); },
+    { down: () => { if ($('navMore').classList.contains('prof-only')) return false; setProfOnly(true); return true; },
+      up: () => { if (!$('navMore').classList.contains('prof-only')) return false; setProfOnly(false); return true; } }));
 }
 function toggleNavMore(open, instant) {
   const want = open === undefined ? $('navMore').hidden : !!open;
@@ -5258,7 +5260,7 @@ $('btnMore').onclick = () => toggleMore(); $('grip').onclick = () => toggleMore(
 
 // Ouvrir / réduire un panneau du bas en douceur : le panneau glisse (il suit le doigt pendant le geste),
 // puis le contenu est ajouté ou retiré une fois le mouvement fini.
-function sheetMotion(panel, content, apply, report, after) {
+function sheetMotion(panel, content, apply, report, after, steps) {
   let y = 0, raf = 0;
   const vis = () => Math.max(0, panel.offsetHeight - Math.max(0, y));
   const setY = v => { y = v; panel.style.transform = v ? `translateY(${v}px)` : ''; report(vis()); };
@@ -5291,6 +5293,8 @@ function sheetMotion(panel, content, apply, report, after) {
             move(st, dy) { let v = st.base + dy; if (v < 0) v *= 0.3; else if (v > st.G) v = st.G + (v - st.G) * 0.3; setY(v); },
             end(st, dy, vy) {
               const goOpen = st.was ? !(dy > 50 || vy > 0.5) : (dy < -40 || vy < -0.5);
+              // panneau à étages : glisser vers le bas passe d'abord à la vue réduite, vers le haut revient à la vue complète
+              if (st.was && steps && (goOpen ? (dy < -40 || vy < -0.5) && steps.up() : steps.down())) { animate(0); return; }
               goOpen ? animate(0) : animate(st.G, () => { setY(0); apply(false); report(vis()); });
             } }
   };
