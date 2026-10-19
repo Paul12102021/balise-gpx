@@ -4,7 +4,7 @@
 
 // La page et le code doivent être de la même version. Sinon (page gardée en cache
 // par le téléphone ou par GitHub), on recharge une page fraîche, au plus 3 fois.
-const APP_VERSION = 137;
+const APP_VERSION = 138;
 try {
   const meta = document.querySelector('meta[name="balise-version"]');
   const pageV = meta ? +meta.content : 0;
@@ -325,12 +325,16 @@ const NAT = {
     url: 'https://mapsneu.wien.gv.at/basemap/geolandbasemap/normal/google3857/{z}/{y}/{x}.png' },
   be: { name: 'IGN Belgique', max: 17, kb: 17, attr: '© <a href="https://www.ngi.be">IGN-NGI</a> · CartoWeb',
     url: 'https://cartoweb.wmts.ngi.be/1.0.0/topo/default/3857/{z}/{y}/{x}.png' },
+  // Toporama : carte topo officielle canadienne, servie image par image (WMS), libellés en français ou en anglais
+  ca: { name: 'Toporama', max: 16, kb: 10, zoff: -1, par: 6, // serveur lent : un niveau de détail de moins au téléchargement attr: '© <a href="https://natural-resources.canada.ca">Ressources naturelles Canada</a> · Toporama',
+    url: `https://maps.geogratis.gc.ca/wms/toporama_${LANG === 'fr' ? 'fr' : 'en'}?SERVICE=WMS&VERSION=1.3.0&REQUEST=GetMap&LAYERS=${LANG === 'fr' ? 'SCW' : 'WMS'}-Toporama&STYLES=&CRS=EPSG:3857&BBOX={bbox-epsg-3857}&WIDTH=256&HEIGHT=256&FORMAT=image/jpeg` },
   us: { name: 'USGS Topo', max: 16, kb: 22, attr: '<a href="https://www.usgs.gov/programs/national-geospatial-program/national-map">USGS The National Map</a>',
     url: 'https://basemap.nationalmap.gov/arcgis/rest/services/USGSTopo/MapServer/tile/{z}/{y}/{x}' },
 };
 let natCur = NAT[store.get('natCur')] ? store.get('natCur') : 'ign', natShapes = null; // dernier pays affiché : bon fond dès l'ouverture
 const natAt = (lon, lat) => { if (!natShapes) return null; for (const k in natShapes) if (inPolys(lon, lat, natShapes[k])) return k; return null; };
-const natTileUrl = prov => (z, x, y) => NAT[prov].url.replace('{z}', z).replace('{x}', x).replace('{y}', y);
+const mercBBox = (z, x, y) => { const o = Math.PI * 6378137, s = 2 * o / 2 ** z; return [-o + x * s, o - (y + 1) * s, -o + (x + 1) * s, o - y * s].join(','); };
+const natTileUrl = prov => (z, x, y) => NAT[prov].url.replace('{z}', z).replace('{x}', x).replace('{y}', y).replace('{bbox-epsg-3857}', mercBBox(+z, +x, +y));
 const LAYERS = [
   { id: 'ign', get name() { return NAT[natCur].name; }, get tiles() { return [NAT[natCur].url]; }, get max() { return NAT[natCur].max; }, get attr() { return NAT[natCur].attr; } },
   { id: 'monde', name: 'Monde (OpenFreeMap)', vector: true, max: 14 },
@@ -4341,6 +4345,7 @@ const COUNTRIES = [
   { id: 'es', nat: 'es', name: 'Espagne', file: 'regions/es.json' },
   { id: 'at', nat: 'at', name: 'Autriche', file: 'regions/at.json' },
   { id: 'be', nat: 'be', name: 'Belgique', file: 'regions/be.json' },
+  { id: 'ca', nat: 'ca', name: 'Canada', file: 'regions/ca.json' }, // parcs nationaux, comme aux États-Unis
   { id: 'us', nat: 'us', name: 'États-Unis', file: 'regions/us.json' }, // parcs nationaux : un État entier serait trop lourd
 ];
 const ccOf = id => COUNTRIES.find(c => c.id === id) || COUNTRIES[0];
@@ -4369,7 +4374,7 @@ async function fillRegs(c) {
   regs = await loadRegs(regCc);
   const sel = $('depSel'); sel.innerHTML = '';
   const order = regs.map((d, i) => i);
-  if (regCc !== 'fr') order.sort((a, b) => regName(regs[a]).localeCompare(regName(regs[b]), LOC));
+  if (regCc !== 'fr') order.sort((a, b) => regs[a].nom.localeCompare(regs[b].nom, LOC));
   order.forEach(i => { const o = document.createElement('option'); o.value = i; o.textContent = regName(regs[i]); sel.appendChild(o); });
   c = c || (me ? { lon: me.lon, lat: me.lat } : (() => { const m = map.getCenter(); return { lon: m.lng, lat: m.lat }; })());
   const here = regs.findIndex(d => inPolys(c.lon, c.lat, d.polys));
@@ -4382,7 +4387,7 @@ let depTilesCache = { key: '', tiles: [] };
 const provKB = prov => prov === 'ofm' ? OFM_KB : prov === 'ign' || !NAT[prov] ? tileKB : NAT[prov].kb;
 const provName = prov => prov === 'ofm' ? 'Monde' : NAT[prov] ? NAT[prov].name : 'IGN';
 function currentDepTiles() {
-  const d = regs[+$('depSel').value], z = Math.min(+$('depDetail').value, NAT[ccOf(regCc).nat].max), key = regCc + ':' + d.code + ':' + z;
+  const N = NAT[ccOf(regCc).nat], d = regs[+$('depSel').value], z = Math.min(+$('depDetail').value + (N.zoff || 0), N.max), key = regCc + ':' + d.code + ':' + z;
   if (depTilesCache.key !== key) depTilesCache = { key, tiles: polyTiles(d.polys, z) };
   return { d, z, tiles: depTilesCache.tiles };
 }
@@ -4504,7 +4509,7 @@ async function downloadPack(pack, tiles) {
   };
   show();
   // OpenFreeMap demande 4 requêtes simultanées au plus pour le hors ligne
-  await Promise.all(Array.from({ length: prov === 'ofm' ? 4 : 8 }, worker));
+  await Promise.all(Array.from({ length: prov === 'ofm' ? 4 : (NAT[prov] && NAT[prov].par) || 8 }, worker));
   const stopped = dl.stop, reason = dl.reason; dl = null;
   if (fetched > 50 && prov === 'ign') { tileKB = clamp(Math.round(fetchedBytes / fetched / 1024 * 10) / 10 || tileKB, 8, 60); store.set('tileKB', tileKB); }
   await save(!stopped && fail === 0);
@@ -4536,7 +4541,7 @@ $('dlTrace').onclick = async () => {
     const ks = new Set(pack.line.filter((_, i) => i % Math.max(1, Math.floor(pack.line.length / 40)) === 0).map(([lon, lat]) => natAt(lon, lat)));
     pack.prov = ks.size === 1 && [...ks][0] && [...ks][0] !== 'ign' ? [...ks][0] : 'ofm';
   }
-  let tiles = pack.prov === 'ofm' ? traceTiles(tr, 14) : traceTiles(tr);
+  let tiles = pack.prov === 'ofm' ? traceTiles(tr, 14) : traceTiles(tr, NAT[pack.prov] && NAT[pack.prov].zoff ? 15 : 16);
   if (pack.prov === 'ofm' && tiles.length > OFM_MAX) tiles = traceTiles(tr, 13);
   if (pack.prov === 'ofm' && tiles.length > OFM_MAX) { toast('Trace trop longue pour la carte Monde hors ligne : utilise plutôt « Une zone de la carte », en plusieurs morceaux.', 6000); return; }
   await downloadPack(pack, tiles);
@@ -4556,7 +4561,7 @@ $('dlDep').onclick = async () => {
   } catch {}
   const pack = cc === 'fr'
     ? { id: `dep:${d.code}:${z}`, kind: 'dep', code: d.code, name: `${d.code} · ${d.nom}`, detail: z >= 15 ? 'détaillé' : 'standard', bbox: polysBBox(d.polys) }
-    : { id: `dep:${cc}:${d.code}:${z}`, kind: 'dep', cc, prov, code: d.code, name: regName(d), detail: z >= 15 ? 'détaillé' : 'standard', bbox: polysBBox(d.polys) };
+    : { id: `dep:${cc}:${d.code}:${z}`, kind: 'dep', cc, prov, code: d.code, name: regName(d), detail: z - (NAT[prov].zoff || 0) >= 15 ? 'détaillé' : 'standard', bbox: polysBBox(d.polys) };
   await downloadPack(pack, tiles);
   if (cc === 'fr') downloadPlaces([d.code]); else if (navigator.onLine !== false) downloadOsmPlaces(pack, [(b => [b[1], b[0], b[3], b[2]])(pack.bbox)]);
   if ($('depGraph').checked && navigator.onLine !== false) await downloadDepGraph(pack, d.polys);
