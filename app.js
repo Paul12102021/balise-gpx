@@ -4,7 +4,7 @@
 
 // La page et le code doivent être de la même version. Sinon (page gardée en cache
 // par le téléphone ou par GitHub), on recharge une page fraîche, au plus 3 fois.
-const APP_VERSION = 141;
+const APP_VERSION = 142;
 try {
   const meta = document.querySelector('meta[name="balise-version"]');
   const pageV = meta ? +meta.content : 0;
@@ -957,7 +957,12 @@ $('bkIn').onchange = async e => {
   const freshPacks = (Array.isArray(data.packs) ? data.packs : []).filter(p => p && typeof p.id === 'string' && Array.isArray(p.tiles)
     && p.tiles.length && p.tiles.every(t => typeof t === 'string') && Array.isArray(p.bbox) && !havePacks.has(p.id));
   // tout est déjà là : on ne touche à rien
-  if (!fresh.length && !freshPacks.length) { bkSay('Cette sauvegarde est déjà sur l\'appli : rien à restaurer.'); return; }
+  if (!fresh.length && !freshPacks.length) {
+    bkSay('Cette sauvegarde est déjà sur l\'appli : rien à restaurer.');
+    // déjà restaurée, mais des cartes restent à retélécharger : on y emmène
+    if ((await listPacks()).some(p => p.restored && !p.complete)) setTimeout(() => { $('backup').hidden = true; openMaps(); }, 1800);
+    return;
+  }
   try {
     for (const it of fresh) await idb('readwrite', st => st.put(it));
     for (const p of freshPacks) await idb('readwrite', st => st.put(Object.assign({}, p, { count: p.tiles.length, bytes: 0, date: Date.now(), complete: false, missing: p.tiles.length, restored: true })), 'packs');
