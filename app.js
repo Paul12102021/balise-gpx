@@ -4,7 +4,7 @@
 
 // La page et le code doivent être de la même version. Sinon (page gardée en cache
 // par le téléphone ou par GitHub), on recharge une page fraîche, au plus 3 fois.
-const APP_VERSION = 153;
+const APP_VERSION = 154;
 try {
   const meta = document.querySelector('meta[name="balise-version"]');
   const pageV = meta ? +meta.content : 0;
@@ -5388,6 +5388,48 @@ function attachSwipe(panel, motion) {
   panel.addEventListener('touchend', end); panel.addEventListener('touchcancel', end);
 }
 attachSwipe($('sheet'), moreMotion());
+
+// Fenêtres du bas (Mes cartes, Mes traces, Sauvegarde…) : glisser vers le bas pour fermer, quand la liste est tout en haut
+function closeSheetPanel(lib) {
+  const btn = [...lib.querySelectorAll('.closebtn[id*="Close"]')].find(b => b.offsetParent);
+  if (btn) btn.click(); else lib.hidden = true;
+}
+document.querySelectorAll('.lib').forEach(lib => {
+  const panel = lib.querySelector('.lib-panel'); if (!panel) return;
+  let x0 = null, y0 = 0, dy = 0, decided = false, swiping = false, top0 = 0, lastY = 0, lastT = 0, vy = 0;
+  const set = (v, anim) => { panel.style.transition = anim ? 'transform .22s ease-out' : ''; panel.style.transform = v ? `translateY(${v}px)` : ''; };
+  panel.addEventListener('touchstart', e => {
+    if (e.touches.length > 1 || e.target.closest('select, textarea, input[type=search], input[type=text], input[type=range], canvas')) { x0 = null; return; }
+    x0 = e.touches[0].clientX; y0 = lastY = e.touches[0].clientY; lastT = performance.now(); dy = vy = 0; decided = swiping = false; top0 = panel.scrollTop;
+  }, { passive: true });
+  panel.addEventListener('touchmove', e => {
+    if (x0 == null) return;
+    const cx = e.touches[0].clientX, cy = e.touches[0].clientY, dx = cx - x0; dy = cy - y0;
+    const now = performance.now(); if (now > lastT) { vy = vy * 0.6 + (cy - lastY) / (now - lastT) * 0.4; lastY = cy; lastT = now; }
+    if (!decided && (Math.abs(dx) > 10 || Math.abs(dy) > 10)) {
+      decided = true;
+      // vers le bas, et la liste n'avait pas défilé : on fait glisser la fenêtre ; sinon la liste défile normalement
+      swiping = dy > 0 && Math.abs(dy) > Math.abs(dx) * 1.2 && top0 <= 2 && panel.scrollTop <= 2;
+      if (swiping) y0 = cy, dy = 0;
+    }
+    if (!swiping) return;
+    if (e.cancelable) e.preventDefault();
+    set(Math.max(0, dy));
+  }, { passive: false });
+  const end = () => {
+    if (x0 == null) return; x0 = null;
+    if (!swiping) return; swiping = false;
+    if (performance.now() - lastT > 120) vy = 0;
+    // le doigt levé sur un bouton : ce n'était pas un clic
+    const block = ev => { if (ev.isTrusted) { ev.stopPropagation(); ev.preventDefault(); } };
+    panel.addEventListener('click', block, true); setTimeout(() => panel.removeEventListener('click', block, true), 400);
+    if (dy > 90 || (vy > 0.6 && dy > 30)) {
+      set(panel.offsetHeight, true);
+      setTimeout(() => { closeSheetPanel(lib); set(0); }, 220);
+    } else set(0, true);
+  };
+  panel.addEventListener('touchend', end); panel.addEventListener('touchcancel', end);
+});
 
 // les boutons ronds se placent juste au-dessus du panneau du bas, quelle que soit sa hauteur
 try {
