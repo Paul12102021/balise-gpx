@@ -63,6 +63,8 @@
                 <category android:name="android.intent.category.DEFAULT" />
                 <category android:name="android.intent.category.BROWSABLE" />
                 <data android:scheme="https" android:host="paul12102021.github.io" android:pathPrefix="/balise-gpx/retour-strava" />
+                <!-- lien de parcours partagé : il ouvre l'appli directement -->
+                <data android:scheme="https" android:host="paul12102021.github.io" android:pathPrefix="/balise-gpx/p/" />
             </intent-filter>
             <!-- « Ouvrir avec » sur un fichier GPX -->
             <intent-filter>

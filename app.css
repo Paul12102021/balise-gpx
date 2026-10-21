@@ -605,6 +605,8 @@ body.choosing #sheet, body.choosing .fab-col { display: none !important; }
 .onb-acts .btn { flex: 1; }
 
 /* Vers ma montre : aide par marque */
-.wt-help { display: flex; flex-direction: column; gap: 8px; font-size: 13.5px; color: var(--muted); line-height: 1.4; }
-.wt-help p { margin: 0; }
+.wt-help { font-size: 13.5px; color: var(--muted); line-height: 1.4; }
+.wt-help summary { cursor: pointer; color: var(--ink); font-weight: 600; padding: 6px 0; }
+.wt-help p { margin: 8px 0 0; }
+.wt-sub { margin: -6px 2px 4px; font-size: 13px; }
 .wt-help b { color: var(--ink); }

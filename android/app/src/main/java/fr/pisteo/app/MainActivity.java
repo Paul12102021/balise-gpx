@@ -277,8 +277,8 @@ public class MainActivity extends Activity {
         Uri u = intent.getData();
         String scheme = u.getScheme() == null ? "" : u.getScheme().toLowerCase(Locale.ROOT);
         if (!scheme.equals("https") || !HOST.equalsIgnoreCase(u.getHost())) return null;
-        String q = u.getEncodedQuery();
-        return HOME + (q == null ? "" : "?" + q);
+        String q = u.getEncodedQuery(), f = u.getEncodedFragment();
+        return HOME + (q == null ? "" : "?" + q) + (f == null ? "" : "#" + f); // lien de parcours : tout est après « # »
     }
 
     // position venue du service de navigation (GPS actif même écran verrouillé) : transmise à la page
@@ -464,6 +464,18 @@ public class MainActivity extends Activity {
         @JavascriptInterface
         public void shareFile(String name, String mime, String content) {
             runOnUiThread(() -> share(name, mime, content));
+        }
+
+        // partager un texte (lien de parcours) : WhatsApp, SMS, mail…
+        @JavascriptInterface
+        public void shareText(String text, String title) {
+            runOnUiThread(() -> {
+                Intent i = new Intent(Intent.ACTION_SEND).setType("text/plain");
+                i.putExtra(Intent.EXTRA_TEXT, text);
+                i.putExtra(Intent.EXTRA_SUBJECT, title);
+                try { startActivity(Intent.createChooser(i, title)); }
+                catch (Exception e) { Toast.makeText(MainActivity.this, "Partage impossible", Toast.LENGTH_SHORT).show(); }
+            });
         }
 
         @JavascriptInterface

@@ -4,7 +4,7 @@
 
 // La page et le code doivent être de la même version. Sinon (page gardée en cache
 // par le téléphone ou par GitHub), on recharge une page fraîche, au plus 3 fois.
-const APP_VERSION = 163;
+const APP_VERSION = 164;
 try {
   const meta = document.querySelector('meta[name="balise-version"]');
   const pageV = meta ? +meta.content : 0;
@@ -730,8 +730,8 @@ async function renderLib() {
     open.querySelector('b').textContent = it.name;
     open.querySelector('span').textContent = `${fmtDist(it.dist)}${it.up != null ? ' · D+ ' + fmtM(it.up) : ''} · ouverte le ${fmtDate(it.date)}`;
     open.onclick = () => { closeLib(); loadText(it.text); };
-    const share = document.createElement('button'); share.className = 'lib-del'; share.setAttribute('aria-label', 'Exporter ' + it.name);
-    share.innerHTML = ICON_SHARE; share.onclick = () => shareGPX(it.text, it.name);
+    const share = document.createElement('button'); share.className = 'lib-del'; share.setAttribute('aria-label', 'Envoyer ' + it.name);
+    share.innerHTML = ICON_SHARE; share.onclick = () => { try { const t = parseGPX(it.text); openSend({ name: it.name, pts: t.pts }); } catch { shareGPX(it.text, it.name); } };
     const del = document.createElement('button'); del.className = 'lib-del'; del.setAttribute('aria-label', 'Retirer ' + it.name);
     del.innerHTML = ICON_DEL; del.onclick = async () => { await idb('readwrite', st => st.delete(it.id)).catch(() => {}); renderLib(); };
     li.append(open, share, del); list.appendChild(li);
@@ -4276,33 +4276,111 @@ async function shareGPX(text, name) {
   document.body.appendChild(a); a.click(); setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 1000);
 }
 
-// ---------- vers ma montre ou mon compteur (Garmin, Wahoo, Suunto…) ----------
-// un GPX propre (une seule trace, nom court, altitudes) que les applis des marques importent bien en parcours
-function watchFile() {
-  const name = (track.name || 'Parcours Pisteo').replace(/\.gpx$/i, '').trim().slice(0, 60);
-  const fname = name.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 40) + '.gpx';
-  return { name, fname: fname === '.gpx' ? 'parcours-pisteo.gpx' : fname, text: loopGPX(track.pts, name) };
+// ---------- envoyer un parcours : lien à partager, appli de la montre (Garmin, Wahoo…), fichier GPX ----------
+// le parcours envoyé : la trace ouverte, ou une trace de « Mes traces »
+let wtSrc = null;
+function wtFile() {
+  const name = (wtSrc.name || 'Parcours Pisteo').replace(/\.gpx$/i, '').trim().slice(0, 60);
+  const fname = name.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 40) + '.gpx';
+  return { name, fname: fname === '.gpx' ? 'parcours-pisteo.gpx' : fname, text: loopGPX(wtSrc.pts, name) };
 }
 function wtSay(m) { $('wtMsg').textContent = m || ''; $('wtMsg').hidden = !m; }
-$('btnWatch').onclick = () => {
-  if (!track) return;
-  $('wtName').textContent = `${track.name || 'Parcours'} · ${fmtDist(track.total)}`; wtSay('');
+function openSend(src) {
+  wtSrc = src; const p = makePath(src.pts, '');
+  $('wtName').textContent = `${src.name || 'Parcours'} · ${fmtDist(p.total)}${p.hasEle ? ' · D+ ' + fmtM(p.totalUp) : ''}`; wtSay('');
   $('watch').hidden = false;
-};
+}
+$('btnWatch').onclick = () => { if (track) openSend({ name: track.name, pts: track.pts }); };
 $('wtClose').onclick = () => { $('watch').hidden = true; };
 $('watch').onclick = e => { if (e.target === $('watch')) $('watch').hidden = true; };
 $('wtOpen').onclick = () => {
-  if (!track) return;
-  const f = watchFile();
+  if (!wtSrc) return;
+  const f = wtFile();
   if (AND && AND.openWith) { try { AND.openWith(f.fname, 'application/gpx+xml', f.text, tr('Ouvrir le parcours avec')); return; } catch {} }
   shareGPX(f.text, f.name); // navigateur ou ancienne version de l'appli : partage du fichier
 };
 $('wtSave').onclick = () => {
-  if (!track) return;
-  const f = watchFile();
+  if (!wtSrc) return;
+  const f = wtFile();
   if (AND) { let ok = false; try { ok = AND.saveDownload(f.fname, 'application/gpx+xml', f.text); } catch {} wtSay(ok ? `Enregistré dans Téléchargements : ${f.fname}` : 'Enregistrement impossible.'); return; }
   saveFile(f.text, f.fname); wtSay(`Fichier téléchargé : ${f.fname}`);
 };
+
+// Le lien porte le parcours lui-même (simplifié puis compressé) : rien n'est stocké sur un serveur,
+// et ce qui suit le « # » d'une adresse n'est jamais envoyé au site.
+// https://paul12102021.github.io/balise-gpx/p/#<données>~<nom>  (p/ = la page qui ouvre l'appli Android si elle est installée)
+const B64 = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_';
+const b64enc = u8 => { let s = ''; for (let i = 0; i < u8.length; i += 3) { const n = (u8[i] << 16) | ((u8[i + 1] || 0) << 8) | (u8[i + 2] || 0); s += B64[n >> 18 & 63] + B64[n >> 12 & 63] + (i + 1 < u8.length ? B64[n >> 6 & 63] : '') + (i + 2 < u8.length ? B64[n & 63] : ''); } return s; };
+const b64dec = s => { const out = []; for (let i = 0; i < s.length; i += 4) { const n = [0, 1, 2, 3].map(k => B64.indexOf(s[i + k] || 'A')); const v = (n[0] << 18) | (n[1] << 12) | (n[2] << 6) | n[3]; out.push(v >> 16 & 255); if (i + 2 < s.length) out.push(v >> 8 & 255); if (i + 3 < s.length) out.push(v & 255); } return new Uint8Array(out); };
+async function zip(u8, how) {
+  if (typeof CompressionStream === 'undefined') return null;
+  const s = new Blob([u8]).stream().pipeThrough(how === 'in' ? new CompressionStream('deflate-raw') : new DecompressionStream('deflate-raw'));
+  return new Uint8Array(await new Response(s).arrayBuffer());
+}
+// tracé simplifié (Douglas-Peucker, tolérance augmentée jusqu'à ~600 points) : invisible sur la carte, lien plus court
+function simplifyDP(pts, max = 600) {
+  if (pts.length <= max) return pts;
+  const lat0 = rad(pts[0].lat), xy = pts.map(p => [p.lon * 111320 * Math.cos(lat0), p.lat * 110540]);
+  const run = tol => {
+    const keep = new Uint8Array(pts.length); keep[0] = keep[pts.length - 1] = 1; const st = [[0, pts.length - 1]];
+    while (st.length) {
+      const [a, b] = st.pop(); let dm = 0, im = -1; const [ax, ay] = xy[a], [bx, by] = xy[b], dx = bx - ax, dy = by - ay, L = dx * dx + dy * dy || 1;
+      for (let i = a + 1; i < b; i++) { const t = clamp(((xy[i][0] - ax) * dx + (xy[i][1] - ay) * dy) / L, 0, 1), ex = ax + t * dx - xy[i][0], ey = ay + t * dy - xy[i][1], d = ex * ex + ey * ey; if (d > dm) { dm = d; im = i; } }
+      if (im > 0 && dm > tol * tol) { keep[im] = 1; st.push([a, im], [im, b]); }
+    }
+    return pts.filter((_, i) => keep[i]);
+  };
+  let tol = 3, out = run(tol);
+  while (out.length > max && tol < 200) { tol *= 1.5; out = run(tol); }
+  return out;
+}
+async function routeLink(name, pts) {
+  const sp = simplifyDP(pts), hasE = sp.some(p => p.ele != null), bytes = [1, hasE ? 1 : 0];
+  const put = v => { v = v < 0 ? -2 * v - 1 : 2 * v; while (v > 127) { bytes.push((v & 127) | 128); v = Math.floor(v / 128); } bytes.push(v); };
+  let pa = 0, po = 0, pe = 0;
+  for (const p of sp) {
+    const a = Math.round(p.lat * 1e5), o = Math.round(p.lon * 1e5); put(a - pa); put(o - po); pa = a; po = o;
+    if (hasE) { const e = Math.round(p.ele != null ? p.ele : pe); put(e - pe); pe = e; }
+  }
+  const raw = new Uint8Array(bytes), z = await zip(raw, 'in').catch(() => null);
+  const data = z && z.length < raw.length ? 'z' + b64enc(z) : 'r' + b64enc(raw);
+  return `${location.origin}${location.pathname.replace(/[^/]*$/, '')}p/#${data}~${encodeURIComponent((name || '').slice(0, 60))}`;
+}
+async function readRouteLink(hash) {
+  const m = /^#?([zr])([A-Za-z0-9_-]+)(?:~(.*))?$/.exec(hash || ''); if (!m) return null;
+  let u8 = b64dec(m[2]); if (m[1] === 'z') u8 = await zip(u8, 'out');
+  if (!u8 || u8[0] !== 1) return null;
+  const hasE = u8[1] === 1, pts = []; let i = 2;
+  const get = () => { let v = 0, f = 1, b; do { b = u8[i++]; v += (b & 127) * f; f *= 128; } while (b & 128 && i < u8.length); return v & 1 ? -(v + 1) / 2 : v / 2; };
+  let a = 0, o = 0, e = 0;
+  while (i < u8.length) { a += get(); o += get(); if (hasE) e += get(); pts.push({ lat: a / 1e5, lon: o / 1e5, ele: hasE ? e : null }); }
+  let name = ''; try { name = decodeURIComponent(m[3] || ''); } catch {}
+  return pts.length > 1 ? { name: name || 'Parcours partagé', pts } : null;
+}
+function copyText(t) {
+  try { if (navigator.clipboard && navigator.clipboard.writeText) { navigator.clipboard.writeText(t); return true; } } catch {}
+  const ta = document.createElement('textarea'); ta.value = t; ta.style.position = 'fixed'; ta.style.opacity = '0'; document.body.appendChild(ta); ta.select();
+  let ok = false; try { ok = document.execCommand('copy'); } catch {} ta.remove(); return ok;
+}
+$('wtLink').onclick = async () => {
+  if (!wtSrc) return;
+  const p = makePath(wtSrc.pts, ''), url = await routeLink(wtSrc.name, wtSrc.pts);
+  const info = `${wtSrc.name || 'Parcours'} · ${fmtDist(p.total)}${p.hasEle ? ' · D+ ' + fmtM(p.totalUp) : ''}`;
+  const text = tr(`${info} — ouvre-le dans Pisteo :`) + ' ' + url;
+  if (AND && AND.shareText) { try { AND.shareText(text, info); return; } catch {} }
+  if (!AND && navigator.share) { try { await navigator.share({ title: info, text: tr(`${info} — ouvre-le dans Pisteo :`), url }); return; } catch (e) { if (e.name === 'AbortError') return; } }
+  wtSay(copyText(text) ? 'Lien copié : colle-le dans un message (WhatsApp, SMS, mail…).' : url);
+};
+// à l'ouverture d'un lien de parcours : on l'affiche, avec « Naviguer » et « Enregistrer »
+async function openRouteLink() {
+  const h = location.hash; if (!/^#[zr][A-Za-z0-9_-]{8,}/.test(h)) return;
+  history.replaceState(null, '', location.pathname + location.search);
+  let r = null; try { r = await readRouteLink(h); } catch {}
+  if (!r) { toast('Lien de parcours illisible.', 4000); return; }
+  loadText(loopGPX(r.pts, r.name), false);
+  toast(`Parcours reçu : ${r.name} · « Enregistrer » pour le garder`, 5000);
+}
+window.addEventListener('hashchange', openRouteLink);
 
 // ---------- terminer : bilan, puis garder, exporter ou supprimer ----------
 function openFinish() {
@@ -5522,6 +5600,7 @@ const saved = store.get('gpx');
 if (saved) { try { showTrack(parseGPX(saved)); } catch { drawProfile(); } } else drawProfile();
 checkShared();
 stvReturn(); setTimeout(stvRetry, 8000);
+setTimeout(openRouteLink, 600); // lien de parcours reçu
 stvUI();
 const VERSION = APP_VERSION + ' · 19 oct. 2026';
 $('note').textContent = (window.isSecureContext ? '' : 'Attention : le GPS ne fonctionne qu\'en HTTPS. ') + 'Version ' + VERSION;
