@@ -4,7 +4,7 @@
 
 // La page et le code doivent être de la même version. Sinon (page gardée en cache
 // par le téléphone ou par GitHub), on recharge une page fraîche, au plus 3 fois.
-const APP_VERSION = 158;
+const APP_VERSION = 159;
 try {
   const meta = document.querySelector('meta[name="balise-version"]');
   const pageV = meta ? +meta.content : 0;
@@ -3755,6 +3755,7 @@ function planSeg(i, straight) {
   });
 }
 function planRemove(k) {
+  if (plan.go && k === 0) { toast('Le départ, c\'est ta position', 2500); return; } // aller vers un lieu : le départ reste
   const n = plan.wps.length;
   plan.wps.splice(k, 1);
   if (n <= 1) { plan.segs = []; }
@@ -3858,7 +3859,7 @@ function planDraw() {
     $('pbStats').textContent = (plan.go ? `Vers ${plan.go.label} · ` : '') + `${fmtDist(pth.total)}${pth.hasEle ? ' · D+ ' + fmtM(pth.totalUp) : ''}` + (plan.go ? '' : ` · ${n} points`) + (plan.busy ? ' · calcul…' : '');
   }
   $('pbHint').textContent = plan.go ? (n < 2 ? 'Départ : ta position · l\'itinéraire suit les chemins' : 'Touche la carte pour ajouter un passage · Naviguer pour partir') : (plan.straight ? 'Ligne droite' : 'Suit les chemins') + (n > 1 ? ' · glisse un point pour le déplacer, touche-le pour le supprimer' : ' · chaque toucher ajoute un point');
-  $('ptUndo').disabled = !n; $('ptClear').disabled = !n; $('ptLoop').disabled = n < 2 && !planLooped(); $('ptDone').disabled = n < 2;
+  $('ptUndo').disabled = plan.go ? n < 2 : !n; $('ptClear').disabled = plan.go ? n < 2 : !n; $('ptLoop').disabled = n < 2 && !planLooped(); $('ptDone').disabled = n < 2;
   $('ptLoop').classList.toggle('on', planLooped()); $('ptLoopL').textContent = planLooped() ? 'Bouclé' : 'Boucler';
   $('ptModeL').textContent = plan.straight ? 'Ligne droite' : 'Chemins';
 }
@@ -3873,8 +3874,8 @@ function planMode(p) {
 function planModeUI() { $('pbFoot').classList.toggle('on', profile !== 'trekking'); $('pbBike').classList.toggle('on', profile === 'trekking'); }
 $('pbFoot').onclick = () => planMode('hiking-mountain');
 $('pbBike').onclick = () => planMode('trekking');
-$('ptUndo').onclick = () => { plan.wps.pop(); plan.segs.length = Math.max(0, plan.wps.length - 1); planDraw(); };
-$('ptClear').onclick = () => { plan.wps = []; plan.segs = []; planDraw(); };
+$('ptUndo').onclick = () => { if (plan.go && plan.wps.length <= 1) return; plan.wps.pop(); plan.segs.length = Math.max(0, plan.wps.length - 1); planDraw(); };
+$('ptClear').onclick = () => { plan.wps = plan.go ? plan.wps.slice(0, 1) : []; plan.segs = []; planDraw(); }; // aller vers un lieu : on garde le départ (ma position)
 $('ptMode').onclick = () => { plan.straight = !plan.straight; planDraw(); toast(plan.straight ? 'Les prochains points seront reliés en ligne droite' : 'Les prochains points suivront les chemins', 2500); };
 // Boucler : retour au départ ajouté (et gardé si on ajoute des points) ; toucher encore pour l'enlever
 $('ptLoop').onclick = () => {
