@@ -4,7 +4,7 @@
 
 // La page et le code doivent être de la même version. Sinon (page gardée en cache
 // par le téléphone ou par GitHub), on recharge une page fraîche, au plus 3 fois.
-const APP_VERSION = 162;
+const APP_VERSION = 163;
 try {
   const meta = document.querySelector('meta[name="balise-version"]');
   const pageV = meta ? +meta.content : 0;
@@ -3783,10 +3783,18 @@ function planRemove(k) {
   planDraw();
 }
 // go : aller vers un lieu (départ = ma position, arrivée = le lieu), avec « Naviguer » au lieu d'« Enregistrer »
+// pendant qu'on prépare un autre trajet, la trace ouverte est masquée (une seule trace à l'écran) ;
+// « Quitter » la fait réapparaître, « Naviguer » / « Aperçu » / « Enregistrer » la remplacent par le nouveau trajet
+function trackShown(on) {
+  for (const id of ['track', 'track-casing']) if (map.getLayer(id)) map.setLayoutProperty(id, 'visibility', on ? 'visible' : 'none');
+  if (!on) { startMk.remove(); endMk.remove(); }
+  else if (track) { startMk.addTo(map); endMk.addTo(map); }
+}
 function openPlan(go, from, restore) {
   if (nav) { toast('Quitte d\'abord la navigation.'); return; }
   closeDest(); closeLib(); toggleMore(false, true); $('loopBar').hidden = true;
   planning = true; document.body.classList.add('plan'); planModeUI();
+  trackShown(false);
   plan.go = go && go.label ? go : null;
   $('ptDoneL').textContent = plan.go ? 'Naviguer' : 'Enregistrer';
   $('ptView').hidden = !plan.go;
@@ -3804,7 +3812,7 @@ function openPlan(go, from, restore) {
   planDraw();
   if ((!plan.go || plan.wps.length < 2) && me) map.easeTo({ center: [me.lon, me.lat], zoom: Math.max(map.getZoom(), 14), pitch: 0, bearing: 0, duration: 600 });
 }
-function closePlan() { routeLabels([]); planning = false; plan.go = null; document.body.classList.remove('plan'); plan.wps = []; plan.segs = []; planMarkers(); setSrc('plan', EMPTY); }
+function closePlan() { trackShown(true); routeLabels([]); planning = false; plan.go = null; document.body.classList.remove('plan'); plan.wps = []; plan.segs = []; planMarkers(); setSrc('plan', EMPTY); }
 $('destPlan').onclick = () => openPlan();
 $('pbClose').onclick = () => {
   closePlan();
