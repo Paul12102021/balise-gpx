@@ -4,7 +4,7 @@
 
 // La page et le code doivent être de la même version. Sinon (page gardée en cache
 // par le téléphone ou par GitHub), on recharge une page fraîche, au plus 3 fois.
-const APP_VERSION = 156;
+const APP_VERSION = 157;
 try {
   const meta = document.querySelector('meta[name="balise-version"]');
   const pageV = meta ? +meta.content : 0;
@@ -2565,8 +2565,19 @@ function lpUI() {
   const q = loopCfg.byTime ? [[30, '30 min'], [60, '1 h'], [90, '1 h 30'], [120, '2 h'], [180, '3 h']] : IMP ? (bike ? [[10, '10 mi'], [20, '20 mi'], [30, '30 mi'], [50, '50 mi']] : [[3, '3 mi'], [5, '5 mi'], [8, '8 mi'], [12, '12 mi']])
     : (bike ? [[15, '15 km'], [30, '30 km'], [50, '50 km'], [80, '80 km']] : [[5, '5 km'], [8, '8 km'], [12, '12 km'], [20, '20 km']]);
   $('lpQuick').innerHTML = '';
-  for (const [v, l] of q) { const b = document.createElement('button'); b.textContent = l; b.onclick = () => { $('lpVal').value = v; loopCfg.val = v; }; $('lpQuick').appendChild(b); }
+  for (const [v, l] of q) {
+    const b = document.createElement('button'); b.textContent = l; b.dataset.v = v;
+    b.onclick = () => {
+      $('lpVal').value = v; loopCfg.val = v; lpMark();
+      // petit effet : la valeur choisie « clignote » doucement dans la case
+      const i = $('lpVal'); i.classList.remove('lp-flash'); void i.offsetWidth; i.classList.add('lp-flash');
+    };
+    $('lpQuick').appendChild(b);
+  }
+  lpMark();
 }
+// la distance (ou durée) proposée qui correspond à la valeur saisie reste surlignée
+function lpMark() { const v = +$('lpVal').value; $('lpQuick').querySelectorAll('button').forEach(b => b.classList.toggle('on', +b.dataset.v === v)); }
 function openLoop() { closeDest(); closeLib(); toggleMore(false); $('loopBar').hidden = true; lpUI(); $('loop').hidden = false; }
 $('destLoop').onclick = openLoop;
 $('loopClose').onclick = () => { $('loop').hidden = true; };
@@ -2575,7 +2586,7 @@ $('lpFoot').onclick = () => { setProfile('hiking-mountain', true); loopCfg.val =
 $('lpBike').onclick = () => { setProfile('trekking', true); loopCfg.val = null; lpUI(); };
 $('lpByKm').onclick = () => { loopCfg.byTime = false; loopCfg.val = null; lpUI(); };
 $('lpByTime').onclick = () => { loopCfg.byTime = true; loopCfg.val = null; lpUI(); };
-$('lpVal').oninput = e => { loopCfg.val = +e.target.value || null; };
+$('lpVal').oninput = e => { loopCfg.val = +e.target.value || null; lpMark(); };
 $('lpFromMe').onclick = () => { loopCfg.from = null; lpUI(); };
 $('lpFromMap').onclick = () => {
   $('loop').hidden = true;
