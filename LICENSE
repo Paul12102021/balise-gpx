@@ -1,0 +1,21 @@
+Copyright (c) 2026 Paul Lecouillard. Tous droits réservés. All rights reserved.
+
+Pisteo (code source, textes, icônes, voix enregistrée hors licence propre, et
+fichiers de ce dépôt) est la propriété de son auteur.
+
+Aucune licence n'est accordée : il est interdit de copier, modifier, publier,
+distribuer, vendre ou réutiliser tout ou partie de ce code ou de cette
+application, y compris sous un autre nom, sans l'autorisation écrite préalable
+de l'auteur. Le fait que ce dépôt soit consultable publiquement ne donne aucun
+droit d'utilisation.
+
+No license is granted. You may not copy, modify, publish, distribute, sell or
+reuse any part of this code or application, including under another name,
+without the author's prior written permission. Public visibility of this
+repository grants no rights of use.
+
+Les composants tiers gardent leur propre licence : MapLibre GL JS (BSD-3-Clause,
+dossier vendor/), voix UPMC (CC BY-SA, voir voice/LICENSE.txt), données et
+cartes citées dans l'appli (OpenStreetMap, IGN, etc.) selon leurs conditions.
+
+Contact : pisteo.app@gmail.com

@@ -1,10 +1,11 @@
-/* Pisteo — navigation guidée sur une trace GPX */
+/* Pisteo — navigation guidée sur une trace GPX
+   © 2026 Paul Lecouillard. Tous droits réservés — toute copie ou réutilisation est interdite sans autorisation (voir LICENSE). */
 (() => {
 'use strict';
 
 // La page et le code doivent être de la même version. Sinon (page gardée en cache
 // par le téléphone ou par GitHub), on recharge une page fraîche, au plus 3 fois.
-const APP_VERSION = 166;
+const APP_VERSION = 167;
 try {
   const meta = document.querySelector('meta[name="balise-version"]');
   const pageV = meta ? +meta.content : 0;
