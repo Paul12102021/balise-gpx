@@ -4,7 +4,7 @@
 
 // La page et le code doivent être de la même version. Sinon (page gardée en cache
 // par le téléphone ou par GitHub), on recharge une page fraîche, au plus 3 fois.
-const APP_VERSION = 154;
+const APP_VERSION = 156;
 try {
   const meta = document.querySelector('meta[name="balise-version"]');
   const pageV = meta ? +meta.content : 0;
@@ -573,7 +573,7 @@ async function showTrack(t, fit = true) {
   track.sig = (t.signals || []).map(s => { const pr = project(track, s, true); return pr && pr.dist < 60 ? pr.along : null; }).filter(v => v != null).sort((x, y) => x - y);
   // le texte et le profil s'affichent tout de suite, la carte suit dès qu'elle est prête
   $('trackName').textContent = `${t.name} · ${fmtDist(track.total)}${track.hasEle ? ' · D+ ' + fmtM(track.totalUp) : ''}`;
-  $('btnClose').hidden = false; $('btnReverse').hidden = false; $('btnSaveTr').hidden = false; refreshSaveBtn(); $('btnNew').hidden = false; $('btnNew').parentElement.classList.add('has-new');
+  $('btnClose').hidden = false; $('btnReverse').hidden = false; $('btnWatch').hidden = false; $('btnSaveTr').hidden = false; refreshSaveBtn(); $('btnNew').hidden = false; $('btnNew').parentElement.classList.add('has-new');
   if (me) progress = project(track, me, true);
   drawProfile(); updateStats();
   const mine = track;
@@ -586,7 +586,7 @@ async function showTrack(t, fit = true) {
   if (fit) { map.setPadding({ top: 0, bottom: 0, left: 0, right: 0 }); fitTo([track.pts]); }
   $('trackName').textContent = `${t.name} · ${fmtDist(track.total)}${track.hasEle ? ' · D+ ' + fmtM(track.totalUp) : ''}`;
   if (me) progress = project(track, me, true);
-  $('btnClose').hidden = false; $('btnReverse').hidden = false; $('btnSaveTr').hidden = false; refreshSaveBtn(); $('btnNew').hidden = false; $('btnNew').parentElement.classList.add('has-new');
+  $('btnClose').hidden = false; $('btnReverse').hidden = false; $('btnWatch').hidden = false; $('btnSaveTr').hidden = false; refreshSaveBtn(); $('btnNew').hidden = false; $('btnNew').parentElement.classList.add('has-new');
   drawProfile(); updateStats(); updateOfflineInfo();
 }
 
@@ -601,7 +601,7 @@ function closeTrack(quiet) {
   setSrc('track', EMPTY); setSrc('turn', EMPTY);
   startMk.remove(); endMk.remove();
   store.set('gpx', '');
-  $('trackName').textContent = 'Aucune trace chargée'; $('btnClose').hidden = true; $('btnReverse').hidden = true; $('btnSaveTr').hidden = true; $('btnNew').hidden = true; $('btnNew').parentElement.classList.remove('has-new');
+  $('trackName').textContent = 'Aucune trace chargée'; $('btnClose').hidden = true; $('btnReverse').hidden = true; $('btnWatch').hidden = true; $('btnSaveTr').hidden = true; $('btnNew').hidden = true; $('btnNew').parentElement.classList.remove('has-new');
   drawProfile(); updateStats(); updateOfflineInfo();
   if (!quiet) toast('Trace fermée', 5000, savedText ? { label: 'Annuler', run: () => loadText(savedText) } : null);
 }
@@ -4221,6 +4221,34 @@ async function shareGPX(text, name) {
   const a = document.createElement('a'); a.href = URL.createObjectURL(file); a.download = fname;
   document.body.appendChild(a); a.click(); setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 1000);
 }
+
+// ---------- vers ma montre ou mon compteur (Garmin, Wahoo, Suunto…) ----------
+// un GPX propre (une seule trace, nom court, altitudes) que les applis des marques importent bien en parcours
+function watchFile() {
+  const name = (track.name || 'Parcours Pisteo').replace(/\.gpx$/i, '').trim().slice(0, 60);
+  const fname = name.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 40) + '.gpx';
+  return { name, fname: fname === '.gpx' ? 'parcours-pisteo.gpx' : fname, text: loopGPX(track.pts, name) };
+}
+function wtSay(m) { $('wtMsg').textContent = m || ''; $('wtMsg').hidden = !m; }
+$('btnWatch').onclick = () => {
+  if (!track) return;
+  $('wtName').textContent = `${track.name || 'Parcours'} · ${fmtDist(track.total)}`; wtSay('');
+  $('watch').hidden = false;
+};
+$('wtClose').onclick = () => { $('watch').hidden = true; };
+$('watch').onclick = e => { if (e.target === $('watch')) $('watch').hidden = true; };
+$('wtOpen').onclick = () => {
+  if (!track) return;
+  const f = watchFile();
+  if (AND && AND.openWith) { try { AND.openWith(f.fname, 'application/gpx+xml', f.text, tr('Ouvrir le parcours avec')); return; } catch {} }
+  shareGPX(f.text, f.name); // navigateur ou ancienne version de l'appli : partage du fichier
+};
+$('wtSave').onclick = () => {
+  if (!track) return;
+  const f = watchFile();
+  if (AND) { let ok = false; try { ok = AND.saveDownload(f.fname, 'application/gpx+xml', f.text); } catch {} wtSay(ok ? `Enregistré dans Téléchargements : ${f.fname}` : 'Enregistrement impossible.'); return; }
+  saveFile(f.text, f.fname); wtSay(`Fichier téléchargé : ${f.fname}`);
+};
 
 // ---------- terminer : bilan, puis garder, exporter ou supprimer ----------
 function openFinish() {

@@ -600,3 +600,8 @@ body.choosing #sheet, body.choosing .fab-col { display: none !important; }
 .onb-dots i.on { width: 22px; border-radius: 4px; background: var(--go); }
 .onb-acts { display: flex; gap: 10px; }
 .onb-acts .btn { flex: 1; }
+
+/* Vers ma montre : aide par marque */
+.wt-help { display: flex; flex-direction: column; gap: 8px; font-size: 13.5px; color: var(--muted); line-height: 1.4; }
+.wt-help p { margin: 0; }
+.wt-help b { color: var(--ink); }

@@ -14,7 +14,7 @@
 <link rel="icon" href="icon.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
 <link rel="stylesheet" href="vendor/maplibre-gl.css">
-<link rel="stylesheet" href="app.css?v=154">
+<link rel="stylesheet" href="app.css?v=156">
 </head>
 <body>
 <div id="map" aria-label="Carte"></div>
@@ -137,8 +137,11 @@
     <button id="btnReverse" class="closebtn icon" hidden aria-label="Inverser le sens de la trace" title="Inverser le sens">
       <svg viewBox="0 0 24 24"><path d="M7 4 3 8l4 4"/><path d="M3 8h13"/><path d="m17 12 4 4-4 4"/><path d="M21 16H8"/></svg>
     </button>
-    <button id="btnClose" class="closebtn" hidden aria-label="Fermer la trace">
-      <svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></svg>Fermer
+    <button id="btnWatch" class="closebtn icon" hidden aria-label="Envoyer vers ma montre ou mon compteur" title="Vers ma montre">
+      <svg viewBox="0 0 24 24"><rect x="7" y="6" width="10" height="12" rx="3"/><path d="M9 6V3h6v3M9 18v3h6v-3M12 10v2.5l1.5 1"/></svg>
+    </button>
+    <button id="btnClose" class="closebtn icon" hidden aria-label="Fermer la trace" title="Fermer la trace">
+      <svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></svg>
     </button>
   </div>
   <canvas id="profile" aria-label="Profil altimétrique"></canvas>
@@ -284,6 +287,25 @@
         <button id="sdRename" class="btn ghost">Renommer</button>
         <button id="sdDelete" class="btn ghost danger">Supprimer</button>
       </div>
+    </div>
+  </div>
+</div>
+
+<div id="watch" class="lib" hidden>
+  <div class="lib-panel" role="dialog" aria-label="Vers ma montre ou mon compteur">
+    <div class="lib-head">
+      <b>Vers ma montre ou mon compteur</b>
+      <button id="wtClose" class="closebtn" aria-label="Fermer"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></svg>Fermer</button>
+    </div>
+    <p id="wtName" class="lib-sum"></p>
+    <button id="wtOpen" class="btn go">Ouvrir dans l'appli de ma montre</button>
+    <button id="wtSave" class="btn">Enregistrer dans Téléchargements</button>
+    <p id="wtMsg" class="fin-msg" role="status" hidden></p>
+    <div class="wt-help">
+      <p><b>Garmin</b> : choisis « Connect » dans la liste. Le parcours arrive dans Garmin Connect › Entraînement et planification › Parcours : touche-le puis « Envoyer vers l'appareil ». Si rien n'apparaît, enregistre le fichier et importe-le depuis un ordinateur sur connect.garmin.com (Entraînement et planification › Parcours › Importer).</p>
+      <p><b>Wahoo</b> : choisis « Wahoo » et confirme l'import, puis Explore › My Routes › le parcours › Send to ELEMNT.</p>
+      <p><b>Suunto, Coros</b> : enregistre le fichier, puis dans l'appli de la montre : Carte ou Itinéraires › + › Importer un fichier GPX.</p>
+      <p><b>Autres</b> : « Ouvrir dans l'appli de ma montre » puis choisis l'appli de ton appareil ; sinon enregistre le fichier et importe-le depuis son appli.</p>
     </div>
   </div>
 </div>
@@ -640,8 +662,8 @@
 <div id="toast" class="toast" hidden></div>
 
 <script src="vendor/maplibre-gl.js"></script>
-<script src="i18n/en.js?v=154"></script>
-<script src="i18n/es.js?v=154"></script>
-<script src="app.js?v=154"></script>
+<script src="i18n/en.js?v=156"></script>
+<script src="i18n/es.js?v=156"></script>
+<script src="app.js?v=156"></script>
 </body>
 </html>

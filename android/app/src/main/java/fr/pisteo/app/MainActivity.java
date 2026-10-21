@@ -353,6 +353,21 @@ public class MainActivity extends Activity {
         }
     }
 
+    // « Ouvrir avec » : l'appli de la montre ou du compteur (Garmin Connect, Wahoo…) reçoit le fichier
+    private void openWith(String name, String mime, String content, String title) {
+        try {
+            File f = writeCache(name, content);
+            Uri uri = FileProvider.getUriForFile(this, getPackageName() + ".files", f);
+            Intent i = new Intent(Intent.ACTION_VIEW);
+            i.setDataAndType(uri, mime);
+            i.setClipData(android.content.ClipData.newRawUri(name, uri));
+            i.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+            startActivity(Intent.createChooser(i, title));
+        } catch (Exception e) {
+            Toast.makeText(this, "Aucune appli pour ouvrir ce fichier", Toast.LENGTH_LONG).show();
+        }
+    }
+
     private boolean saveToDownloads(String name, String mime, String content) {
         if (Build.VERSION.SDK_INT < 29) { share(name, mime, content); return false; }
         try {
@@ -420,6 +435,11 @@ public class MainActivity extends Activity {
         @JavascriptInterface
         public void shareFile(String name, String mime, String content) {
             runOnUiThread(() -> share(name, mime, content));
+        }
+
+        @JavascriptInterface
+        public void openWith(String name, String mime, String content, String title) {
+            runOnUiThread(() -> MainActivity.this.openWith(name, mime, content, title));
         }
 
         @JavascriptInterface
