@@ -4,7 +4,7 @@
 
 // La page et le code doivent être de la même version. Sinon (page gardée en cache
 // par le téléphone ou par GitHub), on recharge une page fraîche, au plus 3 fois.
-const APP_VERSION = 159;
+const APP_VERSION = 160;
 try {
   const meta = document.querySelector('meta[name="balise-version"]');
   const pageV = meta ? +meta.content : 0;
@@ -3771,6 +3771,7 @@ function openPlan(go, from) {
   planning = true; document.body.classList.add('plan'); planModeUI();
   plan.go = go && go.label ? go : null;
   $('ptDoneL').textContent = plan.go ? 'Naviguer' : 'Enregistrer';
+  $('ptView').hidden = !plan.go;
   plan.wps = []; plan.segs = [];
   if (plan.go && go.lat == null) plan.wps = [{ lat: from.lat, lon: from.lon }]; // arrivée à placer
   else if (plan.go) {
@@ -3859,7 +3860,7 @@ function planDraw() {
     $('pbStats').textContent = (plan.go ? `Vers ${plan.go.label} · ` : '') + `${fmtDist(pth.total)}${pth.hasEle ? ' · D+ ' + fmtM(pth.totalUp) : ''}` + (plan.go ? '' : ` · ${n} points`) + (plan.busy ? ' · calcul…' : '');
   }
   $('pbHint').textContent = plan.go ? (n < 2 ? 'Départ : ta position · l\'itinéraire suit les chemins' : 'Touche la carte pour ajouter un passage · Naviguer pour partir') : (plan.straight ? 'Ligne droite' : 'Suit les chemins') + (n > 1 ? ' · glisse un point pour le déplacer, touche-le pour le supprimer' : ' · chaque toucher ajoute un point');
-  $('ptUndo').disabled = plan.go ? n < 2 : !n; $('ptClear').disabled = plan.go ? n < 2 : !n; $('ptLoop').disabled = n < 2 && !planLooped(); $('ptDone').disabled = n < 2;
+  $('ptUndo').disabled = plan.go ? n < 2 : !n; $('ptClear').disabled = plan.go ? n < 2 : !n; $('ptLoop').disabled = n < 2 && !planLooped(); $('ptDone').disabled = n < 2; $('ptView').disabled = n < 2;
   $('ptLoop').classList.toggle('on', planLooped()); $('ptLoopL').textContent = planLooped() ? 'Bouclé' : 'Boucler';
   $('ptModeL').textContent = plan.straight ? 'Ligne droite' : 'Chemins';
 }
@@ -3903,7 +3904,8 @@ map.on('contextmenu', e => {
 });
 
 // lancer la navigation vers le lieu tracé dans l'écran d'itinéraire
-async function planGo() {
+// go = false : le parcours s'affiche dans l'aperçu (enregistrer, inverser, montre…), « Naviguer » pour partir
+async function planGo(go = true) {
   const last = plan.wps[plan.wps.length - 1], dest = { lat: last.lat, lon: last.lon, label: plan.go.label };
   const sg = plan.segs[0], simple = plan.wps.length === 2 && sg && !sg.straight;
   const style = simple && profile === 'trekking' ? sg.style || null : null;
@@ -3912,9 +3914,11 @@ async function planGo() {
   await showTrack({ name: 'Vers ' + dest.label, pts, signals }, true);
   // trajet direct : recalculé tout seul si on s'en écarte
   if (simple) { track.route = dest; track.style = style; }
+  if (!go) { toast('Parcours prêt : « Naviguer » pour partir', 3500); return; }
   toast(`${fmtDist(track.total)} jusqu'à ${dest.label} ${profile === 'trekking' ? 'à vélo' + (style ? ', itinéraire ' + styleName(style) : '') : 'à pied'}`, 4000);
   startNav();
 }
+$('ptView').onclick = async () => { if (plan.wps.length < 2) return; $('ptView').disabled = true; await plan.queue; planGo(false); };
 async function goTo(dest) {
   closeDest();
   if (!startGPS()) return;
