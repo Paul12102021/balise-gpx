@@ -4,7 +4,7 @@
 
 // La page et le code doivent être de la même version. Sinon (page gardée en cache
 // par le téléphone ou par GitHub), on recharge une page fraîche, au plus 3 fois.
-const APP_VERSION = 165;
+const APP_VERSION = 166;
 try {
   const meta = document.querySelector('meta[name="balise-version"]');
   const pageV = meta ? +meta.content : 0;
@@ -13,7 +13,7 @@ try {
     if (n < 3) {
       sessionStorage.setItem('fixVersion', String(n + 1));
       const keep = /[?&]shared=1/.test(location.search) ? '&shared=1' : '';
-      location.replace(location.pathname + '?fresh=' + Date.now() + keep);
+      location.replace(location.pathname + '?fresh=' + Date.now() + keep + location.hash); // le « # » d'un lien de parcours est gardé
       throw new Error('version');
     }
   } else sessionStorage.removeItem('fixVersion');
