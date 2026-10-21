@@ -60,6 +60,7 @@ const exact = {
   'Bouclé': 'Looped', 'Retour au départ enlevé': 'Return to start removed', 'Boucle fermée : les points ajoutés se placeront avant le retour au départ': 'Loop closed: new points will go before the return to start',
   "Le départ, c'est ta position": 'The start is your position',
   'Aperçu': 'Preview', 'Parcours prêt : « Naviguer » pour partir': 'Route ready: “Navigate” to set off',
+  'Navigation et enregistrement en cours': 'Navigation and recording in progress', 'Navigation en cours': 'Navigation in progress', 'Enregistrement de la sortie en cours': 'Recording your outing',
   'Hors ligne': 'Offline', 'Sorties et traces': 'Outings and tracks', 'Navigation': 'Navigation', 'Voix et vibrations': 'Voice and vibration', 'Affichage': 'Display', 'Import manuel': 'Manual import', 'Envoi automatique': 'Auto upload',
   'Je me déplace': 'I travel', 'Pour les itinéraires et le temps estimé': 'For routes and estimated time', 'À pied': 'On foot', 'À vélo': 'By bike',
   'Cartes hors ligne': 'Offline maps', 'Trace, département ou zone': 'Track, French département or area', 'Mes cartes': 'My maps',

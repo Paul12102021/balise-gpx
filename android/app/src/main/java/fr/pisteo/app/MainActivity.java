@@ -52,9 +52,10 @@ import java.util.concurrent.atomic.AtomicInteger;
  * l'ouverture et l'enregistrement de fichiers, le partage et le bouton retour.
  */
 public class MainActivity extends Activity {
+    static volatile MainActivity instance;
     private static final String HOME = "https://paul12102021.github.io/balise-gpx/";
     private static final String HOST = "paul12102021.github.io";
-    private static final int REQ_FILE = 1, REQ_LOC = 2;
+    private static final int REQ_FILE = 1, REQ_LOC = 2, REQ_NOTIF = 3;
     private static final int BAR = Color.parseColor("#1d2a24");
 
     private WebView web;
@@ -74,6 +75,7 @@ public class MainActivity extends Activity {
     @Override
     protected void onCreate(Bundle state) {
         super.onCreate(state);
+        instance = this;
         getWindow().setStatusBarColor(BAR);
         getWindow().setNavigationBarColor(BAR);
 
@@ -201,6 +203,8 @@ public class MainActivity extends Activity {
 
     @Override
     protected void onDestroy() {
+        if (instance == this) instance = null;
+        stopService(new Intent(this, LocationService.class)); // appli fermée : plus de GPS en arrière-plan
         if (tts != null) tts.shutdown();
         if (web != null) { web.destroy(); web = null; }
         super.onDestroy();
@@ -275,6 +279,15 @@ public class MainActivity extends Activity {
         if (!scheme.equals("https") || !HOST.equalsIgnoreCase(u.getHost())) return null;
         String q = u.getEncodedQuery();
         return HOME + (q == null ? "" : "?" + q);
+    }
+
+    // position venue du service de navigation (GPS actif même écran verrouillé) : transmise à la page
+    void pushPosition(android.location.Location l) {
+        String js = String.format(Locale.ROOT, "window.pisteoPos&&pisteoPos(%.7f,%.7f,%s,%.1f,%s,%s,%d)",
+                l.getLatitude(), l.getLongitude(), l.hasAltitude() ? String.format(Locale.ROOT, "%.1f", l.getAltitude()) : "null",
+                l.hasAccuracy() ? l.getAccuracy() : 50f, l.hasSpeed() ? String.format(Locale.ROOT, "%.2f", l.getSpeed()) : "null",
+                l.hasBearing() ? String.format(Locale.ROOT, "%.1f", l.getBearing()) : "null", l.getTime());
+        runOnUiThread(() -> { if (web != null) web.evaluateJavascript(js, null); });
     }
 
     // GPX reçu par « Partager » ou « Ouvrir avec » : gardé de côté, la page vient le chercher
@@ -390,6 +403,22 @@ public class MainActivity extends Activity {
 
     /** Ce que la page peut demander au téléphone (window.PisteoAndroid). */
     private class Bridge {
+        // navigation ou enregistrement : GPS gardé actif en arrière-plan (notification « Pisteo · … en cours »)
+        @JavascriptInterface
+        public void tracking(boolean on, String text) {
+            runOnUiThread(() -> {
+                Intent i = new Intent(MainActivity.this, LocationService.class);
+                if (!on) { stopService(i); return; }
+                if (!hasLocation()) return;
+                if (Build.VERSION.SDK_INT >= 33 && checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED)
+                    requestPermissions(new String[]{Manifest.permission.POST_NOTIFICATIONS}, REQ_NOTIF);
+                i.putExtra(LocationService.EXTRA_TEXT, text);
+                try {
+                    if (Build.VERSION.SDK_INT >= 26) startForegroundService(i); else startService(i);
+                } catch (Exception ignored) { }
+            });
+        }
+
         @JavascriptInterface
         public void openExternal(String url) { openExternal(url, false); }
 

@@ -60,6 +60,7 @@ const exact = {
   'Bouclé': 'Cerrado', 'Retour au départ enlevé': 'Vuelta al inicio quitada', 'Boucle fermée : les points ajoutés se placeront avant le retour au départ': 'Bucle cerrado: los puntos nuevos irán antes de la vuelta al inicio',
   "Le départ, c'est ta position": 'La salida es tu posición',
   'Aperçu': 'Vista previa', 'Parcours prêt : « Naviguer » pour partir': 'Ruta lista: «Navegar» para salir',
+  'Navigation et enregistrement en cours': 'Navegación y grabación en curso', 'Navigation en cours': 'Navegación en curso', 'Enregistrement de la sortie en cours': 'Grabando la salida',
   'Hors ligne': 'Sin conexión', 'Sorties et traces': 'Salidas y tracks', 'Navigation': 'Navegación', 'Voix et vibrations': 'Voz y vibración', 'Affichage': 'Pantalla', 'Import manuel': 'Importación manual', 'Envoi automatique': 'Envío automático',
   'Je me déplace': 'Me desplazo', 'Pour les itinéraires et le temps estimé': 'Para las rutas y el tiempo estimado', 'À pied': 'A pie', 'À vélo': 'En bici',
   'Cartes hors ligne': 'Mapas sin conexión', 'Trace, département ou zone': 'Track, región o zona', 'Mes cartes': 'Mis mapas',

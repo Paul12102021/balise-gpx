@@ -4,7 +4,7 @@
 
 // La page et le code doivent être de la même version. Sinon (page gardée en cache
 // par le téléphone ou par GitHub), on recharge une page fraîche, au plus 3 fois.
-const APP_VERSION = 161;
+const APP_VERSION = 162;
 try {
   const meta = document.querySelector('meta[name="balise-version"]');
   const pageV = meta ? +meta.content : 0;
@@ -1309,11 +1309,24 @@ async function keepAwake() {
 }
 document.addEventListener('visibilitychange', () => { if ((nav || recording) && document.visibilityState === 'visible') keepAwake(); });
 
+// appli Android : pendant la navigation ou l'enregistrement, un service garde le GPS actif écran verrouillé
+// et envoie les positions ici (le navigateur intégré, lui, est mis en veille par Android)
+let nativeT = 0, bgOn = false;
+window.pisteoPos = (lat, lon, ele, acc, speed, heading, t) => { nativeT = Date.now(); onPos({ lat, lon, ele, acc, speed, heading, t }); };
+function bgTrack() {
+  if (!AND || !AND.tracking) return;
+  const want = !!(nav || actState === 'on');
+  const text = nav && actState === 'on' ? 'Navigation et enregistrement en cours' : nav ? 'Navigation en cours' : 'Enregistrement de la sortie en cours';
+  if (want === bgOn && !want) return;
+  bgOn = want;
+  try { AND.tracking(want, tr(text)); } catch {}
+}
 function startGPS() {
   if (sim) return true;
   if (!('geolocation' in navigator)) { toast('Ce navigateur ne donne pas accès au GPS.', 4000); return false; }
   if (watchId != null) return true;
   watchId = navigator.geolocation.watchPosition(p => {
+    if (Date.now() - nativeT < 5000) return; // le service de l'appli Android donne déjà les positions
     const c = p.coords;
     onPos({ lat: c.latitude, lon: c.longitude, ele: c.altitude, acc: c.accuracy, speed: c.speed, heading: c.heading, t: p.timestamp });
   }, err => {
@@ -1484,7 +1497,7 @@ async function startNav(free = false) {
   applyEco(); ecoWake(10000);
   if (me) { if (track) { progress = project(track, me, true); updateDone(me); } guidance(); navCamera(800); }
   else setBanner('gps', '', 'Recherche du signal GPS…', 'gps');
-  updateStats();
+  updateStats(); bgTrack();
 }
 function stopNav() {
   stopPip(); nav = false; document.body.classList.remove('nav', 'free'); applyEco(); toggleNavMore(false, true);
@@ -1493,7 +1506,7 @@ function stopNav() {
   setSrc('turn', EMPTY);
   map.easeTo({ pitch: 0, bearing: 0, padding: { top: 0, bottom: 0, left: 0, right: 0 }, duration: 600 });
   if (!recording) stopGPS();
-  setFollow(false);
+  setFollow(false); bgTrack();
 }
 $('btnNav').onclick = () => track ? startNav() : openDest();
 // trace ouverte : accès aux autres façons de partir (lieu, boucle, tracé, parcours balisés)
@@ -2196,9 +2209,9 @@ function offTrackLogic() {
 // Candidats : les points de la trace les plus proches à vol d'oiseau (minima locaux),
 // puis on garde celui qui est le plus court à rejoindre par les chemins.
 // Où rejoindre la trace : devant ce qui a déjà été parcouru (jamais en arrière), en évitant de
-// sauter une grosse partie du parcours — chaque mètre de trace sauté compte pour un demi-mètre de détour.
+// sauter une grosse partie du parcours — chaque mètre de trace sauté compte pour 20 cm de détour (on rejoint plutôt devant que là où on est sorti).
 // Si la trace n'est pas commencée, on vise son début (sauter du parcours y coûte bien plus cher).
-const skipW = () => done ? 0.5 : joinNear ? 0 : 2;
+const skipW = () => done ? 0.2 : joinNear ? 0 : 2;
 // choix « Départ / Plus proche », affiché tant qu'on rejoint une trace pas encore commencée
 function joinPickUI() {
   const show = !!(nav && track && !track.route && !done && (rejoin || routing) && track.total > 1000);
@@ -4168,7 +4181,7 @@ const saveRec = () => store.set('rec', JSON.stringify(rec));
 const actElapsed = () => act.ms + (act.since ? Date.now() - act.since : 0);
 function setActState(st) {
   actState = st; recording = st !== 'idle'; store.set('actState', st);
-  updateActUI(); updateNavMore();
+  updateActUI(); updateNavMore(); bgTrack();
 }
 
 function startActivity() {
