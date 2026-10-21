@@ -4,7 +4,7 @@
 
 // La page et le code doivent être de la même version. Sinon (page gardée en cache
 // par le téléphone ou par GitHub), on recharge une page fraîche, au plus 3 fois.
-const APP_VERSION = 157;
+const APP_VERSION = 158;
 try {
   const meta = document.querySelector('meta[name="balise-version"]');
   const pageV = meta ? +meta.content : 0;
@@ -2569,8 +2569,6 @@ function lpUI() {
     const b = document.createElement('button'); b.textContent = l; b.dataset.v = v;
     b.onclick = () => {
       $('lpVal').value = v; loopCfg.val = v; lpMark();
-      // petit effet : la valeur choisie « clignote » doucement dans la case
-      const i = $('lpVal'); i.classList.remove('lp-flash'); void i.offsetWidth; i.classList.add('lp-flash');
     };
     $('lpQuick').appendChild(b);
   }
@@ -3812,7 +3810,11 @@ function planSwap(seg, s) {
   planDraw();
   toast(`Itinéraire ${styleName(seg.style)} choisi`, 2000);
 }
-function planAdd(p) {
+// parcours bouclé : le dernier point est le départ
+const planLooped = () => { const w = plan.wps, n = w.length; return n > 2 && w[0].lat === w[n - 1].lat && w[0].lon === w[n - 1].lon; };
+function planAdd(p, closing) {
+  // bouclé : le nouveau point s'insère avant le retour au départ, la boucle reste fermée
+  if (!closing && !plan.go && planLooped()) { plan.wps.pop(); plan.segs.pop(); planAdd(p, true); planAdd(Object.assign({}, plan.wps[0]), true); return; }
   const prev = plan.wps[plan.wps.length - 1];
   plan.wps.push(p);
   if (!prev) { planDraw(); return; }
@@ -3856,7 +3858,8 @@ function planDraw() {
     $('pbStats').textContent = (plan.go ? `Vers ${plan.go.label} · ` : '') + `${fmtDist(pth.total)}${pth.hasEle ? ' · D+ ' + fmtM(pth.totalUp) : ''}` + (plan.go ? '' : ` · ${n} points`) + (plan.busy ? ' · calcul…' : '');
   }
   $('pbHint').textContent = plan.go ? (n < 2 ? 'Départ : ta position · l\'itinéraire suit les chemins' : 'Touche la carte pour ajouter un passage · Naviguer pour partir') : (plan.straight ? 'Ligne droite' : 'Suit les chemins') + (n > 1 ? ' · glisse un point pour le déplacer, touche-le pour le supprimer' : ' · chaque toucher ajoute un point');
-  $('ptUndo').disabled = !n; $('ptClear').disabled = !n; $('ptLoop').disabled = n < 2; $('ptDone').disabled = n < 2;
+  $('ptUndo').disabled = !n; $('ptClear').disabled = !n; $('ptLoop').disabled = n < 2 && !planLooped(); $('ptDone').disabled = n < 2;
+  $('ptLoop').classList.toggle('on', planLooped()); $('ptLoopL').textContent = planLooped() ? 'Bouclé' : 'Boucler';
   $('ptModeL').textContent = plan.straight ? 'Ligne droite' : 'Chemins';
 }
 // à pied / à vélo : les segments qui suivent les chemins sont recalculés pour le nouveau mode
@@ -3873,7 +3876,11 @@ $('pbBike').onclick = () => planMode('trekking');
 $('ptUndo').onclick = () => { plan.wps.pop(); plan.segs.length = Math.max(0, plan.wps.length - 1); planDraw(); };
 $('ptClear').onclick = () => { plan.wps = []; plan.segs = []; planDraw(); };
 $('ptMode').onclick = () => { plan.straight = !plan.straight; planDraw(); toast(plan.straight ? 'Les prochains points seront reliés en ligne droite' : 'Les prochains points suivront les chemins', 2500); };
-$('ptLoop').onclick = () => { if (plan.wps.length > 1) planAdd(Object.assign({}, plan.wps[0])); };
+// Boucler : retour au départ ajouté (et gardé si on ajoute des points) ; toucher encore pour l'enlever
+$('ptLoop').onclick = () => {
+  if (planLooped()) { plan.wps.pop(); plan.segs.pop(); planDraw(); toast('Retour au départ enlevé', 2000); return; }
+  if (plan.wps.length > 1) { planAdd(Object.assign({}, plan.wps[0]), true); toast('Boucle fermée : les points ajoutés se placeront avant le retour au départ', 3500); }
+};
 $('ptDone').onclick = async () => {
   if (plan.wps.length < 2) return;
   $('ptDone').disabled = true;
