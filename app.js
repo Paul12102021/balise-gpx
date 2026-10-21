@@ -4,7 +4,7 @@
 
 // La page et le code doivent être de la même version. Sinon (page gardée en cache
 // par le téléphone ou par GitHub), on recharge une page fraîche, au plus 3 fois.
-const APP_VERSION = 160;
+const APP_VERSION = 161;
 try {
   const meta = document.querySelector('meta[name="balise-version"]');
   const pageV = meta ? +meta.content : 0;
@@ -605,7 +605,12 @@ function closeTrack(quiet) {
   drawProfile(); updateStats(); updateOfflineInfo();
   if (!quiet) toast('Trace fermée', 5000, savedText ? { label: 'Annuler', run: () => loadText(savedText) } : null);
 }
-$('btnClose').onclick = () => closeTrack();
+// fermer l'aperçu d'un trajet en cours de préparation : on revient au placement des points
+$('btnClose').onclick = () => {
+  const back = track && !nav && track.planBack;
+  closeTrack(!!back);
+  if (back) openPlan(back.go, null, back);
+};
 // Exporter la trace ouverte en fichier GPX (à garder, envoyer, mettre sur un GPS…)
 function exportTrack() {
   if (!track) return;
@@ -3765,7 +3770,7 @@ function planRemove(k) {
   planDraw();
 }
 // go : aller vers un lieu (départ = ma position, arrivée = le lieu), avec « Naviguer » au lieu d'« Enregistrer »
-function openPlan(go, from) {
+function openPlan(go, from, restore) {
   if (nav) { toast('Quitte d\'abord la navigation.'); return; }
   closeDest(); closeLib(); toggleMore(false, true); $('loopBar').hidden = true;
   planning = true; document.body.classList.add('plan'); planModeUI();
@@ -3773,6 +3778,10 @@ function openPlan(go, from) {
   $('ptDoneL').textContent = plan.go ? 'Naviguer' : 'Enregistrer';
   $('ptView').hidden = !plan.go;
   plan.wps = []; plan.segs = [];
+  if (restore) { // retour depuis l'aperçu : les points et le tracé tels qu'on les avait laissés
+    plan.wps = restore.wps; plan.segs = restore.segs; plan.straight = restore.straight; planDraw();
+    fitBoth([planAll()], () => $('planTools').offsetHeight + 10); return;
+  }
   if (plan.go && go.lat == null) plan.wps = [{ lat: from.lat, lon: from.lon }]; // arrivée à placer
   else if (plan.go) {
     plan.wps = [{ lat: from.lat, lon: from.lon }, { lat: plan.go.lat, lon: plan.go.lon }];
@@ -3910,11 +3919,12 @@ async function planGo(go = true) {
   const sg = plan.segs[0], simple = plan.wps.length === 2 && sg && !sg.straight;
   const style = simple && profile === 'trekking' ? sg.style || null : null;
   const pts = removeSpurs(planAll()), signals = plan.segs.flatMap(s => (s && s.pts.signals) || []);
+  const back = go ? null : { go: plan.go, wps: plan.wps.map(w => Object.assign({}, w)), segs: plan.segs, straight: plan.straight };
   closePlan();
   await showTrack({ name: 'Vers ' + dest.label, pts, signals }, true);
   // trajet direct : recalculé tout seul si on s'en écarte
   if (simple) { track.route = dest; track.style = style; }
-  if (!go) { toast('Parcours prêt : « Naviguer » pour partir', 3500); return; }
+  if (!go) { track.planBack = back; toast('Parcours prêt : « Naviguer » pour partir', 3500); return; }
   toast(`${fmtDist(track.total)} jusqu'à ${dest.label} ${profile === 'trekking' ? 'à vélo' + (style ? ', itinéraire ' + styleName(style) : '') : 'à pied'}`, 4000);
   startNav();
 }
