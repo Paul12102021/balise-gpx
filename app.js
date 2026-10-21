@@ -4,7 +4,7 @@
 
 // La page et le code doivent être de la même version. Sinon (page gardée en cache
 // par le téléphone ou par GitHub), on recharge une page fraîche, au plus 3 fois.
-const APP_VERSION = 164;
+const APP_VERSION = 165;
 try {
   const meta = document.querySelector('meta[name="balise-version"]');
   const pageV = meta ? +meta.content : 0;
@@ -4379,7 +4379,12 @@ async function openRouteLink() {
   if (!r) { toast('Lien de parcours illisible.', 4000); return; }
   loadText(loopGPX(r.pts, r.name), false);
   toast(`Parcours reçu : ${r.name} · « Enregistrer » pour le garder`, 5000);
+  // reçu dans le navigateur d'un téléphone Android : proposer l'appli (une fois Pisteo public sur le Play Store)
+  if (PLAY_PUBLIC && !AND && /Android/i.test(navigator.userAgent) && !store.get('playHint'))
+    setTimeout(() => { store.set('playHint', '1'); toast('Pisteo existe aussi en appli Android', 9000, { label: 'Installer', run: () => window.open('https://play.google.com/store/apps/details?id=fr.pisteo.app', '_blank') }); }, 5500);
 }
+// passer à true quand l'appli sera publique (production) : avant, le lien du Play Store ne marche que pour les testeurs
+const PLAY_PUBLIC = false;
 window.addEventListener('hashchange', openRouteLink);
 
 // ---------- terminer : bilan, puis garder, exporter ou supprimer ----------
