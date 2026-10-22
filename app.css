@@ -627,3 +627,13 @@ select { pointer-events: none; }
 .pk-opt:disabled { opacity: .4; }
 .pk-group { font-size: 12px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); padding: 12px 12px 4px; }
 #picker { z-index: 45; }
+
+/* fenêtres du bas : mieux détachées de ce qu'il y a derrière (surtout en sombre, et quand deux s'empilent) */
+.lib-panel { position: relative; border-top: 1px solid var(--line); box-shadow: 0 -10px 30px rgba(0,0,0,.28); padding-top: 22px; }
+.lib-panel::before { content: ""; position: absolute; top: 8px; left: 50%; width: 40px; height: 4px; margin-left: -20px; border-radius: 2px; background: var(--muted); opacity: .45; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .lib { background: rgba(0,0,0,.6); } :root:not([data-theme="light"]) .lib-panel { border-top-color: #3a4740; box-shadow: 0 -12px 34px rgba(0,0,0,.6); } }
+:root[data-theme="dark"] .lib { background: rgba(0,0,0,.6); }
+:root[data-theme="dark"] .lib-panel { border-top-color: #3a4740; box-shadow: 0 -12px 34px rgba(0,0,0,.6); }
+/* la liste de choix, posée sur une autre fenêtre : un ton plus claire en sombre */
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) #picker .lib-panel { background: #222c26; } }
+:root[data-theme="dark"] #picker .lib-panel { background: #222c26; }
