@@ -15,7 +15,7 @@ var q = location.search, site = '../' + q;
 document.getElementById('web').href = site;
 if (/Android/i.test(navigator.userAgent)) {
   var a = document.getElementById('app');
-  a.href = 'intent://paul12102021.github.io/balise-gpx/retour-strava/' + q + '#Intent;scheme=https;package=fr.pisteo.app;S.browser_fallback_url=' + encodeURIComponent(new URL(site, location.href).href) + ';end';
+  a.href = 'intent://' + location.host + location.pathname + q + '#Intent;scheme=https;package=fr.pisteo.app;S.browser_fallback_url=' + encodeURIComponent(new URL(site, location.href).href) + ';end';
   a.hidden = false; document.getElementById('t').textContent = 'Connexion à Strava terminée.';
 } else location.replace(site);
 </script>

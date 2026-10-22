@@ -638,3 +638,7 @@ select { pointer-events: none; }
 /* la liste de choix, posée sur une autre fenêtre : un ton plus claire en sombre */
 @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) #picker .lib-panel { background: #222c26; } }
 :root[data-theme="dark"] #picker .lib-panel { background: #222c26; }
+
+/* ancienne adresse : invitation à passer sur pisteo.app */
+.move-box { position: fixed; z-index: 60; left: 12px; right: 12px; top: calc(var(--sa-t) + 12px); background: var(--panel); color: var(--ink); border: 2px solid var(--go); border-radius: 16px; padding: 14px; display: flex; flex-direction: column; gap: 8px; box-shadow: 0 10px 30px rgba(0,0,0,.35); max-width: 520px; margin: 0 auto; }
+.move-box b { font-size: 16px; } .move-box span { color: var(--muted); font-size: 14px; } .move-box a { text-align: center; }

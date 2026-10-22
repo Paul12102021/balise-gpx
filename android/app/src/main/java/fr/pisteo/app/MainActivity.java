@@ -47,14 +47,20 @@ import java.util.Locale;
 import java.util.concurrent.atomic.AtomicInteger;
 
 /**
- * Pisteo pour Android : l'appli web (https://paul12102021.github.io/balise-gpx/) affichée dans une WebView,
+ * Pisteo pour Android : l'appli web (https://pisteo.app/) affichée dans une WebView,
  * avec ce que le navigateur ne fournit pas ici : la voix du téléphone, l'écran allumé, le GPS,
  * l'ouverture et l'enregistrement de fichiers, le partage et le bouton retour.
  */
 public class MainActivity extends Activity {
     static volatile MainActivity instance;
-    private static final String HOME = "https://paul12102021.github.io/balise-gpx/";
-    private static final String HOST = "paul12102021.github.io";
+    private static final String HOME = "https://pisteo.app/";
+    private static final String HOST = "pisteo.app";
+    // ancienne adresse (jusqu'à la version 2.1) : on y récupère une fois les données pour les emporter sur pisteo.app
+    private static final String OLD_HOME = "https://paul12102021.github.io/balise-gpx/";
+    private static final String OLD_HOST = "paul12102021.github.io";
+    private String pendingUrl;
+    private boolean clearHist;
+    private final android.os.Handler ui = new android.os.Handler(android.os.Looper.getMainLooper());
     private static final int REQ_FILE = 1, REQ_LOC = 2, REQ_NOTIF = 3;
     private static final int BAR = Color.parseColor("#1d2a24");
 
@@ -125,6 +131,11 @@ public class MainActivity extends Activity {
             }
 
             @Override
+            public void onPageFinished(WebView view, String url) {
+                if (clearHist && url != null && url.startsWith(HOME)) { clearHist = false; view.clearHistory(); }
+            }
+
+            @Override
             public boolean onRenderProcessGone(WebView view, android.webkit.RenderProcessGoneDetail detail) {
                 recreate(); // le moteur de la page s'est arrêté : on relance proprement
                 return true;
@@ -175,7 +186,8 @@ public class MainActivity extends Activity {
         String back = appLink(getIntent());
         if (back == null) readShared(getIntent());
         if (state != null) web.restoreState(state);
-        if (back != null) web.loadUrl(back);
+        if (state == null && !getPreferences(MODE_PRIVATE).getBoolean("moved", false)) startMove(back);
+        else if (back != null) web.loadUrl(back);
         else if (web.getUrl() == null) web.loadUrl(HOME);
     }
 
@@ -228,8 +240,8 @@ public class MainActivity extends Activity {
         String scheme = u.getScheme() == null ? "" : u.getScheme().toLowerCase(Locale.ROOT);
         String host = u.getHost() == null ? "" : u.getHost().toLowerCase(Locale.ROOT);
         // la connexion Strava (et Google) se fait dans le navigateur ou l'appli Strava : Google refuse les WebView
-        if ((scheme.equals("https") || scheme.equals("http")) && host.equals(HOST)
-                && !String.valueOf(u.getPath()).startsWith("/balise-gpx/retour-strava")) return false;
+        if ((scheme.equals("https") || scheme.equals("http")) && (host.equals(HOST) || host.equals(OLD_HOST))
+                && !String.valueOf(u.getPath()).contains("/retour-strava")) return false;
         try {
             Intent i = scheme.equals("intent") ? Intent.parseUri(u.toString(), Intent.URI_INTENT_SCHEME) : new Intent(Intent.ACTION_VIEW, u);
             if (scheme.equals("intent")) { i.addCategory(Intent.CATEGORY_BROWSABLE); i.setComponent(null); i.setSelector(null); }
@@ -271,12 +283,31 @@ public class MainActivity extends Activity {
         }
     }
 
+    // déménagement vers pisteo.app : on ouvre l'ancienne adresse avec ?migrate=1, la page y rassemble sorties, traces,
+    // réglages et liste des cartes et les rend par migrateOut ; on ouvre alors pisteo.app, qui les reprend (takeMigration).
+    // Sans réponse au bout de 25 s (pas de réseau…), on ouvre pisteo.app et on réessaiera au prochain lancement (3 fois au plus).
+    private void startMove(String then) {
+        pendingUrl = then;
+        android.content.SharedPreferences pr = getPreferences(MODE_PRIVATE);
+        int tries = pr.getInt("moveTries", 0);
+        if (tries >= 3) { pr.edit().putBoolean("moved", true).apply(); web.loadUrl(then != null ? then : HOME); return; }
+        pr.edit().putInt("moveTries", tries + 1).apply();
+        web.loadUrl(OLD_HOME + "?migrate=1");
+        ui.postDelayed(() -> { if (!getPreferences(MODE_PRIVATE).getBoolean("moved", false)) finishMove(); }, 25000);
+    }
+    private void finishMove() {
+        if (web == null) return;
+        clearHist = true;
+        String u = pendingUrl != null ? pendingUrl : HOME; pendingUrl = null;
+        web.loadUrl(u);
+    }
+
     // lien vers le site qui ouvre l'appli (retour de la connexion Strava) : la page à charger, ou null
     private String appLink(Intent intent) {
         if (intent == null || !Intent.ACTION_VIEW.equals(intent.getAction()) || intent.getData() == null) return null;
         Uri u = intent.getData();
         String scheme = u.getScheme() == null ? "" : u.getScheme().toLowerCase(Locale.ROOT);
-        if (!scheme.equals("https") || !HOST.equalsIgnoreCase(u.getHost())) return null;
+        if (!scheme.equals("https") || !(HOST.equalsIgnoreCase(u.getHost()) || OLD_HOST.equalsIgnoreCase(u.getHost()))) return null;
         String q = u.getEncodedQuery(), f = u.getEncodedFragment();
         return HOME + (q == null ? "" : "?" + q) + (f == null ? "" : "#" + f); // lien de parcours : tout est après « # »
     }
@@ -481,6 +512,30 @@ public class MainActivity extends Activity {
         @JavascriptInterface
         public void openWith(String name, String mime, String content, String title) {
             runOnUiThread(() -> MainActivity.this.openWith(name, mime, content, title));
+        }
+
+        // déménagement : la page de l'ancienne adresse rend toutes ses données (vide si rien à emporter)
+        @JavascriptInterface
+        public void migrateOut(String json) {
+            try {
+                if (json != null && json.length() > 2)
+                    try (OutputStream os = new FileOutputStream(new File(getFilesDir(), "move.json"))) { os.write(json.getBytes(StandardCharsets.UTF_8)); }
+            } catch (Exception ignored) { }
+            getPreferences(MODE_PRIVATE).edit().putBoolean("moved", true).apply();
+            runOnUiThread(MainActivity.this::finishMove);
+        }
+
+        // pisteo.app reprend ces données une fois (puis le fichier est effacé)
+        @JavascriptInterface
+        public String takeMigration() {
+            File f = new File(getFilesDir(), "move.json");
+            if (!f.exists()) return null;
+            try (InputStream is = new java.io.FileInputStream(f)) {
+                ByteArrayOutputStream bo = new ByteArrayOutputStream(); byte[] buf = new byte[65536]; int n;
+                while ((n = is.read(buf)) > 0) bo.write(buf, 0, n);
+                return bo.toString(StandardCharsets.UTF_8.name());
+            } catch (Exception e) { return null; }
+            finally { f.delete(); }
         }
 
         @JavascriptInterface

@@ -66,6 +66,7 @@ const exact = {
   'Choisir': 'Choose', 'Rechercher…': 'Search…',
   'Région': 'Region',
   'Aperçu : « Enregistrer » pour le garder, ✕ pour revenir au tracé': 'Preview: “Save” to keep it, ✕ to go back to drawing',
+  "Pisteo a déménagé sur pisteo.app": "Pisteo has moved to pisteo.app", "Emporte tes sorties, traces et réglages en un toucher.": "Take your outings, tracks and settings with you in one tap.", "Transférer et ouvrir pisteo.app": "Transfer and open pisteo.app", "Ouvrir pisteo.app sans transférer": "Open pisteo.app without transferring", "Transfert fait ✓": "Transfer done ✓", "Tes sorties, traces et réglages ont suivi Pisteo sur pisteo.app": "Your outings, tracks and settings followed Pisteo to pisteo.app",
   'Hors ligne': 'Offline', 'Sorties et traces': 'Outings and tracks', 'Navigation': 'Navigation', 'Voix et vibrations': 'Voice and vibration', 'Affichage': 'Display', 'Import manuel': 'Manual import', 'Envoi automatique': 'Auto upload',
   'Je me déplace': 'I travel', 'Pour les itinéraires et le temps estimé': 'For routes and estimated time', 'À pied': 'On foot', 'À vélo': 'By bike',
   'Cartes hors ligne': 'Offline maps', 'Trace, département ou zone': 'Track, French département or area', 'Mes cartes': 'My maps',

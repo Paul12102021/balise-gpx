@@ -8,6 +8,8 @@
 <script>
 // lien de parcours partagé : le parcours est dans la fin du lien (après « # »), jamais envoyé au site.
 // Avec l'appli Android installée, ce lien l'ouvre directement ; sinon on affiche le parcours dans Pisteo sur le site.
-var u = '../' + location.hash; document.getElementById('go').href = u; location.replace(u);
+// ancienne adresse : Pisteo a déménagé sur pisteo.app
+var u = location.hostname === 'paul12102021.github.io' ? 'https://pisteo.app/p/' + location.hash : '../' + location.hash;
+document.getElementById('go').href = u; location.replace(u);
 </script>
 </body></html>

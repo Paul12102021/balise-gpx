@@ -5,7 +5,7 @@
 
 // La page et le code doivent être de la même version. Sinon (page gardée en cache
 // par le téléphone ou par GitHub), on recharge une page fraîche, au plus 3 fois.
-const APP_VERSION = 172;
+const APP_VERSION = 173;
 try {
   const meta = document.querySelector('meta[name="balise-version"]');
   const pageV = meta ? +meta.content : 0;
@@ -13,12 +13,12 @@ try {
     const n = +(sessionStorage.getItem('fixVersion') || 0);
     if (n < 3) {
       sessionStorage.setItem('fixVersion', String(n + 1));
-      const keep = /[?&]shared=1/.test(location.search) ? '&shared=1' : '';
+      const keep = (/[?&]shared=1/.test(location.search) ? '&shared=1' : '') + (/[?&]migrate=1/.test(location.search) ? '&migrate=1' : '');
       location.replace(location.pathname + '?fresh=' + Date.now() + keep + location.hash); // le « # » d'un lien de parcours est gardé
       throw new Error('version');
     }
   } else sessionStorage.removeItem('fixVersion');
-  if (/[?&]fresh=/.test(location.search)) history.replaceState(null, '', location.pathname + (/[?&]shared=1/.test(location.search) ? '?shared=1' : ''));
+  if (/[?&]fresh=/.test(location.search)) history.replaceState(null, '', location.pathname + (/[?&]shared=1/.test(location.search) ? '?shared=1' : /[?&]migrate=1/.test(location.search) ? '?migrate=1' : ''));
 } catch (e) { if (e.message === 'version') return; }
 
 // =====================================================================
@@ -5676,6 +5676,68 @@ if (saved) { try { showTrack(parseGPX(saved)); } catch { drawProfile(); } } else
 checkShared();
 stvReturn(); setTimeout(stvRetry, 8000);
 setTimeout(openRouteLink, 600); // lien de parcours reçu
+
+// =====================================================================
+// Déménagement vers pisteo.app : les données (sorties, traces, réglages, liste des cartes) sont liées à
+// l'adresse du site ; on les transporte de l'ancienne adresse (paul12102021.github.io) vers la nouvelle.
+// =====================================================================
+const OLD_HOST = 'paul12102021.github.io', NEW_ORIGIN = 'https://pisteo.app';
+async function exportAll() {
+  const ls = {}; try { for (let i = 0; i < localStorage.length; i++) { const k = localStorage.key(i); ls[k] = localStorage.getItem(k); } } catch {}
+  const tracks = await listRecent();
+  const packs = (await listPacks()).filter(p => Array.isArray(p.tiles) && p.tiles.length).map(p => ({
+    id: p.id, kind: p.kind, name: p.name, detail: p.detail, code: p.code, cc: p.cc, prov: p.prov, bbox: p.bbox, line: p.line,
+    tiles: p.tiles, count: p.tiles.length, graphWanted: !!(p.graph || p.graphWanted) }));
+  return { app: 'pisteo', move: 1, date: Date.now(), ls, tracks, packs };
+}
+async function importAll(d) {
+  if (!d || d.app !== 'pisteo' || !d.move) return false;
+  let n = 0;
+  try {
+    const have = new Set((await listRecent()).map(it => it.id));
+    for (const it of d.tracks || []) if (it && it.id && it.text && !have.has(it.id)) { await idb('readwrite', st => st.put(it)); n++; }
+    const haveP = new Set((await listPacks()).map(p => p.id));
+    for (const p of d.packs || []) if (p && p.id && !haveP.has(p.id)) await idb('readwrite', st => st.put(Object.assign({}, p, { count: p.tiles.length, bytes: 0, date: Date.now(), complete: false, missing: p.tiles.length, restored: true })), 'packs');
+  } catch {}
+  // réglages, connexion Strava, trace ouverte… (sans écraser ce qui existe déjà ici)
+  try { for (const k in d.ls || {}) if (localStorage.getItem(k) === null && !/^(fixVersion|natCur)$/.test(k)) localStorage.setItem(k, d.ls[k]); } catch {}
+  try { sessionStorage.setItem('moved', String(n)); if ((d.packs || []).length) sessionStorage.setItem('bkMaps', '1'); } catch {}
+  location.reload();
+  return true;
+}
+(async () => {
+  try { const n = sessionStorage.getItem('moved'); if (n !== null) { sessionStorage.removeItem('moved'); setTimeout(() => toast('Tes sorties, traces et réglages ont suivi Pisteo sur pisteo.app', 5000), 1200); } } catch {}
+  // appli Android : la coquille charge d'abord l'ancienne adresse avec ?migrate=1, récupère tout, puis ouvre pisteo.app
+  if (AND && AND.migrateOut && location.hostname === OLD_HOST && /[?&]migrate=1/.test(location.search)) {
+    let s = ''; try { s = JSON.stringify(await exportAll()); } catch {}
+    AND.migrateOut(s); return;
+  }
+  if (AND && AND.takeMigration && location.hostname !== OLD_HOST) {
+    let s = null; try { s = AND.takeMigration(); } catch {}
+    if (s) { try { await importAll(JSON.parse(s)); } catch {} return; }
+  }
+  // navigateur : l'ancienne adresse propose d'emporter les données vers pisteo.app (nouvel onglet + message entre les deux)
+  if (!AND && location.hostname === OLD_HOST) {
+    const box = document.createElement('div'); box.className = 'move-box';
+    box.innerHTML = '<b></b><span></span><button class="btn go"></button><a class="linkbtn"></a>';
+    box.querySelector('b').textContent = tr('Pisteo a déménagé sur pisteo.app');
+    box.querySelector('span').textContent = tr('Emporte tes sorties, traces et réglages en un toucher.');
+    const go = box.querySelector('button'); go.textContent = tr('Transférer et ouvrir pisteo.app');
+    const ln = box.querySelector('a'); ln.textContent = tr('Ouvrir pisteo.app sans transférer'); ln.href = NEW_ORIGIN + '/';
+    go.onclick = async () => {
+      const data = await exportAll(), w = window.open(NEW_ORIGIN + '/?from=old', '_blank');
+      if (!w) { location.href = NEW_ORIGIN + '/'; return; }
+      const onMsg = e => { if (e.origin === NEW_ORIGIN && e.data && e.data.type === 'pisteo-ready') { w.postMessage({ type: 'pisteo-move', data }, NEW_ORIGIN); window.removeEventListener('message', onMsg); go.textContent = tr('Transfert fait ✓'); } };
+      window.addEventListener('message', onMsg);
+    };
+    document.body.appendChild(box);
+  }
+  if (!AND && location.hostname !== OLD_HOST && /[?&]from=old/.test(location.search) && window.opener) {
+    history.replaceState(null, '', location.pathname);
+    window.addEventListener('message', e => { if (e.origin === 'https://' + OLD_HOST && e.data && e.data.type === 'pisteo-move') importAll(e.data.data); });
+    try { window.opener.postMessage({ type: 'pisteo-ready' }, 'https://' + OLD_HOST); } catch {}
+  }
+})();
 stvUI();
 const VERSION = APP_VERSION + ' · 19 oct. 2026';
 $('note').textContent = (window.isSecureContext ? '' : 'Attention : le GPS ne fonctionne qu\'en HTTPS. ') + 'Version ' + VERSION;
