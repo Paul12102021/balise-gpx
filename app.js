@@ -5,7 +5,7 @@
 
 // La page et le code doivent être de la même version. Sinon (page gardée en cache
 // par le téléphone ou par GitHub), on recharge une page fraîche, au plus 3 fois.
-const APP_VERSION = 170;
+const APP_VERSION = 171;
 try {
   const meta = document.querySelector('meta[name="balise-version"]');
   const pageV = meta ? +meta.content : 0;
@@ -3798,7 +3798,7 @@ function openPlan(go, from, restore) {
   trackShown(false);
   plan.go = go && go.label ? go : null;
   $('ptDoneL').textContent = plan.go ? 'Naviguer' : 'Enregistrer';
-  $('ptView').hidden = !plan.go;
+  $('ptView').hidden = false; // aperçu aussi pour le tracé point par point
   plan.wps = []; plan.segs = [];
   if (restore) { // retour depuis l'aperçu : les points et le tracé tels qu'on les avait laissés
     plan.wps = restore.wps; plan.segs = restore.segs; plan.straight = restore.straight; planDraw();
@@ -3950,7 +3950,20 @@ async function planGo(go = true) {
   toast(`${fmtDist(track.total)} jusqu'à ${dest.label} ${profile === 'trekking' ? 'à vélo' + (style ? ', itinéraire ' + styleName(style) : '') : 'à pied'}`, 4000);
   startNav();
 }
-$('ptView').onclick = async () => { if (plan.wps.length < 2) return; $('ptView').disabled = true; await plan.queue; planGo(false); };
+$('ptView').onclick = async () => {
+  if (plan.wps.length < 2) return;
+  $('ptView').disabled = true; await plan.queue;
+  if (plan.go) { planGo(false); return; }
+  // tracé point par point : affiché dans l'aperçu (pas encore dans « Mes traces » : bouton Enregistrer) ;
+  // fermer l'aperçu ramène au placement des points
+  const pts = removeSpurs(planAll());
+  const name = `Itinéraire ${profile === 'trekking' ? 'à vélo' : 'à pied'}`; // la distance s'affiche déjà à côté
+  const back = { go: null, wps: plan.wps.map(w => Object.assign({}, w)), segs: plan.segs, straight: plan.straight };
+  closePlan();
+  loadText(loopGPX(pts, name), false);
+  if (track) track.planBack = back;
+  toast('Aperçu : « Enregistrer » pour le garder, ✕ pour revenir au tracé', 4000);
+};
 async function goTo(dest) {
   closeDest();
   if (!startGPS()) return;

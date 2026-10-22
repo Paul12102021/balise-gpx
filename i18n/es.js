@@ -65,6 +65,7 @@ const exact = {
   'Pisteo existe aussi en appli Android': 'Pisteo también existe como app Android', 'Installer': 'Instalar',
   'Choisir': 'Elegir', 'Rechercher…': 'Buscar…',
   'Région': 'Región',
+  'Aperçu : « Enregistrer » pour le garder, ✕ pour revenir au tracé': 'Vista previa: «Guardar» para conservarlo, ✕ para volver al trazado',
   'Hors ligne': 'Sin conexión', 'Sorties et traces': 'Salidas y tracks', 'Navigation': 'Navegación', 'Voix et vibrations': 'Voz y vibración', 'Affichage': 'Pantalla', 'Import manuel': 'Importación manual', 'Envoi automatique': 'Envío automático',
   'Je me déplace': 'Me desplazo', 'Pour les itinéraires et le temps estimé': 'Para las rutas y el tiempo estimado', 'À pied': 'A pie', 'À vélo': 'En bici',
   'Cartes hors ligne': 'Mapas sin conexión', 'Trace, département ou zone': 'Track, región o zona', 'Mes cartes': 'Mis mapas',
