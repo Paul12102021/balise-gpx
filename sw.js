@@ -1,6 +1,6 @@
 /* Service worker : appli disponible hors ligne + tuiles de carte en cache */
-const APP = 'app-v177', TILES = 'tiles-v2';
-const SHELL = ['./', 'index.html', 'app.css?v=177', 'app.js?v=177', 'i18n/en.js?v=177', 'i18n/es.js?v=177', 'vendor/maplibre-gl.js', 'vendor/maplibre-gl.css',
+const APP = 'app-v178', TILES = 'tiles-v2';
+const SHELL = ['./', 'index.html', 'app.css?v=178', 'app.js?v=178', 'i18n/en.js?v=178', 'i18n/es.js?v=178', 'vendor/maplibre-gl.js', 'vendor/maplibre-gl.css',
   'departements.json', 'regions/countries.json', 'manifest.webmanifest', 'icon.svg', 'icon-192.png', 'icon-512.png', 'icon-maskable-512.png', 'apple-touch-icon.png'];
 
 // Clé de cache commune avec la page : https://tiles.balise/<fond>/<z>/<x>/<y>
@@ -36,8 +36,15 @@ function parseTile(url) {
   return null;
 }
 
+// pisteo.app (Cloudflare) redirige « page.html » vers « page » et « index.html » vers « / » : le navigateur
+// refuse qu'un service worker rende une réponse « redirigée » à une page ouverte → on la recopie sans cette marque
+const unredirect = async r => r.redirected ? new Response(await r.blob(), { status: r.status, statusText: r.statusText, headers: r.headers }) : r;
 self.addEventListener('install', e => {
-  e.waitUntil(caches.open(APP).then(c => c.addAll(SHELL.map(u => new Request(u, { cache: 'reload' })))).then(() => self.skipWaiting()));
+  e.waitUntil(caches.open(APP).then(c => Promise.all(SHELL.map(async u => {
+    const r = await fetch(new Request(u, { cache: 'reload' }));
+    if (!r.ok) throw new Error(u);
+    await c.put(u, await unredirect(r));
+  }))).then(() => self.skipWaiting()));
 });
 self.addEventListener('activate', e => {
   e.waitUntil(caches.keys().then(ks => Promise.all(ks.filter(k => k !== APP && k !== TILES && k !== 'shared' && k !== 'ofm-assets' && k !== 'rt-geo' && k !== 'rt-tiles' && !k.startsWith('voice-')).map(k => caches.delete(k))))
@@ -128,7 +135,7 @@ self.addEventListener('fetch', e => {
     // une page ouverte (navigation) est redemandée par son adresse : certains navigateurs refusent
     // de modifier directement une requête de navigation
     const fresh = req.mode === 'navigate' ? new Request(req.url, { cache: 'no-cache', credentials: 'same-origin' }) : new Request(req, { cache: 'no-cache' });
-    e.respondWith(fetch(fresh).then(r => {
+    e.respondWith(fetch(fresh).then(unredirect).then(r => {
       if (r.ok) { const copy = r.clone(); caches.open(APP).then(c => c.put(req, copy)); }
       return r;
     }).catch(() => caches.match(req, { ignoreSearch: true }).then(r => r || caches.match('index.html'))));
