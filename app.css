@@ -9,6 +9,7 @@
   --panel: #F8F9F4;
   --muted: #5E6B60;
   --line: #D5DCCD;
+  --field: var(--paper); /* cases, boutons et champs posés sur un panneau */
   --hud: #1F2B25;
   --hud-ink: #EEF4EF;
   --track: #E85A0C;      /* orange du logo : la trace à suivre */
@@ -29,16 +30,16 @@
 /* Thème : automatique (réglage du téléphone), ou forcé clair / sombre dans les Réglages */
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
-  --ink: #E8ECE5; --paper: #121814; --panel: #1A221D; --muted: #97A398; --line: #2C3730;
-  --hud: #0D1210; --hud-ink: #EEF4EF; --track: #FF7A2E; --done: #6E7A72; --me: #5AA2FF;
+  --ink: #E8ECE5; --paper: #161D18; --panel: #1E2722; --field: #28332C; --muted: #A2AEA3; --line: #36443B;
+  --hud: #1F2B25; --hud-ink: #EEF4EF; --track: #FF7A2E; --done: #6E7A72; --me: #5AA2FF;
   --go: #3A7556; --go-ink: #7CCB9C; --rec: #F97316; --ok: #4C9A6C; --warn: #E04848;
   --warn-bg: #3A1716; --warn-ink: #FFB4AB; --mapbg: #2A322D;
   color-scheme: dark;
   }
 }
 :root[data-theme="dark"] {
-  --ink: #E8ECE5; --paper: #121814; --panel: #1A221D; --muted: #97A398; --line: #2C3730;
-  --hud: #0D1210; --hud-ink: #EEF4EF; --track: #FF7A2E; --done: #6E7A72; --me: #5AA2FF;
+  --ink: #E8ECE5; --paper: #161D18; --panel: #1E2722; --field: #28332C; --muted: #A2AEA3; --line: #36443B;
+  --hud: #1F2B25; --hud-ink: #EEF4EF; --track: #FF7A2E; --done: #6E7A72; --me: #5AA2FF;
   --go: #3A7556; --go-ink: #7CCB9C; --rec: #F97316; --ok: #4C9A6C; --warn: #E04848;
   --warn-bg: #3A1716; --warn-ink: #FFB4AB; --mapbg: #2A322D;
   color-scheme: dark;
@@ -83,7 +84,7 @@ body { font: 15px/1.35 var(--font); color: var(--ink); background: var(--paper);
 .trackrow { display: flex; align-items: center; gap: 8px; margin-bottom: 4px; min-height: 34px; }
 .trackname { flex: 1; min-width: 0; font-weight: 600; font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .closebtn { flex: none; display: inline-flex; align-items: center; gap: 4px; min-height: 34px; padding: 0 10px; border-radius: 17px;
-  border: 1px solid var(--line); background: var(--paper); color: var(--ink); font: 600 13px var(--font); cursor: pointer; }
+  border: 1px solid var(--line); background: var(--field); color: var(--ink); font: 600 13px var(--font); cursor: pointer; }
 .closebtn svg { width: 14px; height: 14px; fill: none; stroke: currentColor; stroke-width: 2.6; stroke-linecap: round; }
 #profile { width: 100%; height: 96px; display: block; }
 .actions { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-top: 8px; }
@@ -91,7 +92,7 @@ body { font: 15px/1.35 var(--font); color: var(--ink); background: var(--paper);
 .btn {
   display: inline-flex; align-items: center; justify-content: center; gap: 6px;
   min-height: 46px; padding: 0 14px; border-radius: 10px; font: 600 15px var(--font);
-  border: 1px solid var(--line); background: var(--paper); color: var(--ink); cursor: pointer;
+  border: 1px solid var(--line); background: var(--field); color: var(--ink); cursor: pointer;
 }
 .btn svg { width: 18px; height: 18px; fill: currentColor; }
 .btn.go { background: var(--go); color: #fff; border-color: var(--go); }
@@ -107,7 +108,7 @@ button:focus-visible, .btn:focus-visible, select:focus-visible { outline: 3px so
 /* Réglages : 4 raccourcis en tuiles, puis des groupes de réglages façon liste */
 .set-tiles { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
 .set-tile { display: grid; grid-template-columns: 22px 1fr; column-gap: 10px; align-items: center; text-align: left;
-  min-height: 60px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 12px; background: var(--paper); color: var(--ink); font: inherit; cursor: pointer; }
+  min-height: 60px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 12px; background: var(--field); color: var(--ink); font: inherit; cursor: pointer; }
 .set-tile svg { grid-row: span 2; width: 22px; height: 22px; fill: none; stroke: var(--go-ink); stroke-width: 1.9; stroke-linecap: round; stroke-linejoin: round; }
 .set-tile b { font-weight: 600; font-size: 14.5px; line-height: 1.2; }
 .set-tile small { grid-column: 2; color: var(--muted); font-size: 12px; line-height: 1.25; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
@@ -115,7 +116,7 @@ button:focus-visible, .btn:focus-visible, select:focus-visible { outline: 3px so
 .set-tile:has(#mapsStatus:not([hidden])) #mapsSub { display: none; }
 .set-tile .dl-live { color: var(--go-ink); white-space: normal; }
 .set-h { margin: 10px 4px -4px; font-size: 12px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
-.set-group { border: 1px solid var(--line); border-radius: 12px; background: var(--paper); padding: 0 12px; }
+.set-group { border: 1px solid var(--line); border-radius: 12px; background: var(--field); padding: 0 12px; }
 .set-group > .row { min-height: 52px; padding: 8px 0; }
 .set-group > .row + .row { border-top: 1px solid var(--line); }
 .set-group label small, .set-group label { line-height: 1.3; }
@@ -135,8 +136,8 @@ button:focus-visible, .btn:focus-visible, select:focus-visible { outline: 3px so
 .row { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
 .row > span, .row > label { min-width: 0; }
 .row small { color: var(--muted); }
-select { min-height: 40px; border-radius: 8px; border: 1px solid var(--line); background: var(--paper); color: var(--ink); padding: 0 8px; font: inherit; }
-.progress { position: relative; min-height: 22px; border-radius: 6px; background: var(--paper); border: 1px solid var(--line); overflow: hidden; }
+select { min-height: 40px; border-radius: 8px; border: 1px solid var(--line); background: var(--field); color: var(--ink); padding: 0 8px; font: inherit; }
+.progress { position: relative; min-height: 22px; border-radius: 6px; background: var(--field); border: 1px solid var(--line); overflow: hidden; }
 #offBar { position: absolute; left: 0; top: 0; bottom: 0; width: 0; background: var(--ok); opacity: .55; transition: width .2s; }
 #offTxt { position: relative; display: block; padding: 4px 10px; text-align: center; font-size: 12px; line-height: 1.35; font-variant-numeric: tabular-nums; }
 .note { margin: 0; color: var(--muted); font-size: 12px; }
@@ -227,7 +228,7 @@ body.nav[data-banner="hidden"] .navtop:not([data-tone="off"]):not([data-tone="re
 .nb-stat span { font-size: 12px; color: var(--muted); white-space: nowrap; }
 .nb-btn {
   width: 46px; height: 46px; border-radius: 50%; border: 1px solid var(--line); flex: none;
-  background: var(--paper); color: var(--ink); display: grid; place-items: center; cursor: pointer;
+  background: var(--field); color: var(--ink); display: grid; place-items: center; cursor: pointer;
 }
 .nb-btn svg { width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-width: 2.2; stroke-linecap: round; }
 #btnExit { color: var(--warn); }
@@ -273,7 +274,7 @@ body.nav .toast { top: auto; bottom: calc(var(--nav-h, 92px) + 90px); }
 .lib-tabs { display: flex; gap: 4px; padding: 3px; border-radius: 12px; background: var(--line); }
 .lib-tab { flex: 1; min-height: 38px; border: 0; border-radius: 9px; background: none; color: var(--muted); font-family: inherit; font-weight: 600; font-size: 14px; cursor: pointer; }
 .lib-tab.on { background: var(--panel); color: var(--ink); box-shadow: 0 1px 3px rgba(0,0,0,.12); }
-.lib-sum { margin: 0; padding: 10px 12px; border-radius: 10px; background: var(--paper); font-size: 14px; font-variant-numeric: tabular-nums; }
+.lib-sum { margin: 0; padding: 10px 12px; border-radius: 10px; background: var(--field); font-size: 14px; font-variant-numeric: tabular-nums; }
 .lib-sum b { font-weight: 700; }
 .lib-month { font-size: 12px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); padding: 12px 2px 2px; border-bottom: 1px solid var(--line); }
 .lib-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
@@ -314,7 +315,7 @@ body.nav .pausepill { top: calc(var(--nt-h, 100px) + 8px); }
 .row-btns { display: flex; gap: 6px; flex: none; }
 
 /* ---------- activité ---------- */
-.actbar { display: flex; align-items: center; gap: 10px; margin: 8px 0 0; padding: 8px 8px 8px 12px; border-radius: 12px; background: var(--paper); border: 1px solid var(--line); }
+.actbar { display: flex; align-items: center; gap: 10px; margin: 8px 0 0; padding: 8px 8px 8px 12px; border-radius: 12px; background: var(--field); border: 1px solid var(--line); }
 .actbar::before { content: ""; width: 10px; height: 10px; border-radius: 50%; background: var(--rec); flex: none; animation: blink 1.2s steps(2) infinite; }
 .actbar[data-state="paused"]::before { background: #b26a00; animation: none; }
 .actbar[data-state="waiting"]::before { background: var(--muted); }
@@ -340,7 +341,7 @@ body.nav .pausepill { top: calc(var(--nt-h, 100px) + 8px); }
 .dl-live { font-size: 12px; color: var(--go-ink); font-weight: 600; font-variant-numeric: tabular-nums; }
 
 /* ---------- où aller ---------- */
-.search { width: 100%; min-height: 48px; padding: 0 14px; border-radius: 12px; border: 1px solid var(--line); background: var(--paper); color: var(--ink); font: 16px var(--font); }
+.search { width: 100%; min-height: 48px; padding: 0 14px; border-radius: 12px; border: 1px solid var(--line); background: var(--field); color: var(--ink); font: 16px var(--font); }
 .search:focus-visible { outline: 3px solid var(--me); outline-offset: 1px; }
 .dest-btns { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
 .dest-btns .wide2 { grid-column: 1 / -1; }
@@ -397,7 +398,7 @@ body.sheet-open .sheet { max-height: calc(100% - var(--hud-h, 0px) - 6px); }
 .lib-item .so-row { display: flex; gap: 10px; }
 .actions .btn:not(.wide) { padding-left: 4px; padding-right: 4px; font-size: 14px; white-space: nowrap; }
 .so-li { gap: 10px; }
-.so-ic { flex: none; width: 38px; height: 38px; border-radius: 50%; display: grid; place-items: center; background: var(--paper); color: var(--go-ink); }
+.so-ic { flex: none; width: 38px; height: 38px; border-radius: 50%; display: grid; place-items: center; background: var(--field); color: var(--go-ink); }
 .so-ic.bike { color: var(--track); }
 .so-ic svg, .so-mode svg, .so-chip svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 1.9; stroke-linecap: round; stroke-linejoin: round; }
 .so-mode { display: inline-flex; align-items: center; gap: 4px; margin-right: 14px; margin-top: 4px; }
@@ -409,7 +410,7 @@ body.sheet-open .sheet { max-height: calc(100% - var(--hud-h, 0px) - 6px); }
 #stvSetup[hidden], #stvOn[hidden] { display: none; }
 .btn.strava { background: #FC4C02; border-color: #FC4C02; color: #fff; grid-column: 1 / -1; }
 .btn.strava.sent { background: transparent; color: #FC4C02; }
-.stv-field { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin: 6px 0; padding: 8px 10px; border-radius: 10px; background: var(--paper); }
+.stv-field { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin: 6px 0; padding: 8px 10px; border-radius: 10px; background: var(--field); }
 .stv-field span { flex-basis: 100%; font-size: 11px; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); }
 .stv-field code { flex: 1; min-width: 0; font: 600 14px/1.3 ui-monospace, monospace; word-break: break-all; }
 .stv-field.hl { outline: 2px solid #FC4C02; }
@@ -442,7 +443,7 @@ body.sheet-open .sheet { max-height: calc(100% - var(--hud-h, 0px) - 6px); }
 .lp-val span { font-weight: 600; min-width: 36px; }
 .lp-quick { display: flex; gap: 6px; flex-wrap: wrap; }
 .lp-quick button.on { background: var(--go); border-color: var(--go); color: #fff; }
-.lp-quick button { min-height: 34px; padding: 0 12px; border-radius: 17px; border: 1px solid var(--line); background: var(--paper); color: var(--ink); font: 600 13px var(--font); cursor: pointer;
+.lp-quick button { min-height: 34px; padding: 0 12px; border-radius: 17px; border: 1px solid var(--line); background: var(--field); color: var(--ink); font: 600 13px var(--font); cursor: pointer;
   transition: transform .12s ease, background-color .18s, border-color .18s, color .18s; }
 .lp-quick button:active { transform: scale(.92); }
 .loop-bar { position: fixed; z-index: 20; left: 10px; right: 10px; bottom: calc(var(--sheet-h, 260px) + 10px); background: var(--panel); color: var(--ink); border-radius: 14px; box-shadow: 0 6px 24px rgba(0,0,0,.22); padding: 10px 12px; display: flex; flex-direction: column; gap: 8px; }
@@ -506,11 +507,11 @@ body.rtmode .fab-col { top: auto !important; bottom: calc(var(--rt-peek, 140px) 
 body.nav .rt-here { display: none; }
 
 /* ---------- parcours balisés : bouton liste/carte, aperçu, choix ---------- */
-.rt-toggle { margin-left: auto; margin-right: 6px; min-height: 36px; padding: 0 12px; border-radius: 18px; border: 1px solid var(--line); background: var(--paper); color: var(--ink); font: 600 14px var(--font); cursor: pointer; }
+.rt-toggle { margin-left: auto; margin-right: 6px; min-height: 36px; padding: 0 12px; border-radius: 18px; border: 1px solid var(--line); background: var(--field); color: var(--ink); font: 600 14px var(--font); cursor: pointer; }
 #routes.has-card .rt-bar, #routes.has-card #rtStatus { display: none; }
 .rt-card-h { display: flex; align-items: center; gap: 10px; }
 .rt-card-h b { font-size: 15px; }
-.rt-x { margin-left: auto; flex: none; width: 34px; height: 34px; border-radius: 50%; border: 1px solid var(--line); background: var(--paper); color: var(--ink); font-size: 15px; cursor: pointer; }
+.rt-x { margin-left: auto; flex: none; width: 34px; height: 34px; border-radius: 50%; border: 1px solid var(--line); background: var(--field); color: var(--ink); font-size: 15px; cursor: pointer; }
 .rt-dot { flex: none; width: 14px; height: 14px; border-radius: 50%; border: 2px solid #fff; box-shadow: 0 0 0 1px var(--line); }
 .rt-prev, .rt-pick { display: flex; flex-direction: column; gap: 8px; }
 .rt-prev-t { display: flex; flex-direction: column; min-width: 0; }
@@ -520,7 +521,7 @@ body.nav .rt-here { display: none; }
 .rt-prev-acts { display: flex; gap: 8px; }
 .rt-prev-acts .btn { flex: 1; min-height: 42px; font-size: 15px; }
 .rt-pick-list { display: flex; flex-direction: column; gap: 6px; max-height: 40vh; overflow-y: auto; }
-.rt-pick-list button { display: flex; align-items: center; gap: 10px; text-align: left; padding: 10px 12px; border-radius: 12px; border: 1px solid var(--line); background: var(--paper); color: var(--ink); font: inherit; cursor: pointer; }
+.rt-pick-list button { display: flex; align-items: center; gap: 10px; text-align: left; padding: 10px 12px; border-radius: 12px; border: 1px solid var(--line); background: var(--field); color: var(--ink); font: inherit; cursor: pointer; }
 .rt-pick-list button span.t { display: flex; flex-direction: column; min-width: 0; }
 .rt-pick-list button b { font-size: 15px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .rt-pick-list button small { color: var(--muted); font-size: 13px; }
@@ -631,8 +632,8 @@ select { pointer-events: none; }
 /* fenêtres du bas : mieux détachées de ce qu'il y a derrière (surtout en sombre, et quand deux s'empilent) */
 .lib-panel { position: relative; border-top: 1px solid var(--line); box-shadow: 0 -10px 30px rgba(0,0,0,.28); padding-top: 22px; }
 .lib-panel::before { content: ""; position: absolute; top: 8px; left: 50%; width: 40px; height: 4px; margin-left: -20px; border-radius: 2px; background: var(--muted); opacity: .45; }
-@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .lib { background: rgba(0,0,0,.6); } :root:not([data-theme="light"]) .lib-panel { border-top-color: #3a4740; box-shadow: 0 -12px 34px rgba(0,0,0,.6); } }
-:root[data-theme="dark"] .lib { background: rgba(0,0,0,.6); }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .lib { background: rgba(0,0,0,.45); } :root:not([data-theme="light"]) .lib-panel { border-top-color: #3a4740; box-shadow: 0 -12px 34px rgba(0,0,0,.6); } }
+:root[data-theme="dark"] .lib { background: rgba(0,0,0,.45); }
 :root[data-theme="dark"] .lib-panel { border-top-color: #3a4740; box-shadow: 0 -12px 34px rgba(0,0,0,.6); }
 /* la liste de choix, posée sur une autre fenêtre : un ton plus claire en sombre */
 @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) #picker .lib-panel { background: #222c26; } }
