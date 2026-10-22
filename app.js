@@ -5,7 +5,7 @@
 
 // La page et le code doivent être de la même version. Sinon (page gardée en cache
 // par le téléphone ou par GitHub), on recharge une page fraîche, au plus 3 fois.
-const APP_VERSION = 174;
+const APP_VERSION = 175;
 try {
   const meta = document.querySelector('meta[name="balise-version"]');
   const pageV = meta ? +meta.content : 0;
@@ -1138,7 +1138,8 @@ function gpxForStrava(it) {
   return t;
 }
 function saveFile(text, fname) {
-  if (AND) { try { AND.saveDownload(fname, 'application/gpx+xml', text); } catch {} return; }
+  // l'appli renvoie le nom réellement enregistré (2.2+) ; les versions plus anciennes renvoient true/false
+  if (AND) { let r = ''; try { r = AND.saveDownload(fname, 'application/gpx+xml', text); } catch {} return typeof r === 'string' ? r : r ? fname : ''; }
   const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([text], { type: 'application/gpx+xml' })); a.download = fname;
   document.body.appendChild(a); a.click(); setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 1500);
 }
@@ -1147,7 +1148,7 @@ function openStvManual(it, why) {
   const fname = `pisteo-${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}-${pad(d.getHours())}h${pad(d.getMinutes())}.gpx`;
   $('smWhy').textContent = why || 'Strava ne permet plus l\'envoi direct depuis Pisteo sans abonnement. On passe par son import, en 3 touchers :';
   $('smSaved').hidden = true; $('smFile').textContent = fname;
-  $('smSave').onclick = () => { saveFile(gpxForStrava(it), fname); $('smSaved').hidden = false; };
+  $('smSave').onclick = () => { const got = saveFile(gpxForStrava(it), fname); $('smFile').textContent = got || fname; $('smSaved').hidden = false; };
   $('smOpen').onclick = () => window.open('https://www.strava.com/upload/select', '_blank');
   $('smDone').onclick = async () => {
     it.stravaManual = Date.now(); delete it.stvPending;
@@ -4319,7 +4320,7 @@ $('wtOpen').onclick = () => {
 $('wtSave').onclick = () => {
   if (!wtSrc) return;
   const f = wtFile();
-  if (AND) { let ok = false; try { ok = AND.saveDownload(f.fname, 'application/gpx+xml', f.text); } catch {} wtSay(ok ? `Enregistré dans Téléchargements : ${f.fname}` : 'Enregistrement impossible.'); return; }
+  if (AND) { const got = saveFile(f.text, f.fname); wtSay(got ? `Enregistré dans Téléchargements : ${got}` : 'Enregistrement impossible.'); return; }
   saveFile(f.text, f.fname); wtSay(`Fichier téléchargé : ${f.fname}`);
 };
 

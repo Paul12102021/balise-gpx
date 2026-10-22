@@ -412,23 +412,37 @@ public class MainActivity extends Activity {
         }
     }
 
-    private boolean saveToDownloads(String name, String mime, String content) {
-        if (Build.VERSION.SDK_INT < 29) { share(name, mime, content); return false; }
+    /** Enregistre dans Téléchargements et renvoie le nom réel du fichier ("" si échec).
+     *  Android ne connaît pas l'extension .gpx : en cas de doublon il ajoute « (1) » APRÈS
+     *  « .gpx » (fichier illisible par Strava). On choisit donc nous-mêmes « nom-2.gpx », etc. */
+    private String saveToDownloads(String name, String mime, String content) {
+        if (Build.VERSION.SDK_INT < 29) { share(name, mime, content); return ""; }
+        int dot = name.lastIndexOf('.');
+        String base = dot > 0 ? name.substring(0, dot) : name, ext = dot > 0 ? name.substring(dot) : "";
         try {
-            ContentValues cv = new ContentValues();
-            cv.put(MediaStore.Downloads.DISPLAY_NAME, name);
-            cv.put(MediaStore.Downloads.MIME_TYPE, mime);
-            cv.put(MediaStore.Downloads.RELATIVE_PATH, Environment.DIRECTORY_DOWNLOADS);
-            Uri uri = getContentResolver().insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, cv);
-            if (uri == null) throw new Exception("insert");
-            try (OutputStream os = getContentResolver().openOutputStream(uri)) {
-                if (os == null) throw new Exception("open");
-                os.write(content.getBytes(StandardCharsets.UTF_8));
+            for (int i = 1; i <= 50; i++) {
+                String cand = i == 1 ? name : base + "-" + i + ext;
+                ContentValues cv = new ContentValues();
+                cv.put(MediaStore.Downloads.DISPLAY_NAME, cand);
+                cv.put(MediaStore.Downloads.MIME_TYPE, mime);
+                cv.put(MediaStore.Downloads.RELATIVE_PATH, Environment.DIRECTORY_DOWNLOADS);
+                Uri uri = getContentResolver().insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, cv);
+                if (uri == null) throw new Exception("insert");
+                String got = cand;
+                try (android.database.Cursor c = getContentResolver().query(uri, new String[]{ MediaStore.Downloads.DISPLAY_NAME }, null, null, null)) {
+                    if (c != null && c.moveToFirst()) got = c.getString(0);
+                }
+                if (!cand.equals(got)) { getContentResolver().delete(uri, null, null); continue; }
+                try (OutputStream os = getContentResolver().openOutputStream(uri)) {
+                    if (os == null) throw new Exception("open");
+                    os.write(content.getBytes(StandardCharsets.UTF_8));
+                }
+                return cand;
             }
-            return true;
+            throw new Exception("names");
         } catch (Exception e) {
             share(name, mime, content);
-            return false;
+            return "";
         }
     }
 
@@ -539,7 +553,7 @@ public class MainActivity extends Activity {
         }
 
         @JavascriptInterface
-        public boolean saveDownload(String name, String mime, String content) {
+        public String saveDownload(String name, String mime, String content) {
             return saveToDownloads(name, mime, content);
         }
 
