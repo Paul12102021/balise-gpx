@@ -29,7 +29,7 @@
 }
 /* Thème : automatique (réglage du téléphone), ou forcé clair / sombre dans les Réglages */
 @media (prefers-color-scheme: dark) {
-  :root:not([data-theme="light"]) {
+  :root:not([data-theme="light"]):not([data-theme="sun"]) {
   --ink: #E8ECE5; --paper: #161D18; --panel: #1E2722; --field: #28332C; --muted: #A2AEA3; --line: #36443B;
   --hud: #1F2B25; --hud-ink: #EEF4EF; --track: #FF7A2E; --done: #6E7A72; --me: #5AA2FF;
   --go: #3A7556; --go-ink: #7CCB9C; --rec: #F97316; --ok: #4C9A6C; --warn: #E04848;
@@ -44,6 +44,26 @@
   --warn-bg: #3A1716; --warn-ink: #FFB4AB; --mapbg: #2A322D;
   color-scheme: dark;
 }
+/* Plein soleil : lisible avec des reflets, contraste maximal (noir sur blanc pur, traits et chiffres renforcés) */
+:root[data-theme="sun"] {
+  --ink: #000; --paper: #fff; --panel: #fff; --field: #fff; --muted: #222A25; --line: #1A1A1A;
+  --hud: #000; --hud-ink: #fff; --track: #FF4500; --done: #8C8C8C; --me: #0047CC;
+  --go: #154A2E; --go-ink: #0E3B22; --rec: #B23000; --ok: #154A2E; --warn: #C00000;
+  --warn-bg: #FFE3E0; --warn-ink: #6B0000; --mapbg: #F4F4F0;
+  color-scheme: light;
+}
+[data-theme="sun"] body { font-weight: 500; }
+[data-theme="sun"] .lbl { opacity: 1; font-weight: 700; font-size: 11px; }
+[data-theme="sun"] .val { font-size: 24px; font-weight: 800; }
+[data-theme="sun"] .nt-dist { font-size: 42px; font-weight: 800; }
+[data-theme="sun"] .nt-txt { font-size: 21px; font-weight: 800; }
+[data-theme="sun"] .nt-sub { opacity: 1; font-size: 15px; font-weight: 600; }
+[data-theme="sun"] .nt-icon svg { stroke-width: 6.5; }
+[data-theme="sun"] .btn, [data-theme="sun"] .set-group, [data-theme="sun"] .set-tile, [data-theme="sun"] select,
+[data-theme="sun"] .search, [data-theme="sun"] .fab, [data-theme="sun"] .actbar, [data-theme="sun"] .dl-box { border-width: 2px; border-color: #000; }
+[data-theme="sun"] .btn { font-weight: 800; }
+[data-theme="sun"] .set-group > .row + .row { border-top-width: 2px; }
+[data-theme="sun"] small, [data-theme="sun"] .muted { color: #222A25; }
 html.and { --sa-t: 0px; --sa-b: 0px; --sa-l: 0px; --sa-r: 0px; }
 [hidden] { display: none !important; }
 body:not(.nav) .nav-only { display: none !important; }
@@ -632,9 +652,9 @@ select { pointer-events: none; }
 /* fenêtres du bas : mieux détachées de ce qu'il y a derrière (surtout en sombre, et quand deux s'empilent) */
 .lib-panel { position: relative; border-top: 1px solid var(--line); box-shadow: 0 -10px 30px rgba(0,0,0,.28); padding-top: 22px; }
 .lib-panel::before { content: ""; position: absolute; top: 8px; left: 50%; width: 40px; height: 4px; margin-left: -20px; border-radius: 2px; background: var(--muted); opacity: .45; }
-@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .lib { background: rgba(0,0,0,.45); } :root:not([data-theme="light"]) .lib-panel { border-top-color: #3a4740; box-shadow: 0 -12px 34px rgba(0,0,0,.6); } }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]):not([data-theme="sun"]) .lib { background: rgba(0,0,0,.45); } :root:not([data-theme="light"]):not([data-theme="sun"]) .lib-panel { border-top-color: #3a4740; box-shadow: 0 -12px 34px rgba(0,0,0,.6); } }
 :root[data-theme="dark"] .lib { background: rgba(0,0,0,.45); }
 :root[data-theme="dark"] .lib-panel { border-top-color: #3a4740; box-shadow: 0 -12px 34px rgba(0,0,0,.6); }
 /* la liste de choix, posée sur une autre fenêtre : un ton plus claire en sombre */
-@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) #picker .lib-panel { background: #222c26; } }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]):not([data-theme="sun"]) #picker .lib-panel { background: #222c26; } }
 :root[data-theme="dark"] #picker .lib-panel { background: #222c26; }

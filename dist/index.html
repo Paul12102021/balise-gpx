@@ -1,0 +1,178 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Pisteo · GPS de randonnée et de vélo, gratuit et hors ligne</title>
+<meta name="description" content="Suivez vos traces GPX avec guidage à la voix, même sans réseau. Retour à la trace par les chemins, cartes IGN hors ligne, boucles et parcours balisés. Gratuit, sans compte, sans publicité.">
+<meta property="og:title" content="Pisteo · vos traces GPX guidées à la voix, même sans réseau">
+<meta property="og:description" content="GPS de randonnée et de vélo gratuit : guidage vocal, retour à la trace, cartes IGN hors ligne. Sans compte, sans publicité.">
+<meta property="og:image" content="https://pisteo.app/img/og.jpg">
+<meta property="og:type" content="website">
+<meta name="theme-color" content="#1F2B25">
+<link rel="icon" href="img/icon.svg">
+<link rel="apple-touch-icon" href="img/icon-192.png">
+<style>
+:root{--ink:#17201c;--paper:#EEF1E8;--panel:#F8F9F4;--muted:#5E6B60;--line:#D5DCCD;--go:#2F5E45;--go-ink:#2F5E45;--trace:#E85A0C;--hero:#E4E9DC}
+@media (prefers-color-scheme:dark){.btn.primary{box-shadow:inset 0 0 0 2px #3b4a42}:root{--ink:#E8ECE5;--paper:#121814;--panel:#1A221D;--muted:#97A398;--line:#2C3730;--go:#3A7556;--go-ink:#7CCB9C;--hero:#18201b}}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{margin:0;background:var(--paper);color:var(--ink);font:17px/1.55 system-ui,-apple-system,"Segoe UI",Roboto,Inter,sans-serif;-webkit-font-smoothing:antialiased}
+a{color:var(--go-ink)}
+.wrap{max-width:1080px;margin:0 auto;padding:0 20px}
+header.top{display:flex;align-items:center;justify-content:space-between;padding:18px 0}
+.brand{display:flex;align-items:center;gap:10px;font-weight:800;font-size:21px;letter-spacing:-.3px;color:var(--ink);text-decoration:none}
+.brand img{width:36px;height:36px;border-radius:9px}
+.top nav a{margin-left:18px;font-size:15px;font-weight:600;color:var(--muted);text-decoration:none}
+.top nav a:hover{color:var(--ink)}
+.hero{background:var(--hero);border-radius:28px;padding:56px 44px;display:grid;grid-template-columns:1.1fr .9fr;gap:40px;align-items:center;overflow:hidden;position:relative}
+.hero h1{font-size:clamp(34px,5.2vw,58px);line-height:1.04;letter-spacing:-1.5px;margin:0 0 18px;font-weight:800}
+.hero h1 em{font-style:normal;color:var(--trace)}
+.hero p.lead{font-size:20px;color:var(--muted);margin:0 0 26px;max-width:30ch}
+.chips{display:flex;flex-wrap:wrap;gap:8px;margin:0 0 28px;padding:0;list-style:none}
+.chips li{background:var(--go);color:#fff;font-size:14px;font-weight:600;padding:7px 13px;border-radius:999px}
+.ctas{display:flex;flex-wrap:wrap;gap:12px;align-items:center}
+.btn{display:inline-flex;align-items:center;gap:10px;min-height:52px;padding:0 22px;border-radius:14px;font-weight:700;font-size:16px;text-decoration:none;border:0;cursor:pointer}
+.btn.primary{background:#1d2a24;color:#fff}
+.btn.primary small{display:block;font-weight:500;font-size:12px;opacity:.75;line-height:1}
+.btn.ghost{background:transparent;color:var(--ink);border:2px solid var(--line)}
+.btn svg{width:22px;height:22px;flex:none}
+.note{font-size:14px;color:var(--muted);margin:14px 0 0}
+.phone{justify-self:center;width:min(300px,100%);aspect-ratio:9/16;border-radius:34px;overflow:hidden;background:#000;box-shadow:0 30px 60px rgba(23,32,28,.25),0 0 0 8px #1d2a24;position:relative}
+.phone iframe,.phone img{position:absolute;inset:0;width:100%;height:100%;border:0;object-fit:cover}
+section{padding:72px 0 0}
+section h2{font-size:clamp(26px,3.4vw,36px);letter-spacing:-.8px;line-height:1.15;margin:0 0 10px}
+section .sub{color:var(--muted);margin:0 0 34px;max-width:60ch}
+.feat{display:grid;grid-template-columns:repeat(3,1fr);gap:16px}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:20px;padding:24px}
+.card .ic{width:44px;height:44px;border-radius:12px;background:var(--hero);display:grid;place-items:center;margin-bottom:14px}
+.card .ic svg{width:24px;height:24px;stroke:var(--go-ink);fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+.card h3{margin:0 0 6px;font-size:18px}
+.card p{margin:0;color:var(--muted);font-size:15.5px}
+.shots{display:flex;gap:16px;overflow-x:auto;scroll-snap-type:x mandatory;padding:4px 4px 18px;margin:0 -4px}
+.shots figure{flex:0 0 220px;margin:0;scroll-snap-align:start}
+.shots img{width:220px;aspect-ratio:9/16;border-radius:22px;display:block;box-shadow:0 10px 26px rgba(23,32,28,.18);background:var(--line)}
+.shots figcaption{font-size:14px;color:var(--muted);margin-top:10px;text-align:center}
+.cmp{width:100%;border-collapse:collapse;background:var(--panel);border-radius:20px;overflow:hidden;border:1px solid var(--line);font-size:15.5px}
+.cmp th,.cmp td{padding:13px 16px;text-align:left;border-bottom:1px solid var(--line)}
+.cmp thead th{font-size:13px;text-transform:uppercase;letter-spacing:.5px;color:var(--muted)}
+.cmp td:nth-child(2){font-weight:700;color:var(--go-ink)}
+.cmp tr:last-child td{border-bottom:0}
+.faq details{background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:16px 20px;margin-bottom:10px}
+.faq summary{font-weight:700;cursor:pointer;list-style:none;display:flex;justify-content:space-between;gap:16px}
+.faq summary::after{content:"+";color:var(--muted);font-weight:400;font-size:22px;line-height:1}
+.faq details[open] summary::after{content:"–"}
+.faq details p{margin:10px 0 0;color:var(--muted)}
+.final{margin:80px 0 0;background:#1d2a24;color:#fff;border-radius:28px;padding:48px 40px;text-align:center}
+.final h2{color:#fff;margin-bottom:8px}
+.final p{color:#b9c7bd;margin:0 0 24px}
+.final .btn.primary{background:#fff;color:#1d2a24}
+.final .btn.ghost{color:#fff;border-color:#3b4a42}
+.final .ctas{justify-content:center}
+footer{padding:36px 0 48px;color:var(--muted);font-size:14px;display:flex;flex-wrap:wrap;gap:8px 20px;justify-content:space-between}
+footer a{color:var(--muted)}
+@media (max-width:860px){
+  .hero{grid-template-columns:1fr;padding:36px 22px;border-radius:22px}
+  .hero p.lead{max-width:none}
+  .phone{width:min(240px,80%)}
+  .feat{grid-template-columns:1fr}
+  .top nav{display:none}
+  .final{padding:36px 22px}
+  .cmp{font-size:14px}.cmp th,.cmp td{padding:10px}
+}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="top">
+    <a class="brand" href="#"><img src="img/icon.svg" alt="">Pisteo</a>
+    <nav><a href="#fonctions">Fonctions</a><a href="#captures">Captures</a><a href="#faq">Questions</a></nav>
+  </header>
+
+  <div class="hero">
+    <div>
+      <h1>Vos traces GPX,<br>guidées à la voix,<br><em>même sans réseau</em></h1>
+      <p class="lead">Le GPS de randonnée et de vélo simple et gratuit, avec les cartes IGN hors ligne.</p>
+      <ul class="chips"><li>À pied</li><li>À vélo</li><li>Hors connexion</li><li>Sans compte</li></ul>
+      <div class="ctas">
+        <a class="btn primary" id="playBtn" href="#bientot" aria-disabled="true">
+          <svg viewBox="0 0 24 24"><path fill="#34A853" d="M3.6 2.2 13.5 12l-9.9 9.8c-.4-.2-.6-.6-.6-1.1V3.3c0-.5.2-.9.6-1.1z"/><path fill="#FBBC04" d="m17 8.5-3.5 3.5L17 15.5l3.9-2.2c.9-.5.9-1.9 0-2.4z"/><path fill="#EA4335" d="M13.5 12 3.6 21.8c.3.2.8.2 1.2 0L17 15.5z"/><path fill="#4285F4" d="M3.6 2.2c.4-.2.9-.2 1.2 0L17 8.5 13.5 12z"/></svg>
+          <span><small>Bientôt sur</small>Google Play</span>
+        </a>
+        <a class="btn ghost" href="/app/">Essayer dans le navigateur</a>
+      </div>
+      <p class="note">Gratuit · sans compte · sans publicité · tes données restent sur ton téléphone</p>
+    </div>
+    <div class="phone">
+      <img src="img/01-navigation-sombre.webp" alt="">
+      <iframe src="https://www.youtube-nocookie.com/embed/hyRqQgkrIec?autoplay=1&mute=1&loop=1&playlist=hyRqQgkrIec&controls=0&modestbranding=1&playsinline=1&rel=0" title="Démo de Pisteo" allow="autoplay; encrypted-media; picture-in-picture" loading="lazy"></iframe>
+    </div>
+  </div>
+
+  <section id="fonctions">
+    <h2>Tout pour suivre ta trace, rien de superflu</h2>
+    <p class="sub">Pisteo fait une chose et la fait bien : t'amener au bout de ton parcours, que tu aies du réseau ou pas.</p>
+    <div class="feat">
+      <div class="card"><div class="ic"><svg viewBox="0 0 24 24"><path d="M12 3 19 21 12 17 5 21z"/></svg></div><h3>Guidage à la voix</h3><p>Carte orientée dans ton sens de marche, chaque virage annoncé, heure d'arrivée et D+ restant.</p></div>
+      <div class="card"><div class="ic"><svg viewBox="0 0 24 24"><path d="M9 14 4 9l5-5"/><path d="M4 9h10a6 6 0 0 1 0 12h-3"/></svg></div><h3>Retour à la trace</h3><p>Tu t'écartes ? Pisteo te prévient et calcule le chemin le plus court pour revenir, par les sentiers.</p></div>
+      <div class="card"><div class="ic"><svg viewBox="0 0 24 24"><path d="M3 6l6-3 6 3 6-3v15l-6 3-6-3-6 3z"/><path d="M9 3v15M15 6v15"/></svg></div><h3>Cartes IGN hors ligne</h3><p>Télécharge une trace, un département ou une zone du monde, avec ses chemins. Gratuitement.</p></div>
+      <div class="card"><div class="ic"><svg viewBox="0 0 24 24"><path d="M21 12a9 9 0 1 1-3-6.7"/><path d="M21 3v6h-6"/></svg></div><h3>Boucles et parcours balisés</h3><p>Une boucle de la distance voulue, les GR et véloroutes autour de toi, ou ton tracé point par point.</p></div>
+      <div class="card"><div class="ic"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg></div><h3>Tes sorties enregistrées</h3><p>Distance, temps en mouvement, dénivelé et profil. Export GPX ou envoi vers Strava.</p></div>
+      <div class="card"><div class="ic"><svg viewBox="0 0 24 24"><rect x="3" y="7" width="16" height="10" rx="2"/><path d="M21 11v2M7 10v4M10 10v4"/></svg></div><h3>Économie de batterie</h3><p>Écran noir entre les virages, la carte revient juste avant chacun. Pour les longues journées.</p></div>
+    </div>
+  </section>
+
+  <section id="captures">
+    <h2>En images</h2>
+    <p class="sub">Captures prises autour de Chamonix, en thème clair et sombre.</p>
+    <div class="shots">
+      <figure><img src="img/01-navigation-sombre.webp" alt="Navigation le long d'une trace avec le prochain virage" loading="lazy"><figcaption>Guidage pas à pas</figcaption></figure>
+      <figure><img src="img/02-progression.webp" alt="Profil d'altitude et progression" loading="lazy"><figcaption>Progression et profil</figcaption></figure>
+      <figure><img src="img/03-retour-trace-sombre.webp" alt="Itinéraire de retour vers la trace" loading="lazy"><figcaption>Retour à la trace</figcaption></figure>
+      <figure><img src="img/04-cartes-hors-ligne.webp" alt="Téléchargement des cartes hors ligne" loading="lazy"><figcaption>Cartes hors ligne</figcaption></figure>
+      <figure><img src="img/05-sortie-sombre.webp" alt="Fiche d'une sortie enregistrée" loading="lazy"><figcaption>Tes sorties</figcaption></figure>
+      <figure><img src="img/06-itineraire.webp" alt="Itinéraire calculé vers une destination" loading="lazy"><figcaption>Itinéraire vers un lieu</figcaption></figure>
+      <figure><img src="img/07-ou-aller.webp" alt="Menu Où aller" loading="lazy"><figcaption>Où aller ?</figcaption></figure>
+      <figure><img src="img/08-boucle-sombre.webp" alt="Boucle proposée de 15 km" loading="lazy"><figcaption>Boucle proposée</figcaption></figure>
+    </div>
+  </section>
+
+  <section>
+    <h2>Gratuit, vraiment</h2>
+    <p class="sub">Ce que d'autres applis réservent à leurs abonnés, Pisteo l'offre à tout le monde.</p>
+    <table class="cmp">
+      <thead><tr><th></th><th>Pisteo</th><th>Applis avec abonnement</th></tr></thead>
+      <tbody>
+        <tr><td>Cartes hors ligne</td><td>Gratuit</td><td>Payant (de 4 à 60 € par an)</td></tr>
+        <tr><td>Carte IGN</td><td>Gratuit (Plan IGN)</td><td>Abonnement</td></tr>
+        <tr><td>Boucles automatiques</td><td>Gratuit</td><td>Abonnement</td></tr>
+        <tr><td>Compte obligatoire</td><td>Non</td><td>Oui</td></tr>
+        <tr><td>Publicité, traceurs</td><td>Aucun</td><td>Selon l'appli</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <section id="faq" class="faq">
+    <h2>Questions fréquentes</h2>
+    <p class="sub"></p>
+    <details><summary>Faut-il créer un compte ?</summary><p>Non. Pas d'inscription, pas de publicité. Tes traces, tes sorties et ta position restent sur ton téléphone.</p></details>
+    <details><summary>Ça marche vraiment sans réseau ?</summary><p>Oui, dans une zone téléchargée à l'avance avec ses chemins : carte, guidage, retour à la trace, itinéraires et recherche de communes fonctionnent hors connexion.</p></details>
+    <details><summary>Comment ouvrir un GPX reçu par mail ou WhatsApp ?</summary><p>Touche « Partager » sur le fichier et choisis Pisteo, ou ouvre-le depuis « Mes traces ».</p></details>
+    <details><summary>Et sur iPhone ?</summary><p>Pas encore d'appli sur l'App Store, mais Pisteo fonctionne dans Safari : ouvre la version web, puis Partager › « Sur l'écran d'accueil ».</p></details>
+    <details><summary>Comment ne pas perdre mes sorties en changeant de téléphone ?</summary><p>Réglages › Sauvegarde : un fichier emporte tes sorties, traces et réglages. Sur le nouveau téléphone, « Restaurer » remet tout et propose de retélécharger tes cartes.</p></details>
+    <details><summary>Qui développe Pisteo ?</summary><p>Un randonneur et cycliste, sur son temps libre. Une idée, un souci ? Écris à <a href="mailto:pisteo.app@gmail.com">pisteo.app@gmail.com</a> ou utilise « Donner mon avis » dans l'appli.</p></details>
+  </section>
+
+  <div class="final" id="bientot">
+    <h2>Bientôt sur Google Play</h2>
+    <p>En attendant, Pisteo fonctionne déjà dans le navigateur de ton téléphone.</p>
+    <div class="ctas"><a class="btn primary" href="/app/">Ouvrir Pisteo</a><a class="btn ghost" href="mailto:pisteo.app@gmail.com?subject=Pisteo%20%C2%B7%20Je%20veux%20tester">Devenir testeur</a></div>
+  </div>
+
+  <footer>
+    <span>© 2026 Pisteo · Cartes © IGN, © OpenStreetMap, OpenFreeMap</span>
+    <span><a href="/app/confidentialite.html">Confidentialité</a> · <a href="mailto:pisteo.app@gmail.com">Contact</a></span>
+  </footer>
+</div>
+</body>
+</html>

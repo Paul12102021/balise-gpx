@@ -113,6 +113,7 @@ const exact = {
   'Restauration impossible : le stockage du téléphone est plein ou bloqué.': 'Cannot restore: the phone\'s storage is full or blocked.',
   'Tout retélécharger': 'Download all again',
   // ---- welcome
+  'Plein soleil': 'Bright sunlight',
   'Bienvenue dans Pisteo': 'Welcome to Pisteo',
   'Suis tes traces GPX à pied ou à vélo, guidé à la voix, même sans réseau. Gratuit, sans compte : tout reste sur ton téléphone.':
     'Follow your GPX tracks on foot or by bike, with voice guidance, even without signal. Free, no account: everything stays on your phone.',

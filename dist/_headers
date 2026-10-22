@@ -1,0 +1,13 @@
+# Cloudflare Pages : en-têtes des fichiers publiés
+/app/sw.js
+  Cache-Control: no-cache
+/app/index.html
+  Cache-Control: no-cache
+/app/
+  Cache-Control: no-cache
+/.well-known/assetlinks.json
+  Content-Type: application/json
+  Access-Control-Allow-Origin: *
+/*
+  X-Content-Type-Options: nosniff
+  Referrer-Policy: strict-origin-when-cross-origin

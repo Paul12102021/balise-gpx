@@ -1,0 +1,685 @@
+<!doctype html>
+<!-- Pisteo © 2026 Pisteo. Tous droits réservés — copie et réutilisation interdites sans autorisation. -->
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<meta name="theme-color" content="#1F2B25">
+<script>try{var t=localStorage.getItem('theme');if(t==='light'||t==='dark')document.documentElement.dataset.theme=t}catch(e){}</script>
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="balise-version" content="172">
+<title>Pisteo</title>
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<link rel="stylesheet" href="vendor/maplibre-gl.css">
+<link rel="stylesheet" href="app.css?v=172">
+</head>
+<body>
+<div id="map" aria-label="Carte"></div>
+
+<!-- Aperçu -->
+<header class="hud ov-only">
+  <div class="stat"><span class="lbl">Reste</span><span class="val" id="sDist">–</span></div>
+  <div class="stat"><span class="lbl">D+ restant</span><span class="val" id="sUp">–</span></div>
+  <div class="stat"><span class="lbl">Écart</span><span class="val" id="sOff">–</span></div>
+  <div class="stat"><span class="lbl">Altitude</span><span class="val" id="sEle">–</span></div>
+</header>
+
+<!-- Navigation : bandeau de direction -->
+<div id="navTop" class="navtop nav-only" data-tone="gps">
+  <div class="nt-icon" id="ntIcon"></div>
+  <div class="nt-main">
+    <div class="nt-dist" id="ntDist"></div>
+    <div class="nt-txt" id="ntTxt">Recherche du signal GPS…</div>
+    <div class="nt-sub" id="ntSub"></div>
+  </div>
+</div>
+
+<div class="fab-col">
+  <button id="btnPip" class="fab nav-only" title="Fenêtre réduite" aria-label="Passer en fenêtre réduite pour utiliser une autre appli">
+    <svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2"/><rect x="12" y="11" width="7" height="6" rx="1" fill="currentColor" stroke="none"/></svg>
+  </button>
+  <button id="btnEcoFab" class="fab nav-only" title="Économie de batterie" aria-label="Économie de batterie (écran noir entre les virages)">
+    <svg viewBox="0 0 24 24"><rect x="3" y="7" width="16" height="10" rx="2"/><path d="M21 10.5v3"/><path class="bolt" d="m11.5 8.5-2.5 4h3l-1.5 3"/></svg>
+  </button>
+  <button id="btnNorth" class="fab" hidden title="Nord en haut" aria-label="Remettre le nord en haut de la carte">
+    <svg viewBox="0 0 24 24"><g id="northNeedle"><path d="M12 2.5 15.6 12H8.4Z" fill="#e5484d" stroke="none"/><path d="M12 21.5 8.4 12h7.2Z" fill="currentColor" stroke="none" opacity=".45"/></g></svg>
+  </button>
+  <button id="btnLayer" class="fab" title="Fond de carte" aria-label="Changer de fond de carte">
+    <svg viewBox="0 0 24 24"><path d="M12 3 2 8l10 5 10-5-10-5Z"/><path d="m2 13 10 5 10-5"/></svg>
+  </button>
+  <button id="btnVoice" class="fab nav-only" title="Guidage vocal" aria-label="Activer ou couper le guidage vocal">
+    <svg viewBox="0 0 24 24"><path d="M4 9v6h4l5 4V5L8 9H4Z"/><path class="wave" d="M16.5 8.5a5 5 0 0 1 0 7M19 6a8.5 8.5 0 0 1 0 12"/><path class="cross" d="m16 9 6 6m0-6-6 6"/></svg>
+  </button>
+  <button id="btnVibFab" class="fab nav-only" title="Vibrations" aria-label="Activer ou couper les vibrations">
+    <svg viewBox="0 0 24 24"><rect x="8" y="4" width="8" height="16" rx="1.6"/><path class="wave" d="M4.5 9v6M19.5 9v6M2 11v2M22 11v2"/><path class="cross" d="M3 3l18 18"/></svg>
+  </button>
+  <button id="btnRecFab" class="fab nav-only" title="Enregistrer ma trace" aria-label="Enregistrer ma trace">
+    <span class="dot"></span>
+  </button>
+  <button id="btnRejoin" class="fab" title="Itinéraire vers la trace" aria-label="Calculer l'itinéraire vers le point de la trace le plus proche">
+    <svg viewBox="0 0 24 24"><path d="M9 14 4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11"/></svg>
+  </button>
+  <button id="btnCenter" class="fab" title="Me suivre" aria-label="Centrer et suivre ma position">
+    <svg viewBox="0 0 24 24"><path d="M12 2 19 21 12 17 5 21Z"/></svg>
+  </button>
+</div>
+
+<div id="pausePill" class="pausepill" hidden>
+  <span><b>Sortie en pause</b> · chrono arrêté</span>
+  <button id="pauseResume" class="btn small go">Reprendre</button>
+</div>
+
+<div id="speed" class="speed nav-only"><b id="spVal">–</b><span>km/h</span></div>
+
+<!-- Navigation : barre du bas -->
+<div id="navBottom" class="navbottom nav-only">
+  <div class="nb-bar"><div id="nbBar"></div></div>
+  <div class="nb-grip" id="nbGrip" role="button" aria-label="Afficher ou masquer la progression"></div>
+  <div id="joinPick" class="join-pick" hidden><span>Rejoindre la trace</span><div class="seg"><button id="jpStart">au départ</button><button id="jpNear">au plus proche</button></div></div>
+  <div class="nb-row">
+    <button id="btnExit" class="nb-btn" aria-label="Quitter la navigation">
+      <svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></svg>
+    </button>
+    <div class="nb-stats">
+      <div class="nb-stat"><b id="nbEta">–</b><span id="nbDur">arrivée</span></div>
+      <div class="nb-stat"><b id="nbRem">–</b><span id="nbL2">restant</span></div>
+      <div class="nb-stat"><b id="nbUp">–</b><span id="nbL3">D+ restant</span></div>
+    </div>
+    <button id="btnOverview" class="nb-btn" aria-label="Vue d'ensemble de la trace">
+      <svg viewBox="0 0 24 24"><circle cx="6" cy="18" r="2"/><circle cx="18" cy="6" r="2"/><path d="M8 18h7.5a3.5 3.5 0 0 0 0-7h-7a3.5 3.5 0 0 1 0-7H16"/></svg>
+    </button>
+  </div>
+  <div id="navMore" class="nav-more" hidden>
+    <canvas id="navProfile" aria-label="Profil altimétrique et position"></canvas>
+    <div class="np-proftools">
+      <span id="npProfInfo"></span>
+      <button id="npProfOnly" class="linkbtn">Profil seul</button>
+    </div>
+    <div class="np-acts">
+      <button id="npRec" class="btn"></button>
+      <button id="npEnd" class="btn ghost" hidden>Terminer</button>
+    </div>
+    <div class="np-toggles">
+      <button id="npVoice" class="chip"></button>
+      <button id="npVib" class="chip"></button>
+      <button id="npMode" class="chip"></button>
+      <button id="npBanner" class="chip"></button>
+      <button id="npEco" class="chip"></button>
+    </div>
+    <div id="npBack" class="np-back" hidden>
+      <svg viewBox="0 0 24 24"><path d="M9 14 4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11"/></svg>
+      <div><span>Retour à la trace</span><b id="npBackVal">–</b></div>
+      <small id="npBackSub"></small>
+    </div>
+    <div class="np-grid">
+      <div><span>Parcouru</span><b id="npDone">–</b></div>
+      <div class="trk"><span>Restant</span><b id="npLeft">–</b></div>
+      <div class="trk"><span>Progression</span><b id="npPct">–</b></div>
+      <div class="trk"><span>D+ fait</span><b id="npUpDone">–</b></div>
+      <div class="trk"><span>D+ restant</span><b id="npUpLeft">–</b></div>
+      <div class="trk"><span>D− restant</span><b id="npDownLeft">–</b></div>
+      <div><span id="npTimeL">Temps (sortie)</span><b id="npTime">–</b></div>
+      <div><span>Vitesse moy.</span><b id="npAvg">–</b></div>
+      <div><span>Altitude</span><b id="npEle">–</b></div>
+    </div>
+  </div>
+</div>
+
+<!-- Aperçu : panneau du bas -->
+<section class="sheet ov-only" id="sheet">
+  <div class="grip" id="grip" role="button" aria-label="Afficher ou masquer les réglages"></div>
+  <div class="trackrow">
+    <div class="trackname" id="trackName">Aucune trace chargée</div>
+    <button id="btnSaveTr" class="closebtn save" hidden aria-label="Enregistrer la trace dans Mes traces"></button>
+    <button id="btnReverse" class="closebtn icon" hidden aria-label="Inverser le sens de la trace" title="Inverser le sens">
+      <svg viewBox="0 0 24 24"><path d="M7 4 3 8l4 4"/><path d="M3 8h13"/><path d="m17 12 4 4-4 4"/><path d="M21 16H8"/></svg>
+    </button>
+    <button id="btnWatch" class="closebtn icon" hidden aria-label="Envoyer le parcours (lien, montre, fichier GPX)" title="Envoyer">
+      <svg viewBox="0 0 24 24"><circle cx="18" cy="5" r="2.5"/><circle cx="6" cy="12" r="2.5"/><circle cx="18" cy="19" r="2.5"/><path d="m8.2 10.8 7.6-4.4M8.2 13.2l7.6 4.4"/></svg>
+    </button>
+    <button id="btnClose" class="closebtn icon" hidden aria-label="Fermer la trace" title="Fermer la trace">
+      <svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></svg>
+    </button>
+  </div>
+  <canvas id="profile" aria-label="Profil altimétrique"></canvas>
+  <div id="actBar" class="actbar" hidden>
+    <div class="ab-text"><b id="actLabel">Enregistrement</b><span id="actStats"></span></div>
+    <button id="actPause" class="btn small"></button>
+    <button id="actEnd" class="btn small danger">Terminer</button>
+  </div>
+  <div class="actions">
+    <button id="btnNav" class="btn go wide">
+      <svg viewBox="0 0 24 24"><path d="M12 2 19 21 12 17 5 21Z"/></svg>Naviguer
+    </button>
+    <button id="btnNew" class="btn" hidden>＋ Autre trajet</button>
+    <button id="btnOpen" class="btn">Mes traces</button>
+    <button id="btnSorties" class="btn">Mes sorties</button>
+    <input type="file" id="fileIn" accept=".gpx,application/gpx+xml,application/xml,text/xml" hidden>
+    <button id="btnMore" class="btn ghost">Réglages</button>
+  </div>
+
+  <div id="more" class="more" hidden>
+    <div class="set-tiles">
+      <button id="btnMaps" class="set-tile"><svg viewBox="0 0 24 24"><path d="M9 4 3 6v14l6-2 6 2 6-2V4l-6 2-6-2Z"/><path d="M9 4v14M15 6v14"/></svg><b>Mes cartes</b><small id="mapsSub">Hors ligne</small><small id="mapsStatus" class="dl-live" hidden></small></button>
+      <button id="btnStrava" class="set-tile"><svg viewBox="0 0 24 24"><path d="m10 3-6 12h4l2-4 2 4h4L10 3Z"/><path d="m15 15-2 4h4l-2-4"/></svg><b>Strava</b><small id="stvStatus">Non connecté</small></button>
+      <button id="btnBackup" class="set-tile"><svg viewBox="0 0 24 24"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M4 17v3h16v-3"/></svg><b>Sauvegarde</b><small>Sorties et traces</small></button>
+      <button id="btnFeedback" class="set-tile"><svg viewBox="0 0 24 24"><path d="M4 5h16v11H9l-5 4V5Z"/></svg><b>Mon avis</b><small>Un souci, une idée ?</small></button>
+    </div>
+
+    <h3 class="set-h">Navigation</h3>
+    <div class="set-group">
+      <div class="row">
+        <label for="prof">Je me déplace<br><small>Pour les itinéraires et le temps estimé</small></label>
+        <select id="prof">
+          <option value="hiking-mountain">À pied</option>
+          <option value="trekking">À vélo</option>
+        </select>
+      </div>
+      <div class="row">
+        <label for="thr">Alerte hors trace<br><small>Au-delà de cette distance</small></label>
+        <select id="thr">
+          <option value="25">25 m</option><option value="50">50 m</option>
+          <option value="100">100 m</option><option value="200">200 m</option>
+          <option value="500">500 m</option><option value="0">Aucune</option>
+        </select>
+      </div>
+      <div class="row">
+        <label for="optBanner">Indications<br><small>Taille du bandeau de direction</small></label>
+        <select id="optBanner"><option value="normal">Grandes</option><option value="compact">Réduites</option><option value="hidden">Masquées</option></select>
+      </div>
+      <div class="row">
+        <label for="autoRec">Enregistrer automatiquement<br><small>Dès que la navigation démarre</small></label>
+        <input type="checkbox" id="autoRec" class="check">
+      </div>
+      <div class="row">
+        <label for="optEco">Économie de batterie<br><small>Écran noir entre les virages · <button id="ecoInfoLink" class="linkbtn">en savoir plus</button></small></label>
+        <input type="checkbox" id="optEco" class="check">
+      </div>
+    </div>
+
+    <h3 class="set-h">Voix et vibrations</h3>
+    <div class="set-group">
+      <div class="row">
+        <label for="optVoice">Guidage vocal et bips<br><small><button id="voiceTest" class="linkbtn">écouter</button></small></label>
+        <input type="checkbox" id="optVoice" class="check">
+      </div>
+      <div class="row" id="rowVStyle">
+        <label for="optVStyle">Voix<br><small id="voiceHelpRow">Robotique ? <button id="voiceHelp" class="linkbtn">une voix plus naturelle</button></small><small id="voiceCredit">Voix UPMC, licence <a href="voice/LICENSE.txt" target="_blank" rel="noopener">CC BY-SA</a></small></label>
+        <select id="optVStyle"><option value="system">Voix du téléphone</option><option value="pisteo">Jessica (enregistrée)</option></select>
+      </div>
+      <div class="row">
+        <label for="optVib">Vibrations<br><small>Virages, sortie de trace</small></label>
+        <input type="checkbox" id="optVib" class="check">
+      </div>
+    </div>
+
+    <h3 class="set-h">Affichage</h3>
+    <div class="set-group">
+      <div class="row">
+        <label for="optTheme">Thème</label>
+        <select id="optTheme"><option value="auto">Automatique</option><option value="light">Clair</option><option value="dark">Sombre</option></select>
+      </div>
+      <div class="row">
+        <label for="optLang">Langue<br><small>Language · Idioma</small></label>
+        <select id="optLang"><option value="">Automatique · Auto</option><option value="fr">Français</option><option value="en">English</option><option value="es">Español</option></select>
+      </div>
+      <div class="row">
+        <label for="optUnits">Unités</label>
+        <select id="optUnits"><option value="">Automatique</option><option value="metric">Kilomètres, mètres</option><option value="imperial">Miles, pieds</option></select>
+      </div>
+    </div>
+    <p class="note version-line"><span id="note"></span> · <button id="btnRepair" class="linkbtn" title="Recharge l'appli sans toucher à tes traces ni à tes cartes">Réparer l'appli</button> · <a href="confidentialite.html" target="_blank" rel="noopener" class="linkbtn">Confidentialité</a></p>
+  </div>
+</section>
+
+<div id="lib" class="lib" hidden>
+  <div class="lib-panel" role="dialog" aria-label="Mes traces">
+    <div class="lib-head">
+      <b id="libTitle">Mes traces</b>
+      <button id="libClose" class="closebtn" aria-label="Fermer"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></svg>Fermer</button>
+    </div>
+    <button id="libBrowse" class="btn go">Chercher un fichier GPX…</button>
+    <ul id="libList" class="lib-list"></ul>
+    <p id="libEmpty" class="note" hidden>Les traces que tu ouvres ou enregistres apparaîtront ici.</p>
+    <p id="libTip" class="note">Pour créer un parcours (boucle, tracé point par point, parcours balisés) : bouton « Naviguer » quand aucune trace n'est ouverte, ou « ＋ Autre trajet ». Astuce : dans ton gestionnaire de fichiers ou un mail, fais « Partager » sur un GPX puis choisis Pisteo.</p>
+  </div>
+</div>
+
+<div id="sorties" class="lib" hidden>
+  <div class="lib-panel tall" role="dialog" aria-label="Mes sorties">
+    <div id="soList">
+      <div class="lib-head">
+        <b>Mes sorties</b>
+        <button id="soClose" class="closebtn" aria-label="Fermer"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></svg>Fermer</button>
+      </div>
+      <p id="soSum" class="lib-sum" hidden></p>
+      <ul id="soItems" class="lib-list"></ul>
+      <p id="soEmpty" class="note" hidden>Tes sorties enregistrées apparaîtront ici. En navigation, touche ● pour enregistrer, puis « Terminer » et « Garder ».</p>
+    </div>
+    <div id="soDetail" hidden>
+      <div class="lib-head">
+        <button id="soBack" class="closebtn" aria-label="Retour à la liste"><svg viewBox="0 0 24 24"><path d="M15 5 8 12l7 7"/></svg>Mes sorties</button>
+        <button id="soClose2" class="closebtn" aria-label="Fermer"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></svg>Fermer</button>
+      </div>
+      <div class="so-title"><b id="sdName"></b><span id="sdDate"></span><button id="sdMode" class="chip so-chip"></button></div>
+      <div class="so-mapbox"><canvas id="sdMap" class="so-map" aria-label="Carte de la sortie"></canvas><button id="sdLayer" class="chip so-layer" aria-label="Changer le fond de carte"></button></div>
+      <div class="np-grid so-grid">
+        <div><span>Distance</span><b id="sdDist">–</b></div>
+        <div><span>En mouvement</span><b id="sdMove">–</b></div>
+        <div><span>Vitesse moy.</span><b id="sdAvg">–</b></div>
+        <div><span>D+</span><b id="sdUp">–</b></div>
+        <div><span>D−</span><b id="sdDown">–</b></div>
+        <div><span>Vitesse max</span><b id="sdMax">–</b></div>
+        <div><span>Durée totale</span><b id="sdTotal">–</b></div>
+        <div><span>Alt. min</span><b id="sdMin">–</b></div>
+        <div><span>Alt. max</span><b id="sdMaxE">–</b></div>
+      </div>
+      <canvas id="sdProfile" class="so-prof" aria-label="Profil altimétrique"></canvas>
+      <p id="sdGps" class="so-gps" hidden></p>
+      <div class="so-acts">
+        <button id="sdFollow" class="btn go">Refaire ce parcours</button>
+        <button id="sdStrava" class="btn strava">Mettre sur Strava</button>
+        <p id="sdStvMsg" class="so-msg" hidden></p>
+        <button id="sdExport" class="btn">Exporter le GPX</button>
+        <button id="sdRename" class="btn ghost">Renommer</button>
+        <button id="sdDelete" class="btn ghost danger">Supprimer</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div id="picker" class="lib" hidden>
+  <div class="lib-panel pk-panel" role="dialog" aria-labelledby="pkTitle">
+    <div class="lib-head">
+      <b id="pkTitle"></b>
+      <button id="pkClose" class="closebtn" aria-label="Fermer"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></svg>Fermer</button>
+    </div>
+    <input id="pkSearch" class="search" type="search" placeholder="Rechercher…" hidden>
+    <div id="pkList" class="pk-list" role="listbox"></div>
+  </div>
+</div>
+
+<div id="watch" class="lib" hidden>
+  <div class="lib-panel" role="dialog" aria-label="Envoyer le parcours">
+    <div class="lib-head">
+      <b>Envoyer le parcours</b>
+      <button id="wtClose" class="closebtn" aria-label="Fermer"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></svg>Fermer</button>
+    </div>
+    <p id="wtName" class="lib-sum"></p>
+    <button id="wtLink" class="btn go">Partager un lien</button>
+    <p class="note wt-sub">Ton ami touche le lien et le parcours s'ouvre dans Pisteo, même sans l'appli installée.</p>
+    <button id="wtOpen" class="btn">Ouvrir dans l'appli de ma montre</button>
+    <button id="wtSave" class="btn">Enregistrer le fichier GPX</button>
+    <p id="wtMsg" class="fin-msg" role="status" hidden></p>
+    <details class="wt-help">
+      <summary>Comment faire avec ma montre ou mon compteur ?</summary>
+      <p><b>Garmin</b> : choisis « Connect » dans la liste. Le parcours arrive dans Garmin Connect › Entraînement et planification › Parcours : touche-le puis « Envoyer vers l'appareil ». Si rien n'apparaît, enregistre le fichier et importe-le depuis un ordinateur sur connect.garmin.com (Entraînement et planification › Parcours › Importer).</p>
+      <p><b>Wahoo</b> : choisis « Wahoo » et confirme l'import, puis Explore › My Routes › le parcours › Send to ELEMNT.</p>
+      <p><b>Suunto, Coros</b> : enregistre le fichier, puis dans l'appli de la montre : Carte ou Itinéraires › + › Importer un fichier GPX.</p>
+      <p><b>Autres</b> : « Ouvrir dans l'appli de ma montre » puis choisis l'appli de ton appareil ; sinon enregistre le fichier et importe-le depuis son appli.</p>
+    </details>
+  </div>
+</div>
+
+<div id="backup" class="lib" hidden>
+  <div class="lib-panel" role="dialog" aria-label="Sauvegarde">
+    <div class="lib-head">
+      <b>Sauvegarde</b>
+      <button id="bkClose" class="closebtn" aria-label="Fermer"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></svg>Fermer</button>
+    </div>
+    <p class="note">Tes sorties et traces restent sur ce téléphone. Pour ne rien perdre (changement de téléphone, appli désinstallée), garde de temps en temps une sauvegarde : dans ton Drive, par mail ou sur ton ordinateur.</p>
+    <p id="bkSum" class="lib-sum"></p>
+    <button id="bkSave" class="btn go">Créer une sauvegarde</button>
+    <button id="bkLoad" class="btn">Restaurer une sauvegarde</button>
+    <p id="bkMsg" class="fin-msg" role="status" hidden></p>
+    <p class="note">La restauration ajoute les sorties et traces du fichier à celles déjà présentes, sans rien effacer. Les cartes hors ligne ne sont pas copiées dans le fichier (trop lourdes), seulement leur liste : après une restauration, « Mes cartes » propose de toutes les retélécharger. La connexion Strava est à refaire.</p>
+    <input type="file" id="bkIn" accept=".json,application/json" hidden>
+  </div>
+</div>
+<div id="onb" class="onb" hidden role="dialog" aria-label="Bienvenue dans Pisteo">
+  <div class="onb-card">
+    <div class="onb-slides">
+      <section class="onb-s on">
+        <div class="onb-art"><img src="icon.svg" alt=""></div>
+        <h2>Bienvenue dans Pisteo</h2>
+        <p>Suis tes traces GPX à pied ou à vélo, guidé à la voix, même sans réseau. Gratuit, sans compte : tout reste sur ton téléphone.</p>
+      </section>
+      <section class="onb-s">
+        <div class="onb-art"><svg viewBox="0 0 24 24"><path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><path d="M14 3v6h6M9 15l2 2 4-4"/></svg></div>
+        <h2>1 · Ouvre ta trace</h2>
+        <p><b>Mes traces › Chercher un fichier GPX</b>, ou « Partager » un GPX reçu par mail ou WhatsApp vers Pisteo. Pas de trace ? <b>Naviguer</b> propose une boucle, les parcours balisés ou un lieu.</p>
+      </section>
+      <section class="onb-s">
+        <div class="onb-art"><svg viewBox="0 0 24 24"><path d="M12 3 19 21 12 17 5 21z"/></svg></div>
+        <h2>2 · Laisse-toi guider</h2>
+        <p>Touche <b>Naviguer</b> : la carte suit ton sens de marche et chaque virage est annoncé. Si tu sors de la trace, Pisteo te prévient et calcule le retour par les chemins. Touche <b>●</b> pour enregistrer ta sortie.</p>
+      </section>
+      <section class="onb-s">
+        <div class="onb-art"><svg viewBox="0 0 24 24"><path d="M3 6l6-3 6 3 6-3v15l-6 3-6-3-6 3z"/><path d="M9 3v15M15 6v15"/></svg></div>
+        <h2>3 · Pense au hors ligne</h2>
+        <p>En montagne, le réseau manque souvent. Avant de partir : <b>Réglages › Mes cartes</b>, pour télécharger la carte le long de ta trace ou d'un département, avec les chemins.</p>
+      </section>
+    </div>
+    <div class="onb-dots"><i class="on"></i><i></i><i></i><i></i></div>
+    <div class="onb-acts"><button id="onbSkip" class="btn ghost">Passer</button><button id="onbNext" class="btn go">Suivant</button></div>
+  </div>
+</div>
+<div id="voiceInfo" class="lib" hidden>
+  <div class="lib-panel" role="dialog" aria-label="Une voix plus naturelle">
+    <div class="lib-head">
+      <b>Une voix plus naturelle</b>
+      <button id="viClose" class="closebtn" aria-label="Fermer"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></svg>Fermer</button>
+    </div>
+    <p class="note">Pisteo parle avec la voix de synthèse de ton téléphone. Android en propose souvent de bien plus naturelles que celle réglée par défaut, et elles marchent aussi sans réseau une fois téléchargées.</p>
+    <ol class="sm-steps">
+      <li>Ouvre les <b>Paramètres</b> du téléphone et cherche <b>« Synthèse vocale »</b> (ou Langue et saisie › Sortie de synthèse vocale).</li>
+      <li>Choisis le moteur <b>Google</b> (Services Google de reconnaissance vocale), plus naturel que celui du fabricant.</li>
+      <li>Touche ⚙️ à côté › <b>Installer les données vocales</b> › <b>Français (France)</b>.</li>
+      <li>Écoute les voix proposées et choisis celle qui te plaît, puis télécharge-la pour le hors ligne.</li>
+      <li>Reviens ici et touche <b>Écouter</b>.</li>
+    </ol>
+    <button id="viTest" class="btn go">Écouter</button>
+  </div>
+</div>
+<div id="feedback" class="lib" hidden>
+  <div class="lib-panel" role="dialog" aria-label="Donner mon avis">
+    <div class="lib-head">
+      <b>Mon avis</b>
+      <button id="fbClose" class="closebtn" aria-label="Fermer"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></svg>Fermer</button>
+    </div>
+    <div class="seg" id="fbKind"><button data-k="Problème" class="on">Un problème</button><button data-k="Idée">Une idée</button><button data-k="Avis">Un avis</button></div>
+    <textarea id="fbText" class="fb-text" rows="6" placeholder="Raconte ce qui s'est passé : ce que tu faisais, ce que tu attendais, ce que l'appli a fait…"></textarea>
+    <button id="fbSend" class="btn go">Envoyer par e-mail</button>
+    <p class="note">Ton appli de messagerie s'ouvre avec le message prêt. Il contient aussi la version de Pisteo et le modèle de ton téléphone, pour m'aider à reproduire le souci. Rien n'est envoyé sans ton accord.</p>
+  </div>
+</div>
+<div id="strava" class="lib" hidden>
+  <div class="lib-panel" role="dialog" aria-label="Strava">
+    <div class="lib-head">
+      <b>Envoyer mes sorties sur Strava</b>
+      <button id="stvClose" class="closebtn" aria-label="Fermer"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></svg>Fermer</button>
+    </div>
+    <div id="stvSetup">
+      <p class="note">Connecte ton compte Strava une fois : tes sorties pourront ensuite y être envoyées d'un toucher, ou automatiquement.</p>
+      <p id="stvNotReady" class="fin-msg" hidden>La connexion Strava n'est pas encore activée sur cette version de Pisteo.</p>
+    </div>
+    <button id="stvConnect" class="btn strava">Se connecter avec Strava</button>
+    <div id="stvOn" hidden>
+      <p class="lib-sum">Connecté : <b id="stvWho"></b></p>
+      <p id="stvBlockedMsg" class="fin-msg" hidden>Strava refuse l'envoi direct depuis Pisteo sans abonnement Strava. Pour publier une sortie : <b>Mes sorties</b> → la sortie → <b>Mettre sur Strava</b> (import en 3 touchers).</p>
+      <div class="row">
+        <label for="stvAuto"><span id="stvAutoL">Envoyer automatiquement chaque sortie gardée</span><br><small id="stvAutoS">Sinon : bouton « Mettre sur Strava » dans la fiche de la sortie</small></label>
+        <input type="checkbox" id="stvAuto" class="check">
+      </div>
+      <button id="stvRetryBtn" class="btn ghost" hidden>J'ai pris un abonnement : réessayer l'envoi direct</button>
+      <button id="stvOff" class="btn ghost danger">Se déconnecter de Strava</button>
+    </div>
+  </div>
+</div>
+
+<div id="stvMan" class="lib" hidden>
+  <div class="lib-panel" role="dialog" aria-label="Mettre la sortie sur Strava">
+    <div class="lib-head">
+      <b>Mettre sur Strava</b>
+      <button id="smClose" class="closebtn" aria-label="Fermer"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></svg>Fermer</button>
+    </div>
+    <p class="note" id="smWhy">Strava ne permet plus l'envoi direct depuis Pisteo sans abonnement. On passe par son import, en 3 touchers :</p>
+    <ol class="sm-steps">
+      <li><span><b>Enregistre le fichier</b> sur ton téléphone.</span>
+        <button id="smSave" class="btn go">1 · Enregistrer le GPX</button>
+        <small id="smSaved" hidden>✓ Enregistré dans <b>Téléchargements</b> : <code id="smFile"></code></small></li>
+      <li><span><b>Ouvre l'import Strava</b>, touche « Choisir des fichiers », va dans Téléchargements et choisis le fichier.</span>
+        <button id="smOpen" class="btn strava">2 · Ouvrir l'import Strava</button>
+        <small>Si la page s'affiche mal ou renvoie vers l'appli Strava : menu ⋮ de Chrome → coche « Version pour ordinateur ».</small></li>
+      <li><span><b>Valide sur Strava</b> (« Enregistrer et afficher »), puis reviens ici.</span>
+        <button id="smDone" class="btn ghost">3 · C'est fait, elle est sur Strava</button></li>
+    </ol>
+  </div>
+</div>
+
+<div id="loop" class="lib" hidden>
+  <div class="lib-panel" role="dialog" aria-label="Proposer une boucle">
+    <div class="lib-head">
+      <b>Proposer une boucle</b>
+      <button id="loopClose" class="closebtn" aria-label="Fermer"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></svg>Fermer</button>
+    </div>
+    <div class="lp-block">
+      <span class="lp-l">Départ</span>
+      <div class="seg"><button id="lpFromMe" class="on">Ma position</button><button id="lpFromMap">Un point sur la carte</button></div>
+      <small id="lpFromTxt" class="lp-small"></small>
+    </div>
+    <div class="lp-block">
+      <span class="lp-l">Je me déplace</span>
+      <div class="seg"><button id="lpFoot">À pied</button><button id="lpBike">À vélo</button></div>
+    </div>
+    <div class="lp-block">
+      <span class="lp-l">Je veux faire</span>
+      <div class="seg"><button id="lpByKm" class="on">Une distance</button><button id="lpByTime">Une durée</button></div>
+      <div class="lp-val"><input id="lpVal" class="search" type="number" inputmode="decimal" min="1" step="any"><span id="lpUnit">km</span></div>
+      <div id="lpQuick" class="lp-quick"></div>
+    </div>
+    <button id="lpGo" class="btn go">Proposer un itinéraire</button>
+    <p class="note">La boucle part et revient au même endroit, sur les routes et chemins adaptés (BRouter · OpenStreetMap). Chaque proposition prend une direction différente.</p>
+  </div>
+</div>
+
+<div id="loopBar" class="loop-bar" hidden>
+  <div class="lb-info"><b id="lbTitle"></b><span id="lbSub"></span></div>
+  <div class="lb-acts">
+    <button id="lbAgain" class="btn small">⟳ Autre</button>
+    <button id="lbEdit" class="btn small">Modifier</button>
+    <button id="lbKeep" class="btn small">Garder</button>
+    <button id="lbGo" class="btn small go">Naviguer</button>
+  </div>
+</div>
+
+<div id="routes" class="lib rt-sheet" hidden>
+  <div id="rtPanel" class="lib-panel tall" role="dialog" aria-label="Parcours balisés">
+    <div id="rtGrab" class="rt-grab">
+      <div class="rt-handle"></div>
+      <div class="lib-head">
+        <b>Parcours balisés</b>
+        <button id="rtToggle" class="rt-toggle">Liste ▴</button>
+        <button id="rtClose" class="closebtn" aria-label="Fermer"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></svg>Fermer</button>
+      </div>
+      <div class="rt-bar"><input id="rtQ" class="search rt-q" type="search" placeholder="Chercher un lieu…" autocomplete="off" enterkeyhint="search"><div class="seg rt-mode"><button id="rtFoot">À pied</button><button id="rtBike">À vélo</button></div></div>
+      <ul id="rtQList" class="lib-list rt-qlist" hidden></ul>
+      <p id="rtStatus" class="note"></p>
+      <div id="rtPick" class="rt-pick" hidden>
+        <div class="rt-card-h"><b>Plusieurs parcours passent ici : lequel ?</b><button id="rtPickClose" class="rt-x" aria-label="Fermer">✕</button></div>
+        <div id="rtPickList" class="rt-pick-list"></div>
+      </div>
+      <div id="rtPrev" class="rt-prev" hidden>
+        <div class="rt-card-h"><span id="rtpDot" class="rt-dot"></span><div class="rt-prev-t"><b id="rtpTitle"></b><span id="rtpSub"></span></div><button id="rtpClose" class="rt-x" aria-label="Fermer l'aperçu">✕</button></div>
+        <canvas id="rtpProf" class="rt-prof"></canvas>
+        <div class="rt-prev-acts"><button id="rtpKeep" class="btn small">Garder</button><button id="rtpGo" class="btn small go">Naviguer</button></div>
+      </div>
+    </div>
+    <button id="rtShowMap" class="btn go">Voir la carte ↓</button>
+    <div class="lp-block">
+      <span class="lp-l">Distance</span>
+      <div id="rtFiltD" class="lp-quick"></div>
+      <span class="lp-l">Dénivelé positif</span>
+      <div id="rtFiltU" class="lp-quick"></div>
+    </div>
+    <ul id="rtList" class="lib-list"></ul>
+    <p class="note">Sentiers et véloroutes balisés recensés par OpenStreetMap (GR, PR, EuroVelo, véloroutes, VTT). Pour les grands itinéraires, seule la portion autour du point choisi est chargée. Données © contributeurs OpenStreetMap, altitudes IGN.</p>
+  </div>
+</div>
+
+
+<div id="rtMapBar" class="loop-bar" hidden>
+  <div class="lb-info"><b id="rtmTitle">Parcours balisés</b><span id="rtmSub">Touche une ligne de couleur pour ouvrir le parcours.</span></div>
+  <div class="lb-acts">
+    <button id="rtmList" class="btn small">Liste et filtres</button>
+    <button id="rtmMode" class="btn small"></button>
+    <button id="rtmHide" class="btn small">Masquer</button>
+  </div>
+</div>
+
+<div id="rtBar" class="loop-bar" hidden>
+  <div class="lb-info"><b id="rtbTitle"></b><span id="rtbSub"></span></div>
+  <div class="lb-acts">
+    <button id="rtbBack" class="btn small">↩ Autres parcours</button>
+    <button id="rtbKeep" class="btn small">Garder</button>
+    <button id="rtbGo" class="btn small go">Naviguer</button>
+  </div>
+</div>
+
+<div id="ecoInfo" class="lib" hidden>
+  <div class="lib-panel" role="dialog" aria-label="Économie de batterie">
+    <div class="lib-head">
+      <b>Économie de batterie</b>
+      <button id="eiClose" class="closebtn" aria-label="Fermer"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></svg>Fermer</button>
+    </div>
+    <p class="note">L'écran est ce qui consomme le plus. En navigation, l'appli affiche donc un <b>écran noir</b> entre les virages : sur la plupart des téléphones, un pixel noir est éteint et ne consomme presque rien.</p>
+    <ul class="ei-list">
+      <li><b>Entre les virages</b> : écran noir avec seulement la consigne (« ↑ 2,4 km · Continuez sur la trace »), la distance restante et l'heure d'arrivée.</li>
+      <li><b>La carte revient toute seule</b> environ 200 m avant chaque virage, si tu sors de la trace, pendant un calcul de retour et à l'arrivée.</li>
+      <li><b>Touche l'écran noir</b> pour voir la carte 15 secondes.</li>
+      <li><b>La voix et les vibrations</b> continuent de te guider normalement.</li>
+      <li><b>Carte allégée</b> : à plat (sans 3D), thème sombre, recentrée toutes les 3 s loin des virages.</li>
+      <li><b>L'enregistrement</b> de ta sortie n'est pas affecté.</li>
+    </ul>
+    <p class="note">À activer ou couper à tout moment avec le bouton pile 🔋 à droite de la carte en navigation.</p>
+    <div class="ei-acts">
+      <button id="eiOff" class="btn ghost">Ne pas activer</button>
+      <button id="eiOn" class="btn go">Activer</button>
+    </div>
+  </div>
+</div>
+
+<div id="maps" class="lib" hidden>
+  <div class="lib-panel" role="dialog" aria-label="Cartes hors ligne">
+    <div class="lib-head">
+      <b>Cartes hors ligne</b>
+      <button id="mapsClose" class="closebtn" aria-label="Fermer"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></svg>Fermer</button>
+    </div>
+    <div id="packRestore" class="fin-msg" hidden>
+      <span id="packRestoreTxt"></span>
+      <button id="packRestoreBtn" class="btn go">Tout retélécharger</button>
+    </div>
+
+    <div class="dl-box">
+      <div class="dl-title">Le long de la trace ouverte</div>
+      <small class="note">Carte + réseau des chemins : itinéraire de retour calculé même sans connexion.</small>
+      <div class="dl-row"><small id="dlTraceInfo"></small><button id="dlTrace" class="btn">Télécharger</button></div>
+    </div>
+    <div class="dl-box">
+      <div class="dl-title">Un département ou une région</div>
+      <select id="depCountry" aria-label="Pays"></select>
+      <select id="depSel" aria-label="Département"><option>Chargement…</option></select>
+      <select id="depDetail" aria-label="Niveau de détail">
+        <option value="14">Standard (routes, chemins, relief)</option>
+        <option value="15">Détaillé (≈ 4× plus lourd)</option>
+      </select>
+      <label class="dl-check" for="depGraph"><input type="checkbox" id="depGraph" class="check"><span>Inclure les chemins pour les itinéraires hors connexion <small id="depGraphMo"></small></span></label>
+      <div class="dl-row"><small id="dlDepInfo"></small><button id="dlDep" class="btn">Télécharger</button></div>
+    </div>
+    <div class="dl-box">
+      <div class="dl-title">Une zone de la carte · partout dans le monde</div>
+      <small class="note">Cadre la zone voulue sur la carte, puis télécharge-la.</small>
+      <div class="row">
+        <label for="zoneProv">Carte</label>
+        <select id="zoneProv"><option value="auto">Automatique (carte officielle du pays, sinon Monde)</option><option value="ign">IGN (France)</option><option value="ofm">Monde (OpenFreeMap)</option></select>
+      </div>
+      <label class="dl-check" for="zoneGraph"><input type="checkbox" id="zoneGraph" class="check"><span>Inclure les chemins pour les itinéraires hors connexion</span></label>
+      <button id="zoneStart" class="btn">Choisir la zone sur la carte</button>
+    </div>
+    <div class="progress" id="offProg" hidden><div id="offBar"></div><span id="offTxt"></span></div>
+    <button id="dlStop" class="btn ghost" hidden>Arrêter le téléchargement</button>
+
+    <div class="dl-title">Téléchargées</div>
+    <ul id="packList" class="lib-list"></ul>
+    <p id="packEmpty" class="note">Aucune carte téléchargée pour l'instant.</p>
+    <div class="row"><label for="showPacks">Montrer ces zones sur la carte</label><input type="checkbox" id="showPacks" class="check"></div>
+    <div class="row"><small id="storeInfo"></small><button id="btnClearTiles" class="btn ghost">Tout supprimer</button></div>
+    <p class="note">Cartes téléchargées : cartes officielles libres (IGN en France, IGN España, basemap.at, IGN Belgique, Toporama au Canada, USGS aux États-Unis) ou carte Monde ailleurs. Sans réseau, l'appli passe toute seule sur ces cartes. Garde l'écran allumé pendant un téléchargement.</p>
+  </div>
+</div>
+
+<div id="finish" class="lib" hidden>
+  <div class="lib-panel" role="dialog" aria-label="Terminer la sortie">
+    <div class="lib-head"><b>Terminer la sortie ?</b></div>
+    <div class="note" id="finTitle"></div>
+    <div class="np-grid fin-grid">
+      <div><span>Distance</span><b id="finDist">–</b></div>
+      <div><span>Temps (hors pauses)</span><b id="finTime">–</b></div>
+      <div><span>Vitesse moy.</span><b id="finAvg">–</b></div>
+      <div><span>D+</span><b id="finUp">–</b></div>
+    </div>
+    <p id="finMsg" class="fin-msg" hidden></p>
+    <button id="finSave" class="btn go">Terminer et garder dans Mes sorties</button>
+    <button id="finExport" class="btn">Exporter le GPX</button>
+    <button id="finContinue" class="btn ghost">Continuer la sortie</button>
+    <button id="finDelete" class="btn ghost danger">Supprimer cette sortie</button>
+  </div>
+</div>
+
+<div id="dest" class="lib" hidden>
+  <div class="lib-panel" role="dialog" aria-label="Où aller ?">
+    <div class="lib-head">
+      <b>Où aller ?</b>
+      <button id="destClose" class="closebtn" aria-label="Fermer"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></svg>Fermer</button>
+    </div>
+    <input id="destQ" class="search" type="search" placeholder="Adresse, lieu, piscine…" autocomplete="off" enterkeyhint="search">
+    <ul id="destList" class="lib-list"></ul>
+    <div class="dest-btns">
+      <button id="destPick" class="btn">Choisir sur la carte</button>
+      <button id="destFree" class="btn">Balade libre</button>
+      <button id="destLoop" class="btn go wide2">⟳ Proposer une boucle</button>
+      <button id="destPlan" class="btn wide2">✎ Tracer un itinéraire point par point</button>
+      <button id="destRoutes" class="btn wide2">⚑ Parcours balisés</button>
+    </div>
+    <div class="row">
+      <label for="destProf">Je me déplace</label>
+      <select id="destProf"><option value="hiking-mountain">À pied</option><option value="trekking">À vélo</option></select>
+    </div>
+    <p class="note">Balade libre : la carte te suit, sans trace à suivre. Sans réseau, la recherche trouve les communes des départements téléchargés. Astuce : un appui long sur la carte propose d'y aller. Itinéraires BRouter (OpenStreetMap), adresses IGN.</p>
+  </div>
+</div>
+
+<div id="pickBanner" class="pausepill pick" hidden>
+  <span id="pickTxt">Touche la carte à l'endroit où tu veux aller</span>
+  <button id="pickCancel" class="btn small">Annuler</button>
+</div>
+
+<div id="zoneFrame" class="zone-frame" aria-hidden="true"></div>
+<div id="planBar" class="plan-bar">
+  <div class="pb-info"><b id="pbStats">Touche la carte pour placer le départ</b><span id="pbHint">Chaque toucher ajoute un point · l'itinéraire suit les chemins</span></div>
+  <div class="pb-right">
+    <div class="seg pb-seg"><button id="pbFoot">À pied</button><button id="pbBike">À vélo</button></div>
+    <button id="pbClose" class="btn small">Quitter</button>
+  </div>
+</div>
+<div id="planTools" class="plan-tools">
+  <button id="ptUndo" class="pt"><svg viewBox="0 0 24 24"><path d="M9 14 4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11"/></svg>Annuler</button>
+  <button id="ptMode" class="pt"><svg viewBox="0 0 24 24"><path d="M4 19c4-1 3-7 8-8s4-6 8-7"/></svg><span id="ptModeL">Chemins</span></button>
+  <button id="ptLoop" class="pt"><svg viewBox="0 0 24 24"><path d="M20 12a8 8 0 1 1-3-6.2"/><path d="M17 2v4h4"/></svg><span id="ptLoopL">Boucler</span></button>
+  <button id="ptClear" class="pt"><svg viewBox="0 0 24 24"><path d="M5 7h14M10 7V4h4v3M7 7l1 13h8l1-13"/></svg>Effacer</button>
+  <button id="ptView" class="pt" hidden><svg viewBox="0 0 24 24"><path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12Z"/><circle cx="12" cy="12" r="3"/></svg>Aperçu</button>
+  <button id="ptDone" class="pt go"><svg viewBox="0 0 24 24"><path d="m5 12 5 5 9-10"/></svg><span id="ptDoneL">Enregistrer</span></button>
+</div>
+
+<div id="zoneBar" class="zone-bar">
+  <div><b>Zone à télécharger</b><span id="zoneInfo">…</span></div>
+  <div class="zone-btns"><button id="zoneCancel" class="btn small">Annuler</button><button id="zoneGo" class="btn small go">Télécharger</button></div>
+</div>
+
+<div id="ecoBlack" hidden>
+  <div class="eb-main"><div id="ebIcon" class="eb-icon"></div><div><div id="ebDist" class="eb-dist"></div><div id="ebTxt" class="eb-txt"></div></div></div>
+  <div id="ebRem" class="eb-rem"></div>
+  <div class="eb-hint">Écran noir pour économiser la batterie · touche pour voir la carte</div>
+</div>
+<div id="toast" class="toast" hidden></div>
+
+<script src="vendor/maplibre-gl.js"></script>
+<script src="i18n/en.js?v=172"></script>
+<script src="i18n/es.js?v=172"></script>
+<script src="app.js?v=172"></script>
+</body>
+</html>

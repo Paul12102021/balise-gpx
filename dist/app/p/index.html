@@ -1,0 +1,13 @@
+<!doctype html>
+<html lang="fr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Parcours Pisteo</title>
+<meta name="robots" content="noindex">
+<style>body{margin:0;min-height:100vh;display:grid;place-items:center;font:16px system-ui,sans-serif;background:#EEF1E8;color:#17201c;padding:16px;box-sizing:border-box;text-align:center}a{color:#2F5E45;font-weight:600}</style>
+</head><body>
+<p>Ouverture du parcours dans Pisteo… <a id="go" href="../">continuer</a></p>
+<script>
+// lien de parcours partagé : le parcours est dans la fin du lien (après « # »), jamais envoyé au site.
+// Avec l'appli Android installée, ce lien l'ouvre directement ; sinon on affiche le parcours dans Pisteo sur le site.
+var u = '../' + location.hash; document.getElementById('go').href = u; location.replace(u);
+</script>
+</body></html>

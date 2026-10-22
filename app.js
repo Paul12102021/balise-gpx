@@ -2070,12 +2070,16 @@ function refreshColors() {
     if (map.getLayer('bg')) map.setPaintProperty('bg', 'background-color', cssVar('--mapbg'));
     if (map.getLayer('rec')) map.setPaintProperty('rec', 'line-color', COL.rec);
     if (map.getLayer('rejoin')) map.setPaintProperty('rejoin', 'line-color', COL.me);
+    // plein soleil : trace plus épaisse, pour la voir malgré les reflets
+    const sun = document.documentElement.dataset.theme === 'sun', lw = (x, y) => ['interpolate', ['linear'], ['zoom'], 10, x, 18, y];
+    if (map.getLayer('track')) map.setPaintProperty('track', 'line-width', sun ? lw(5, 13) : lw(3, 9));
+    if (map.getLayer('track-casing')) map.setPaintProperty('track-casing', 'line-width', sun ? lw(8, 19) : lw(5, 14));
     setDone(lastFrac < 0 ? 0 : lastFrac, true);
   });
   drawProfile(); navMoreT = 0; updateNavMore();
 }
 function applyTheme(t) {
-  if (t === 'light' || t === 'dark') document.documentElement.dataset.theme = t;
+  if (t === 'light' || t === 'dark' || t === 'sun') document.documentElement.dataset.theme = t;
   else delete document.documentElement.dataset.theme;
   refreshColors();
 }
@@ -2090,6 +2094,7 @@ if (IMP) { // libellés en pieds / mph
 }
 $('optTheme').onchange = e => { store.set('theme', e.target.value); applyTheme(e.target.value); };
 try { matchMedia('(prefers-color-scheme: dark)').addEventListener('change', refreshColors); } catch {}
+if (document.documentElement.dataset.theme === 'sun') refreshColors(); // trace épaisse dès l'ouverture
 $('autoRec').checked = store.get('autoRec') === '1';
 $('autoRec').onchange = e => store.set('autoRec', e.target.checked ? '1' : '0');
 function setProfile(p, quiet) {
