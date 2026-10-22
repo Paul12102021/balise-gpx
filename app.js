@@ -5,7 +5,7 @@
 
 // La page et le code doivent être de la même version. Sinon (page gardée en cache
 // par le téléphone ou par GitHub), on recharge une page fraîche, au plus 3 fois.
-const APP_VERSION = 176;
+const APP_VERSION = 177;
 try {
   const meta = document.querySelector('meta[name="balise-version"]');
   const pageV = meta ? +meta.content : 0;
@@ -330,13 +330,17 @@ const NAT = {
   be: { name: 'IGN Belgique', max: 17, kb: 17, attr: '© <a href="https://www.ngi.be">IGN-NGI</a> · CartoWeb',
     url: 'https://cartoweb.wmts.ngi.be/1.0.0/topo/default/3857/{z}/{y}/{x}.png' },
   // Toporama : carte topo officielle canadienne, servie image par image (WMS), libellés en français ou en anglais
-  ca: { name: 'Toporama', max: 16, kb: 10, zoff: -1, par: 6, // serveur lent : un niveau de détail de moins au téléchargement attr: '© <a href="https://natural-resources.canada.ca">Ressources naturelles Canada</a> · Toporama',
+  // serveur lent : un niveau de détail de moins au téléchargement
+  ca: { name: 'Toporama', max: 16, kb: 10, zoff: -1, par: 6, attr: '© <a href="https://natural-resources.canada.ca">Ressources naturelles Canada</a> · Toporama',
     url: `https://maps.geogratis.gc.ca/wms/toporama_${LANG === 'fr' ? 'fr' : 'en'}?SERVICE=WMS&VERSION=1.3.0&REQUEST=GetMap&LAYERS=${LANG === 'fr' ? 'SCW' : 'WMS'}-Toporama&STYLES=&CRS=EPSG:3857&BBOX={bbox-epsg-3857}&WIDTH=256&HEIGHT=256&FORMAT=image/jpeg` },
   us: { name: 'USGS Topo', max: 16, kb: 22, attr: '<a href="https://www.usgs.gov/programs/national-geospatial-program/national-map">USGS The National Map</a>',
     url: 'https://basemap.nationalmap.gov/arcgis/rest/services/USGSTopo/MapServer/tile/{z}/{y}/{x}' },
   // swisstopo : carte nationale suisse (données ouvertes, usage libre avec la mention « © swisstopo »)
   ch: { name: 'swisstopo', max: 18, kb: 35, par: 4, attr: '© <a href="https://www.swisstopo.admin.ch">swisstopo</a>',
     url: 'https://wmts.geo.admin.ch/1.0.0/ch.swisstopo.pixelkarte-farbe/default/current/3857/{z}/{x}/{y}.jpeg' },
+  // TopPlusOpen (BKG) : carte topo officielle allemande, libre (dl-de/by-2-0), détaillée jusqu'au niveau 18 en Allemagne
+  de: { name: 'TopPlusOpen', max: 18, kb: 30, par: 4, attr: 'Kartendarstellung © <a href="https://www.bkg.bund.de">BKG</a> (2026) <a href="https://www.govdata.de/dl-de/by-2-0">dl-de/by-2-0</a> · <a href="https://sgx.geodatenzentrum.de/web_public/gdz/datenquellen/datenquellen_topplusopen.html">Datenquellen</a>',
+    url: 'https://sgx.geodatenzentrum.de/wmts_topplus_open/tile/1.0.0/web/default/WEBMERCATOR/{z}/{y}/{x}.png' },
 };
 let natCur = NAT[store.get('natCur')] ? store.get('natCur') : 'ign', natShapes = null; // dernier pays affiché : bon fond dès l'ouverture
 const natAt = (lon, lat) => { if (!natShapes) return null; for (const k in natShapes) if (inPolys(lon, lat, natShapes[k])) return k; return null; };
@@ -4575,6 +4579,7 @@ function polyTiles(polys, zmax) {
 // pour ajouter un pays : sa carte dans NAT, ses régions (code, nom, names, polys) dans regions/<pays>.json
 const COUNTRIES = [
   { id: 'fr', nat: 'ign', name: 'France', file: 'departements.json' },
+  { id: 'de', nat: 'de', name: 'Allemagne', file: 'regions/de.json' }, // Länder
   { id: 'es', nat: 'es', name: 'Espagne', file: 'regions/es.json' },
   { id: 'at', nat: 'at', name: 'Autriche', file: 'regions/at.json' },
   { id: 'be', nat: 'be', name: 'Belgique', file: 'regions/be.json' },
