@@ -5,7 +5,7 @@
 
 // La page et le code doivent être de la même version. Sinon (page gardée en cache
 // par le téléphone ou par GitHub), on recharge une page fraîche, au plus 3 fois.
-const APP_VERSION = 175;
+const APP_VERSION = 176;
 try {
   const meta = document.querySelector('meta[name="balise-version"]');
   const pageV = meta ? +meta.content : 0;
@@ -1143,13 +1143,18 @@ function saveFile(text, fname) {
   const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([text], { type: 'application/gpx+xml' })); a.download = fname;
   document.body.appendChild(a); a.click(); setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 1500);
 }
+// un seul bouton : enregistre le GPX et ouvre l'import Strava ; au retour dans Pisteo, on demande si c'est publié
+let smAway = false;
 function openStvManual(it, why) {
   const d = new Date(it.start || it.date), pad = n => String(n).padStart(2, '0');
   const fname = `pisteo-${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}-${pad(d.getHours())}h${pad(d.getMinutes())}.gpx`;
-  $('smWhy').textContent = why || 'Strava ne permet plus l\'envoi direct depuis Pisteo sans abonnement. On passe par son import, en 3 touchers :';
-  $('smSaved').hidden = true; $('smFile').textContent = fname;
-  $('smSave').onclick = () => { const got = saveFile(gpxForStrava(it), fname); $('smFile').textContent = got || fname; $('smSaved').hidden = false; };
-  $('smOpen').onclick = () => window.open('https://www.strava.com/upload/select', '_blank');
+  const strava = () => { smAway = true; window.open('https://www.strava.com/upload/select', '_blank'); };
+  $('smWhy').textContent = why || 'Strava bloque l\'envoi direct sans abonnement : on passe par sa page d\'import.';
+  $('smFile').textContent = $('smFile2').textContent = fname;
+  $('smGo').hidden = false; $('smBack').hidden = true; smAway = false;
+  $('smOpen').onclick = () => { const got = saveFile(gpxForStrava(it), fname); if (got) $('smFile').textContent = $('smFile2').textContent = got; strava(); };
+  $('smAgain').onclick = strava;
+  $('smLater').onclick = () => { $('stvMan').hidden = true; };
   $('smDone').onclick = async () => {
     it.stravaManual = Date.now(); delete it.stvPending;
     await idb('readwrite', st => st.put(it)).catch(() => {});
@@ -1158,6 +1163,10 @@ function openStvManual(it, why) {
   };
   $('stvMan').hidden = false;
 }
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState !== 'visible' || !smAway || $('stvMan').hidden) return;
+  smAway = false; $('smGo').hidden = true; $('smBack').hidden = false;
+});
 $('smClose').onclick = () => { $('stvMan').hidden = true; };
 $('stvMan').onclick = e => { if (e.target === $('stvMan')) $('stvMan').hidden = true; };
 // Strava a refusé l'appli (pas d'abonnement) : on retient pour une semaine et on passe à l'import manuel

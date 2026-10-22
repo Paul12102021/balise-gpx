@@ -9,13 +9,13 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<meta name="balise-version" content="175">
+<meta name="balise-version" content="176">
 <title>Pisteo</title>
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" href="icon.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
 <link rel="stylesheet" href="vendor/maplibre-gl.css">
-<link rel="stylesheet" href="app.css?v=175">
+<link rel="stylesheet" href="app.css?v=176">
 </head>
 <body>
 <div id="map" aria-label="Carte"></div>
@@ -410,7 +410,7 @@
     <button id="stvConnect" class="btn strava">Se connecter avec Strava</button>
     <div id="stvOn" hidden>
       <p class="lib-sum">Connecté : <b id="stvWho"></b></p>
-      <p id="stvBlockedMsg" class="fin-msg" hidden>Strava refuse l'envoi direct depuis Pisteo sans abonnement Strava. Pour publier une sortie : <b>Mes sorties</b> → la sortie → <b>Mettre sur Strava</b> (import en 3 touchers).</p>
+      <p id="stvBlockedMsg" class="fin-msg" hidden>Strava refuse l'envoi direct depuis Pisteo sans abonnement Strava. Pour publier une sortie : <b>Mes sorties</b> → la sortie → <b>Mettre sur Strava</b> (import par le site Strava).</p>
       <div class="row">
         <label for="stvAuto"><span id="stvAutoL">Envoyer automatiquement chaque sortie gardée</span><br><small id="stvAutoS">Sinon : bouton « Mettre sur Strava » dans la fiche de la sortie</small></label>
         <input type="checkbox" id="stvAuto" class="check">
@@ -422,22 +422,32 @@
 </div>
 
 <div id="stvMan" class="lib" hidden>
-  <div class="lib-panel" role="dialog" aria-label="Mettre la sortie sur Strava">
+  <div class="lib-panel sm-panel" role="dialog" aria-label="Mettre la sortie sur Strava">
     <div class="lib-head">
       <b>Mettre sur Strava</b>
       <button id="smClose" class="closebtn" aria-label="Fermer"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></svg>Fermer</button>
     </div>
-    <p class="note" id="smWhy">Strava ne permet plus l'envoi direct depuis Pisteo sans abonnement. On passe par son import, en 3 touchers :</p>
-    <ol class="sm-steps">
-      <li><span><b>Enregistre le fichier</b> sur ton téléphone.</span>
-        <button id="smSave" class="btn go">1 · Enregistrer le GPX</button>
-        <small id="smSaved" hidden>✓ Enregistré dans <b>Téléchargements</b> : <code id="smFile"></code></small></li>
-      <li><span><b>Ouvre l'import Strava</b>, touche « Choisir des fichiers », va dans Téléchargements et choisis le fichier.</span>
-        <button id="smOpen" class="btn strava">2 · Ouvrir l'import Strava</button>
-        <small>Si la page s'affiche mal ou renvoie vers l'appli Strava : menu ⋮ de Chrome → coche « Version pour ordinateur ».</small></li>
-      <li><span><b>Valide sur Strava</b> (« Enregistrer et afficher »), puis reviens ici.</span>
-        <button id="smDone" class="btn ghost">3 · C'est fait, elle est sur Strava</button></li>
-    </ol>
+    <div id="smGo" class="sm-part">
+      <p class="note" id="smWhy">Strava bloque l'envoi direct sans abonnement : on passe par sa page d'import.</p>
+      <button id="smOpen" class="btn strava sm-big">Enregistrer et ouvrir Strava</button>
+      <div class="sm-box">
+        <b>Ensuite, sur la page Strava :</b>
+        <ol>
+          <li>Touche <b>« Sélect. fichiers »</b></li>
+          <li>Choisis <b>Fichiers</b> → <b>Téléchargements</b> <span class="sm-dim">(pas Photos)</span></li>
+          <li>Prends <code id="smFile"></code></li>
+          <li>Valide <b>« Enregistrer et afficher »</b></li>
+        </ol>
+      </div>
+      <small class="sm-dim">Page mal affichée ? Menu ⋮ de Chrome → « Version pour ordinateur ».</small>
+    </div>
+    <div id="smBack" class="sm-part" hidden>
+      <div class="sm-ask"><span class="sm-ico" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M9 14 4 9l5-5"/><path d="M4 9h10a6 6 0 0 1 0 12h-3"/></svg></span>
+        <div><b>De retour de Strava</b><br><span>La sortie est-elle en ligne ?</span></div></div>
+      <button id="smDone" class="btn go sm-big">Oui, elle est publiée</button>
+      <div class="sm-row"><button id="smLater" class="btn ghost">Pas encore</button><button id="smAgain" class="btn ghost">Rouvrir Strava</button></div>
+      <small class="sm-dim">Fichier dans Téléchargements :<br><code id="smFile2"></code></small>
+    </div>
   </div>
 </div>
 
@@ -678,8 +688,8 @@
 <div id="toast" class="toast" hidden></div>
 
 <script src="vendor/maplibre-gl.js"></script>
-<script src="i18n/en.js?v=175"></script>
-<script src="i18n/es.js?v=175"></script>
-<script src="app.js?v=175"></script>
+<script src="i18n/en.js?v=176"></script>
+<script src="i18n/es.js?v=176"></script>
+<script src="app.js?v=176"></script>
 </body>
 </html>
