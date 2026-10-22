@@ -610,3 +610,20 @@ body.choosing #sheet, body.choosing .fab-col { display: none !important; }
 .wt-help p { margin: 8px 0 0; }
 .wt-sub { margin: -6px 2px 4px; font-size: 13px; }
 .wt-help b { color: var(--ink); }
+
+/* listes de choix : une fenêtre du bas aux couleurs de l'appli (au lieu de la liste du téléphone) */
+select { pointer-events: none; }
+.pk-panel { max-height: 75vh; }
+.pk-list { display: flex; flex-direction: column; margin: 0 -4px; }
+.pk-opt { display: flex; align-items: center; gap: 12px; width: 100%; min-height: 52px; padding: 10px 12px; border: 0; border-radius: 12px; background: none; color: var(--ink); font: 500 16px var(--font); text-align: left; cursor: pointer; }
+.pk-opt + .pk-opt { margin-top: 2px; }
+.pk-opt:active { background: var(--line); }
+.pk-opt .pk-flag { font-size: 22px; line-height: 1; width: 28px; text-align: center; flex: none; }
+.pk-opt .pk-txt { flex: 1; min-width: 0; }
+.pk-opt .pk-check { flex: none; width: 22px; height: 22px; border-radius: 50%; border: 2px solid var(--line); display: grid; place-items: center; }
+.pk-opt.on { background: color-mix(in srgb, var(--go) 12%, transparent); color: var(--go-ink); font-weight: 650; }
+.pk-opt.on .pk-check { border-color: var(--go); background: var(--go); }
+.pk-opt.on .pk-check::after { content: ""; width: 10px; height: 6px; border: solid #fff; border-width: 0 0 2.4px 2.4px; transform: translateY(-1px) rotate(-45deg); }
+.pk-opt:disabled { opacity: .4; }
+.pk-group { font-size: 12px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); padding: 12px 12px 4px; }
+#picker { z-index: 45; }

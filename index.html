@@ -9,13 +9,13 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<meta name="balise-version" content="168">
+<meta name="balise-version" content="169">
 <title>Pisteo</title>
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" href="icon.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
 <link rel="stylesheet" href="vendor/maplibre-gl.css">
-<link rel="stylesheet" href="app.css?v=168">
+<link rel="stylesheet" href="app.css?v=169">
 </head>
 <body>
 <div id="map" aria-label="Carte"></div>
@@ -289,6 +289,17 @@
         <button id="sdDelete" class="btn ghost danger">Supprimer</button>
       </div>
     </div>
+  </div>
+</div>
+
+<div id="picker" class="lib" hidden>
+  <div class="lib-panel pk-panel" role="dialog" aria-labelledby="pkTitle">
+    <div class="lib-head">
+      <b id="pkTitle"></b>
+      <button id="pkClose" class="closebtn" aria-label="Fermer"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></svg>Fermer</button>
+    </div>
+    <input id="pkSearch" class="search" type="search" placeholder="Rechercher…" hidden>
+    <div id="pkList" class="pk-list" role="listbox"></div>
   </div>
 </div>
 
@@ -667,8 +678,8 @@
 <div id="toast" class="toast" hidden></div>
 
 <script src="vendor/maplibre-gl.js"></script>
-<script src="i18n/en.js?v=168"></script>
-<script src="i18n/es.js?v=168"></script>
-<script src="app.js?v=168"></script>
+<script src="i18n/en.js?v=169"></script>
+<script src="i18n/es.js?v=169"></script>
+<script src="app.js?v=169"></script>
 </body>
 </html>

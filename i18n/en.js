@@ -63,6 +63,8 @@ const exact = {
   'Navigation et enregistrement en cours': 'Navigation and recording in progress', 'Navigation en cours': 'Navigation in progress', 'Enregistrement de la sortie en cours': 'Recording your outing',
   "Envoyer le parcours": "Send the route", "Partager un lien": "Share a link", "Ton ami touche le lien et le parcours s'ouvre dans Pisteo, même sans l'appli installée.": "Your friend taps the link and the route opens in Pisteo, even without the app installed.", "Enregistrer le fichier GPX": "Save the GPX file", "Comment faire avec ma montre ou mon compteur ?": "How do I do it with my watch or bike computer?", "Lien copié : colle-le dans un message (WhatsApp, SMS, mail…).": "Link copied: paste it into a message (WhatsApp, SMS, email…).", "Lien de parcours illisible.": "Unreadable route link.", "Parcours partagé": "Shared route", "Envoyer le parcours (lien, montre, fichier GPX)": "Send the route (link, watch, GPX file)", "Envoyer": "Send",
   'Pisteo existe aussi en appli Android': 'Pisteo is also an Android app', 'Installer': 'Install',
+  'Choisir': 'Choose', 'Rechercher…': 'Search…',
+  'Région': 'Region',
   'Hors ligne': 'Offline', 'Sorties et traces': 'Outings and tracks', 'Navigation': 'Navigation', 'Voix et vibrations': 'Voice and vibration', 'Affichage': 'Display', 'Import manuel': 'Manual import', 'Envoi automatique': 'Auto upload',
   'Je me déplace': 'I travel', 'Pour les itinéraires et le temps estimé': 'For routes and estimated time', 'À pied': 'On foot', 'À vélo': 'By bike',
   'Cartes hors ligne': 'Offline maps', 'Trace, département ou zone': 'Track, French département or area', 'Mes cartes': 'My maps',

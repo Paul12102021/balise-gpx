@@ -5,7 +5,7 @@
 
 // La page et le code doivent être de la même version. Sinon (page gardée en cache
 // par le téléphone ou par GitHub), on recharge une page fraîche, au plus 3 fois.
-const APP_VERSION = 168;
+const APP_VERSION = 169;
 try {
   const meta = document.querySelector('meta[name="balise-version"]');
   const pageV = meta ? +meta.content : 0;
@@ -5553,6 +5553,58 @@ function attachSwipe(panel, motion) {
   };
   panel.addEventListener('touchend', end); panel.addEventListener('touchcancel', end);
 }
+// ---------- listes de choix (select) : fenêtre du bas aux couleurs de l'appli ----------
+// les <select> restent dans la page (valeur, événement « change ») mais ne s'ouvrent plus eux-mêmes :
+// un toucher sur l'un d'eux ouvre cette fenêtre (les selects sont rendus « transparents » au toucher en CSS)
+const FLAG = cc => /^[a-z]{2}$/.test(cc) ? String.fromCodePoint(...[...cc.toUpperCase()].map(ch => 0x1F1A5 + ch.charCodeAt(0))) : '';
+let pkSel = null;
+function pkLabel(sel) {
+  if (sel.id === 'depSel') return tr(regCc === 'fr' ? 'Département' : 'Région');
+  const l = sel.id && document.querySelector(`label[for="${sel.id}"]`);
+  const t = l ? (l.childNodes[0] && l.childNodes[0].textContent || l.textContent) : sel.getAttribute('aria-label') || sel.title || '';
+  return t.trim() || tr('Choisir');
+}
+function pkRender(q = '') {
+  const list = $('pkList'); list.innerHTML = '';
+  const norm = s => s.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
+  let lastGroup = null;
+  for (const o of pkSel.options) {
+    if (o.hidden || (q && !norm(o.textContent).includes(norm(q)))) continue;
+    const g = o.parentElement && o.parentElement.tagName === 'OPTGROUP' ? o.parentElement.label : null;
+    if (g && g !== lastGroup) { const h = document.createElement('div'); h.className = 'pk-group'; h.textContent = g; list.appendChild(h); lastGroup = g; }
+    const b = document.createElement('button'); b.className = 'pk-opt' + (o.selected ? ' on' : ''); b.disabled = o.disabled;
+    b.setAttribute('role', 'option'); b.setAttribute('aria-selected', o.selected ? 'true' : 'false');
+    const flag = pkSel.id === 'depCountry' ? FLAG(o.value) : '';
+    b.innerHTML = (flag ? '<span class="pk-flag"></span>' : '') + '<span class="pk-txt"></span><span class="pk-check"></span>';
+    if (flag) b.querySelector('.pk-flag').textContent = flag;
+    b.querySelector('.pk-txt').textContent = o.textContent;
+    b.onclick = () => {
+      const sel = pkSel; closePicker();
+      if (sel.value !== o.value) { sel.value = o.value; sel.dispatchEvent(new Event('input', { bubbles: true })); sel.dispatchEvent(new Event('change', { bubbles: true })); }
+    };
+    list.appendChild(b);
+  }
+}
+function openPicker(sel) {
+  pkSel = sel; $('pkTitle').textContent = pkLabel(sel);
+  const many = sel.options.length > 12; $('pkSearch').hidden = !many; $('pkSearch').value = '';
+  pkRender(); $('picker').hidden = false;
+  const on = $('pkList').querySelector('.on'); if (on) on.scrollIntoView({ block: 'center' });
+}
+function closePicker() { $('picker').hidden = true; pkSel = null; }
+$('pkClose').onclick = closePicker;
+$('picker').onclick = e => { if (e.target === $('picker')) closePicker(); };
+$('pkSearch').oninput = e => pkRender(e.target.value);
+// un toucher qui tombe sur une liste de choix visible (elle-même ne reçoit plus les touchers)
+document.addEventListener('click', e => {
+  if (!$('picker').hidden) return;
+  for (const sel of document.querySelectorAll('select')) {
+    if (sel.disabled || !sel.offsetParent) continue;
+    const r = sel.getBoundingClientRect();
+    if (e.clientX >= r.left && e.clientX <= r.right && e.clientY >= r.top && e.clientY <= r.bottom) { e.preventDefault(); e.stopPropagation(); openPicker(sel); return; }
+  }
+}, true);
+
 attachSwipe($('sheet'), moreMotion());
 
 // Fenêtres du bas (Mes cartes, Mes traces, Sauvegarde…) : glisser vers le bas pour fermer, quand la liste est tout en haut
