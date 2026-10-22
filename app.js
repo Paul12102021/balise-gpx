@@ -334,6 +334,9 @@ const NAT = {
     url: `https://maps.geogratis.gc.ca/wms/toporama_${LANG === 'fr' ? 'fr' : 'en'}?SERVICE=WMS&VERSION=1.3.0&REQUEST=GetMap&LAYERS=${LANG === 'fr' ? 'SCW' : 'WMS'}-Toporama&STYLES=&CRS=EPSG:3857&BBOX={bbox-epsg-3857}&WIDTH=256&HEIGHT=256&FORMAT=image/jpeg` },
   us: { name: 'USGS Topo', max: 16, kb: 22, attr: '<a href="https://www.usgs.gov/programs/national-geospatial-program/national-map">USGS The National Map</a>',
     url: 'https://basemap.nationalmap.gov/arcgis/rest/services/USGSTopo/MapServer/tile/{z}/{y}/{x}' },
+  // swisstopo : carte nationale suisse (données ouvertes, usage libre avec la mention « © swisstopo »)
+  ch: { name: 'swisstopo', max: 18, kb: 35, par: 4, attr: '© <a href="https://www.swisstopo.admin.ch">swisstopo</a>',
+    url: 'https://wmts.geo.admin.ch/1.0.0/ch.swisstopo.pixelkarte-farbe/default/current/3857/{z}/{x}/{y}.jpeg' },
 };
 let natCur = NAT[store.get('natCur')] ? store.get('natCur') : 'ign', natShapes = null; // dernier pays affiché : bon fond dès l'ouverture
 const natAt = (lon, lat) => { if (!natShapes) return null; for (const k in natShapes) if (inPolys(lon, lat, natShapes[k])) return k; return null; };
@@ -4566,6 +4569,7 @@ const COUNTRIES = [
   { id: 'at', nat: 'at', name: 'Autriche', file: 'regions/at.json' },
   { id: 'be', nat: 'be', name: 'Belgique', file: 'regions/be.json' },
   { id: 'ca', nat: 'ca', name: 'Canada', file: 'regions/ca.json' }, // parcs nationaux, comme aux États-Unis
+  { id: 'ch', nat: 'ch', name: 'Suisse', file: 'regions/ch.json' }, // cantons
   { id: 'us', nat: 'us', name: 'États-Unis', file: 'regions/us.json' }, // parcs nationaux : un État entier serait trop lourd
 ];
 const ccOf = id => COUNTRIES.find(c => c.id === id) || COUNTRIES[0];

@@ -25,6 +25,8 @@ function parseTile(url) {
     const b = url.searchParams.get('BBOX').split(',').map(Number), o = Math.PI * 6378137, s = b[2] - b[0];
     if (s > 0) return { prov: 'ca', z: Math.round(Math.log2(2 * o / s)), x: Math.round((b[0] + o) / s), y: Math.round((o - b[3]) / s) };
   }
+  if (url.hostname === 'wmts.geo.admin.ch' && (m = url.pathname.match(/^\/1\.0\.0\/ch\.swisstopo\.pixelkarte-farbe\/default\/current\/3857\/(\d+)\/(\d+)\/(\d+)\.jpeg$/)))
+    return { prov: 'ch', z: +m[1], x: +m[2], y: +m[3] };
   if (url.hostname === 'basemap.nationalmap.gov' && (m = url.pathname.match(/^\/arcgis\/rest\/services\/USGSTopo\/MapServer\/tile\/(\d+)\/(\d+)\/(\d+)$/)))
     return { prov: 'us', z: +m[1], x: +m[3], y: +m[2] };
   if (url.hostname === 'data.geopf.fr' && /GetTile/i.test(url.searchParams.get('REQUEST') || ''))
