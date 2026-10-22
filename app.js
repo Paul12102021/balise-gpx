@@ -932,16 +932,19 @@ function openBackup() { $('backup').hidden = false; $('bkSum').textContent = '�
 $('btnBackup').onclick = openBackup;
 $('bkClose').onclick = () => { $('backup').hidden = true; };
 $('backup').onclick = e => { if (e.target === $('backup')) $('backup').hidden = true; };
-$('bkSave').onclick = async () => {
+async function bkBuild() {
   const items = await listRecent();
   // les cartes : seulement leur description (pas les images), pour pouvoir les retélécharger
   const packs = (await listPacks()).filter(p => Array.isArray(p.tiles) && p.tiles.length).map(p => ({
     id: p.id, kind: p.kind, name: p.name, detail: p.detail, code: p.code, cc: p.cc, prov: p.prov, bbox: p.bbox, line: p.line,
     tiles: p.tiles, count: p.tiles.length, graphWanted: !!(p.graph || p.graphWanted) }));
-  if (!items.length && !packs.length) { toast('Rien à sauvegarder pour l\'instant'); return; }
   const settings = {};
   for (const k of BK_KEYS) { const v = store.get(k); if (v != null && v !== '') settings[k] = v; }
-  const data = { app: 'pisteo', format: 1, version: APP_VERSION, date: new Date().toISOString(), settings, tracks: items, packs };
+  return { app: 'pisteo', format: 1, version: APP_VERSION, date: new Date().toISOString(), settings, tracks: items, packs };
+}
+$('bkSave').onclick = async () => {
+  const data = await bkBuild(), items = data.tracks, packs = data.packs;
+  if (!items.length && !packs.length) { toast('Rien à sauvegarder pour l\'instant'); return; }
   const d = new Date(), pad = n => String(n).padStart(2, '0');
   const fname = `pisteo-sauvegarde-${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}.json`;
   if (AND) { try { AND.shareFile(fname, 'application/json', JSON.stringify(data)); store.set('bkDate', String(Date.now())); } catch {} return; }
@@ -960,6 +963,27 @@ $('bkIn').onchange = async e => {
   let data;
   try { data = JSON.parse(await f.text()); } catch { data = null; }
   if (!data || data.app !== 'pisteo' || !Array.isArray(data.tracks)) { bkSay('Ce fichier n\'est pas une sauvegarde Pisteo.'); return; }
+  const r = await bkApply(data);
+  if (r.error) { bkSay(r.error); return; }
+  if (r.none) {
+    bkSay('Cette sauvegarde est déjà sur l\'appli : rien à restaurer.');
+    // déjà restaurée, mais des cartes restent à retélécharger : on y emmène
+    if ((await listPacks()).some(p => p.restored && !p.complete)) setTimeout(() => { $('backup').hidden = true; openMaps(); }, 1800);
+    return;
+  }
+  await bkRefresh();
+  if (r.setChanged) {
+    bkSay(r.msg + ' Réglages appliqués, l\'appli redémarre…');
+    try { sessionStorage.setItem('bkDone', r.msg); if (r.maps) sessionStorage.setItem('bkMaps', '1'); } catch {}
+    setTimeout(() => location.reload(), 2500);
+  } else {
+    bkSay(r.msg);
+    // les cartes ne sont pas dans le fichier : on ouvre « Mes cartes », où « Tout retélécharger » attend
+    if (r.maps) setTimeout(() => { $('backup').hidden = true; openMaps(); }, 1800);
+  }
+};
+// ajoute une sauvegarde à ce qui est déjà sur le téléphone (rien n'est écrasé)
+async function bkApply(data) {
   const ok = data.tracks.filter(it => it && typeof it.id === 'string' && typeof it.text === 'string' && /<gpx/i.test(it.text));
   const have = new Set((await listRecent()).map(it => it.id));
   const fresh = ok.filter(it => !have.has(it.id));
@@ -967,16 +991,11 @@ $('bkIn').onchange = async e => {
   const freshPacks = (Array.isArray(data.packs) ? data.packs : []).filter(p => p && typeof p.id === 'string' && Array.isArray(p.tiles)
     && p.tiles.length && p.tiles.every(t => typeof t === 'string') && Array.isArray(p.bbox) && !havePacks.has(p.id));
   // tout est déjà là : on ne touche à rien
-  if (!fresh.length && !freshPacks.length) {
-    bkSay('Cette sauvegarde est déjà sur l\'appli : rien à restaurer.');
-    // déjà restaurée, mais des cartes restent à retélécharger : on y emmène
-    if ((await listPacks()).some(p => p.restored && !p.complete)) setTimeout(() => { $('backup').hidden = true; openMaps(); }, 1800);
-    return;
-  }
+  if (!fresh.length && !freshPacks.length) return { none: true };
   try {
     for (const it of fresh) await idb('readwrite', st => st.put(it));
     for (const p of freshPacks) await idb('readwrite', st => st.put(Object.assign({}, p, { count: p.tiles.length, bytes: 0, date: Date.now(), complete: false, missing: p.tiles.length, restored: true })), 'packs');
-  } catch { bkSay('Restauration impossible : le stockage du téléphone est plein ou bloqué.'); return; }
+  } catch { return { error: 'Restauration impossible : le stockage du téléphone est plein ou bloqué.' }; }
   if (freshPacks.length) drawPacks();
   let setChanged = false;
   if (data.settings && typeof data.settings === 'object')
@@ -984,18 +1003,91 @@ $('bkIn').onchange = async e => {
   const parts = [];
   if (fresh.length) parts.push(bkCount(fresh));
   if (freshPacks.length) parts.push('la liste de ' + bkMaps(freshPacks.length));
-  const msg = 'Restauré : ' + parts.join(', et ') + '.';
-  await bkRefresh();
-  if (setChanged) {
-    bkSay(msg + ' Réglages appliqués, l\'appli redémarre…');
-    try { sessionStorage.setItem('bkDone', msg); if (freshPacks.length) sessionStorage.setItem('bkMaps', '1'); } catch {}
-    setTimeout(() => location.reload(), 2500);
-  } else {
-    bkSay(msg);
-    // les cartes ne sont pas dans le fichier : on ouvre « Mes cartes », où « Tout retélécharger » attend
-    if (freshPacks.length) setTimeout(() => { $('backup').hidden = true; openMaps(); }, 1800);
+  return { msg: 'Restauré : ' + parts.join(', et ') + '.', setChanged, maps: freshPacks.length > 0 };
+}
+// ---------- déménagement vers pisteo.app ----------
+// Les données (sorties, traces, réglages) sont liées à l'adresse du site. Au changement d'adresse, l'ancienne
+// les confie à la nouvelle : dans l'appli Android, par la coquille (v16) ; dans un navigateur, par une fenêtre
+// ouverte sur la nouvelle adresse (les deux pages se parlent par postMessage, chacune vérifie l'origine de l'autre).
+const NEW_ORIGIN = 'https://pisteo.app', NEW_HOME = NEW_ORIGIN + '/app/';
+const OLD_ORIGIN = 'https://paul12102021.github.io';
+const MV_SKIP = ['tileKB', 'ofmTiles', 'depGraph', 'zoneGraph', 'act', 'actState', 'rec', 'mvDone', 'mvSeen'];
+async function mvBuild() {
+  const d = await bkBuild(), ls = {};
+  try { for (let i = 0; i < localStorage.length; i++) { const k = localStorage.key(i); if (!MV_SKIP.includes(k)) ls[k] = localStorage.getItem(k); } } catch {}
+  d.ls = ls; d.move = 1;
+  return d;
+}
+async function mvApply(d) {
+  if (!d || d.app !== 'pisteo' || !Array.isArray(d.tracks)) return null;
+  // réglages, connexion Strava… : seulement ceux qui n'existent pas encore ici
+  if (d.ls && typeof d.ls === 'object')
+    for (const [k, v] of Object.entries(d.ls)) if (typeof v === 'string' && !MV_SKIP.includes(k) && store.get(k) == null) store.set(k, v);
+  const r = await bkApply(d);
+  store.set('mvDone', '1');
+  return r;
+}
+function mvFinish(r) {
+  const n = r && !r.none && !r.error;
+  const msg = n ? 'Tes sorties, traces et réglages ont suivi Pisteo sur sa nouvelle adresse.' : '';
+  try { if (msg) sessionStorage.setItem('mvMsg', msg); if (r && r.maps) sessionStorage.setItem('bkMaps', '1'); } catch {}
+  location.replace(location.pathname); // repart propre, avec les réglages repris
+}
+try { const m = sessionStorage.getItem('mvMsg'); if (m) { sessionStorage.removeItem('mvMsg'); setTimeout(() => toast(m, 5000), 900); } } catch {}
+
+if (location.origin === NEW_ORIGIN) {
+  // appli Android : la coquille a récupéré les données de l'ancienne adresse au premier lancement
+  if (AND && typeof AND.takeMigration === 'function') {
+    let s = null; try { s = AND.takeMigration(); } catch {}
+    if (s) { let d = null; try { d = JSON.parse(s); } catch {} if (d) mvApply(d).then(mvFinish, () => {}); }
   }
-};
+  // navigateur : la page de l'ancienne adresse nous a ouverts pour nous confier les données
+  if (/[?&]import=1/.test(location.search) && window.opener) {
+    window.addEventListener('message', async e => {
+      if (e.origin !== OLD_ORIGIN || !e.data || !e.data.pisteoMove) return;
+      let r = null; try { r = await mvApply(e.data.pisteoMove); } catch {}
+      try { window.opener.postMessage({ pisteoDone: 1 }, OLD_ORIGIN); } catch {}
+      mvFinish(r);
+    });
+    try { window.opener.postMessage({ pisteoReady: 1 }, OLD_ORIGIN); } catch {}
+  }
+} else if (location.origin === OLD_ORIGIN) {
+  if (/[?&]migrate=1/.test(location.search) && AND && typeof AND.migrationData === 'function') {
+    // appli Android v16 : elle charge l'ancienne adresse une fois, pour emporter les données
+    mvBuild().then(d => { try { AND.migrationData(JSON.stringify(d)); } catch {} }, () => { try { AND.migrationData(''); } catch {} });
+  } else if (!AND) setTimeout(mvOffer, 1500);
+}
+// navigateur, ancienne adresse : on propose d'emporter ses données sur pisteo.app
+async function mvOffer() {
+  const d = await mvBuild(), has = d.tracks.length || d.packs.length;
+  const box = document.createElement('div');
+  box.className = 'lib';
+  box.innerHTML = `<div class="lib-panel" style="padding:18px 16px calc(18px + var(--sa-b));display:flex;flex-direction:column;gap:12px">
+    <b style="font-size:18px">Pisteo change d'adresse</b>
+    <p style="margin:0">Pisteo est maintenant sur <b>pisteo.app</b>. Cette adresse ne sera bientôt plus mise à jour.</p>
+    <p style="margin:0" id="mvTxt">${has ? 'Tes sorties, tes traces et tes réglages peuvent te suivre : touche le bouton, une nouvelle page s\'ouvre et les reçoit.' : 'Tu n\'as encore rien enregistré ici : il suffit d\'aller sur la nouvelle adresse.'}</p>
+    <button class="btn primary" id="mvGo" style="min-height:48px">${has ? 'Emporter mes données sur pisteo.app' : 'Aller sur pisteo.app'}</button>
+    <button class="btn ghost" id="mvLater">Plus tard</button></div>`;
+  document.body.appendChild(box);
+  box.querySelector('#mvLater').onclick = () => box.remove();
+  box.querySelector('#mvGo').onclick = () => {
+    if (!has) { location.href = NEW_HOME; return; }
+    const w = window.open(NEW_HOME + '?import=1', '_blank');
+    if (!w) { location.href = NEW_HOME; return; }
+    const txt = box.querySelector('#mvTxt');
+    txt.textContent = 'Transfert en cours…';
+    window.addEventListener('message', e => {
+      if (e.origin !== NEW_ORIGIN || !e.data) return;
+      if (e.data.pisteoReady) w.postMessage({ pisteoMove: d }, NEW_ORIGIN);
+      if (e.data.pisteoDone) {
+        txt.textContent = 'C\'est fait : tout est sur pisteo.app. Installe Pisteo depuis cette nouvelle page (menu du navigateur › « Installer l\'application »), puis supprime l\'ancienne icône.';
+        box.querySelector('#mvGo').textContent = 'Ouvrir pisteo.app';
+        box.querySelector('#mvGo').onclick = () => { location.href = NEW_HOME; };
+      }
+    });
+  };
+}
+
 try { const m = sessionStorage.getItem('bkDone'), mp = sessionStorage.getItem('bkMaps'); sessionStorage.removeItem('bkMaps');
   if (m) { sessionStorage.removeItem('bkDone'); setTimeout(() => toast(m + ' Réglages appliqués.', 4000), 800); }
   if (mp) setTimeout(() => openMaps(), 1500); } catch {}
@@ -4322,7 +4414,7 @@ $('wtSave').onclick = () => {
 
 // Le lien porte le parcours lui-même (simplifié puis compressé) : rien n'est stocké sur un serveur,
 // et ce qui suit le « # » d'une adresse n'est jamais envoyé au site.
-// https://paul12102021.github.io/balise-gpx/p/#<données>~<nom>  (p/ = la page qui ouvre l'appli Android si elle est installée)
+// https://pisteo.app/app/p/#<données>~<nom>  (p/ = la page qui ouvre l'appli Android si elle est installée)
 const B64 = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_';
 const b64enc = u8 => { let s = ''; for (let i = 0; i < u8.length; i += 3) { const n = (u8[i] << 16) | ((u8[i + 1] || 0) << 8) | (u8[i + 2] || 0); s += B64[n >> 18 & 63] + B64[n >> 12 & 63] + (i + 1 < u8.length ? B64[n >> 6 & 63] : '') + (i + 2 < u8.length ? B64[n & 63] : ''); } return s; };
 const b64dec = s => { const out = []; for (let i = 0; i < s.length; i += 4) { const n = [0, 1, 2, 3].map(k => B64.indexOf(s[i + k] || 'A')); const v = (n[0] << 18) | (n[1] << 12) | (n[2] << 6) | n[3]; out.push(v >> 16 & 255); if (i + 2 < s.length) out.push(v >> 8 & 255); if (i + 3 < s.length) out.push(v & 255); } return new Uint8Array(out); };

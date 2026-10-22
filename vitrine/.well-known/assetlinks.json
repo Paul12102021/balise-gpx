@@ -1,0 +1,15 @@
+[
+  {
+    "relation": [
+      "delegate_permission/common.handle_all_urls"
+    ],
+    "target": {
+      "namespace": "android_app",
+      "package_name": "fr.pisteo.app",
+      "sha256_cert_fingerprints": [
+        "FF:6D:2A:B4:CA:E0:A2:3B:C2:E4:89:15:DB:81:C1:A0:D7:2B:B9:B8:18:40:92:05:4E:01:9A:1D:81:6C:91:5A",
+        "A3:1B:DE:85:F7:0E:A3:6B:16:74:40:5E:28:B6:B1:6E:29:0B:37:65:AD:AB:1C:7B:2C:E1:10:14:3C:03:EE:06"
+      ]
+    }
+  }
+]

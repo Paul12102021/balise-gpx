@@ -1,0 +1,94 @@
+<!doctype html>
+<html lang="fr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Pisteo change d'adresse</title>
+<meta name="robots" content="noindex">
+<link rel="canonical" href="https://pisteo.app/app/">
+<style>
+:root{--ink:#17201c;--paper:#EEF1E8;--panel:#F8F9F4;--line:#D5DCCD;--go:#2F5E45;--muted:#5E6B60;color-scheme:light}
+@media (prefers-color-scheme:dark){:root{--ink:#E8ECE5;--paper:#161D18;--panel:#1E2722;--line:#36443B;--go:#3A7556;--muted:#A2AEA3;color-scheme:dark}}
+body{margin:0;min-height:100vh;display:grid;place-items:center;font:16px/1.4 system-ui,sans-serif;background:var(--paper);color:var(--ink);padding:16px;box-sizing:border-box}
+main{max-width:360px;width:100%;background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:20px 18px;display:flex;flex-direction:column;gap:12px}
+h1{font-size:20px;margin:0}p{margin:0}small{color:var(--muted)}
+a.btn,button{display:block;width:100%;min-height:48px;border-radius:12px;font:600 16px system-ui,sans-serif;text-align:center;text-decoration:none;line-height:48px;cursor:pointer;border:0;padding:0}
+.go{background:var(--go);color:#fff}.ghost{background:none;color:var(--go);border:1px solid var(--line)!important}
+</style></head><body>
+<main><h1>Pisteo change d'adresse</h1>
+<p>Pisteo est maintenant sur <b>pisteo.app</b>.</p>
+<p id="t">Un instant…</p>
+<div id="act"></div>
+<small>Rien n'est envoyé ailleurs : tes données passent seulement d'une page Pisteo à l'autre, sur ce téléphone.</small></main>
+<script>
+// Ancienne adresse de Pisteo. Cette page emporte les données gardées ici (sorties, traces, réglages)
+// vers https://pisteo.app/app/ : par la coquille Android v16 (migrationData), ou dans un navigateur
+// par une fenêtre ouverte sur la nouvelle adresse (postMessage, origine vérifiée des deux côtés).
+var NEW_ORIGIN = 'https://pisteo.app', NEW_HOME = NEW_ORIGIN + '/app/';
+var SKIP = ['tileKB', 'ofmTiles', 'depGraph', 'zoneGraph', 'act', 'actState', 'rec', 'mvDone', 'mvSeen'];
+var AND = window.PisteoAndroid || null;
+var t = document.getElementById('t'), act = document.getElementById('act');
+function say(s) { t.textContent = s; }
+function buttons(html) { act.innerHTML = html; }
+
+function readStore(db, name) {
+  return new Promise(function (res) {
+    if (!db || !db.objectStoreNames.contains(name)) return res([]);
+    try { var r = db.transaction(name, 'readonly').objectStore(name).getAll(); r.onsuccess = function () { res(r.result || []); }; r.onerror = function () { res([]); }; }
+    catch (e) { res([]); }
+  });
+}
+function openDB() {
+  return new Promise(function (res) {
+    var done = false, tm = setTimeout(function () { if (!done) { done = true; res(null); } }, 4000);
+    try {
+      var r = indexedDB.open('balise');
+      r.onsuccess = function () { if (!done) { done = true; clearTimeout(tm); res(r.result); } };
+      r.onerror = r.onblocked = function () { if (!done) { done = true; clearTimeout(tm); res(null); } };
+    } catch (e) { done = true; clearTimeout(tm); res(null); }
+  });
+}
+async function build() {
+  var db = await openDB();
+  var tracks = await readStore(db, 'tracks'), packs = await readStore(db, 'packs');
+  packs = packs.filter(function (p) { return Array.isArray(p.tiles) && p.tiles.length; }).map(function (p) {
+    return { id: p.id, kind: p.kind, name: p.name, detail: p.detail, code: p.code, cc: p.cc, prov: p.prov, bbox: p.bbox, line: p.line,
+      tiles: p.tiles, count: p.tiles.length, graphWanted: !!(p.graph || p.graphWanted) };
+  });
+  var ls = {};
+  try { for (var i = 0; i < localStorage.length; i++) { var k = localStorage.key(i); if (SKIP.indexOf(k) < 0) ls[k] = localStorage.getItem(k); } } catch (e) {}
+  return { app: 'pisteo', format: 1, version: 0, date: new Date().toISOString(), settings: {}, tracks: tracks, packs: packs, ls: ls, move: 1 };
+}
+function goNew() { location.replace(NEW_HOME + location.hash); }
+
+(async function () {
+  var q = location.search;
+  // appli Android v16 : elle passe ici une fois pour emporter les données
+  if (/[?&]migrate=1/.test(q) && AND && typeof AND.migrationData === 'function') {
+    say('Transfert de tes données…');
+    try { AND.migrationData(JSON.stringify(await build())); } catch (e) { try { AND.migrationData(''); } catch (e2) {} }
+    return;
+  }
+  // ancienne appli Android (jusqu'à la v15) : il faut la mettre à jour
+  if (AND) {
+    say('Mets Pisteo à jour sur le Play Store : la nouvelle version emporte automatiquement tes sorties et tes traces.');
+    buttons('<a class="btn go" href="https://play.google.com/store/apps/details?id=fr.pisteo.app">Mettre à jour Pisteo</a>');
+    return;
+  }
+  var d = await build();
+  if (!d.tracks.length && !d.packs.length) { say('Redirection…'); goNew(); return; }
+  say((d.tracks.length > 1 ? 'Tes ' + d.tracks.length + ' sorties et traces peuvent' : 'Ta sortie peut') + ' te suivre, avec tes réglages : touche le bouton, la nouvelle page s\'ouvre et les reçoit.');
+  buttons('<button class="go" id="go">Emporter mes données sur pisteo.app</button>');
+  document.getElementById('go').onclick = function () {
+    var w = window.open(NEW_HOME + '?import=1', '_blank');
+    if (!w) { goNew(); return; }
+    say('Transfert en cours…');
+    window.addEventListener('message', function (e) {
+      if (e.origin !== NEW_ORIGIN || !e.data) return;
+      if (e.data.pisteoReady) w.postMessage({ pisteoMove: d }, NEW_ORIGIN);
+      if (e.data.pisteoDone) {
+        say('C\'est fait : tout est sur pisteo.app. Installe Pisteo depuis la nouvelle page (menu du navigateur › « Installer l\'application »), puis supprime l\'ancienne icône.');
+        buttons('<a class="btn go" href="' + NEW_HOME + '">Ouvrir pisteo.app</a>');
+      }
+    });
+  };
+})();
+</script>
+</body></html>

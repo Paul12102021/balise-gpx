@@ -113,6 +113,19 @@ const exact = {
   'Restauration impossible : le stockage du téléphone est plein ou bloqué.': 'Cannot restore: the phone\'s storage is full or blocked.',
   'Tout retélécharger': 'Download all again',
   // ---- welcome
+  // ---- déménagement vers pisteo.app
+  'Tes sorties, traces et réglages ont suivi Pisteo sur sa nouvelle adresse.': 'Your outings, tracks and settings have followed Pisteo to its new address.',
+  'Pisteo change d\'adresse': 'Pisteo has a new address',
+  'Pisteo est maintenant sur': 'Pisteo now lives at',
+  '. Cette adresse ne sera bientôt plus mise à jour.': '. This address will soon stop being updated.',
+  'Tes sorties, tes traces et tes réglages peuvent te suivre : touche le bouton, une nouvelle page s\'ouvre et les reçoit.': 'Your outings, tracks and settings can come along: tap the button, a new page opens and receives them.',
+  'Tu n\'as encore rien enregistré ici : il suffit d\'aller sur la nouvelle adresse.': 'You haven\'t saved anything here yet: just go to the new address.',
+  'Emporter mes données sur pisteo.app': 'Take my data to pisteo.app',
+  'Aller sur pisteo.app': 'Go to pisteo.app',
+  'Plus tard': 'Later',
+  'Transfert en cours…': 'Transferring…',
+  'C\'est fait : tout est sur pisteo.app. Installe Pisteo depuis cette nouvelle page (menu du navigateur › « Installer l\'application »), puis supprime l\'ancienne icône.': 'Done: everything is on pisteo.app. Install Pisteo from that new page (browser menu › "Install app"), then remove the old icon.',
+  'Ouvrir pisteo.app': 'Open pisteo.app',
   'Bienvenue dans Pisteo': 'Welcome to Pisteo',
   'Suis tes traces GPX à pied ou à vélo, guidé à la voix, même sans réseau. Gratuit, sans compte : tout reste sur ton téléphone.':
     'Follow your GPX tracks on foot or by bike, with voice guidance, even without signal. Free, no account: everything stays on your phone.',

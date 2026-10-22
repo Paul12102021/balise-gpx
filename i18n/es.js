@@ -113,6 +113,19 @@ const exact = {
   'Restauration impossible : le stockage du téléphone est plein ou bloqué.': 'No se puede restaurar: el almacenamiento del teléfono está lleno o bloqueado.',
   'Tout retélécharger': 'Volver a descargar todo',
   // ---- bienvenida
+  // ---- déménagement vers pisteo.app
+  'Tes sorties, traces et réglages ont suivi Pisteo sur sa nouvelle adresse.': 'Tus salidas, rutas y ajustes han seguido a Pisteo a su nueva dirección.',
+  'Pisteo change d\'adresse': 'Pisteo cambia de dirección',
+  'Pisteo est maintenant sur': 'Pisteo ahora está en',
+  '. Cette adresse ne sera bientôt plus mise à jour.': '. Esta dirección pronto dejará de actualizarse.',
+  'Tes sorties, tes traces et tes réglages peuvent te suivre : touche le bouton, une nouvelle page s\'ouvre et les reçoit.': 'Tus salidas, rutas y ajustes pueden acompañarte: toca el botón, se abre una página nueva que los recibe.',
+  'Tu n\'as encore rien enregistré ici : il suffit d\'aller sur la nouvelle adresse.': 'Aún no has guardado nada aquí: basta con ir a la nueva dirección.',
+  'Emporter mes données sur pisteo.app': 'Llevar mis datos a pisteo.app',
+  'Aller sur pisteo.app': 'Ir a pisteo.app',
+  'Plus tard': 'Más tarde',
+  'Transfert en cours…': 'Transfiriendo…',
+  'C\'est fait : tout est sur pisteo.app. Installe Pisteo depuis cette nouvelle page (menu du navigateur › « Installer l\'application »), puis supprime l\'ancienne icône.': 'Hecho: todo está en pisteo.app. Instala Pisteo desde esa página nueva (menú del navegador › «Instalar aplicación») y luego borra el icono antiguo.',
+  'Ouvrir pisteo.app': 'Abrir pisteo.app',
   'Bienvenue dans Pisteo': 'Te damos la bienvenida a Pisteo',
   'Suis tes traces GPX à pied ou à vélo, guidé à la voix, même sans réseau. Gratuit, sans compte : tout reste sur ton téléphone.':
     'Sigue tus tracks GPX a pie o en bici, con guía por voz, incluso sin cobertura. Gratis, sin cuenta: todo se queda en tu teléfono.',

@@ -66,6 +66,14 @@
                 <!-- lien de parcours partagé : il ouvre l'appli directement -->
                 <data android:scheme="https" android:host="paul12102021.github.io" android:pathPrefix="/balise-gpx/p/" />
             </intent-filter>
+            <!-- nouvelle adresse (v16) : retour Strava et liens de parcours -->
+            <intent-filter android:autoVerify="true">
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="https" android:host="pisteo.app" android:pathPrefix="/app/retour-strava" />
+                <data android:scheme="https" android:host="pisteo.app" android:pathPrefix="/app/p/" />
+            </intent-filter>
             <!-- « Ouvrir avec » sur un fichier GPX -->
             <intent-filter>
                 <action android:name="android.intent.action.VIEW" />

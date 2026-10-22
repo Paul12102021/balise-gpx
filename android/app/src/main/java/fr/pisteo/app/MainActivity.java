@@ -5,6 +5,7 @@ import android.app.Activity;
 import android.content.ActivityNotFoundException;
 import android.content.ContentValues;
 import android.content.Intent;
+import android.content.SharedPreferences;
 import android.content.pm.ApplicationInfo;
 import android.content.pm.PackageManager;
 import android.graphics.Color;
@@ -15,6 +16,8 @@ import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.Environment;
+import android.os.Handler;
+import android.os.Looper;
 import android.provider.MediaStore;
 import android.speech.tts.TextToSpeech;
 import android.speech.tts.UtteranceProgressListener;
@@ -47,14 +50,19 @@ import java.util.Locale;
 import java.util.concurrent.atomic.AtomicInteger;
 
 /**
- * Pisteo pour Android : l'appli web (https://paul12102021.github.io/balise-gpx/) affichée dans une WebView,
+ * Pisteo pour Android : l'appli web (https://pisteo.app/app/) affichée dans une WebView,
  * avec ce que le navigateur ne fournit pas ici : la voix du téléphone, l'écran allumé, le GPS,
  * l'ouverture et l'enregistrement de fichiers, le partage et le bouton retour.
  */
 public class MainActivity extends Activity {
     static volatile MainActivity instance;
-    private static final String HOME = "https://paul12102021.github.io/balise-gpx/";
-    private static final String HOST = "paul12102021.github.io";
+    private static final String HOME = "https://pisteo.app/app/";
+    private static final String HOST = "pisteo.app";
+    // ancienne adresse (jusqu'à la v15) : ses données sont emportées une fois, au premier lancement de la v16
+    private static final String OLD_HOME = "https://paul12102021.github.io/balise-gpx/";
+    private static final String OLD_HOST = "paul12102021.github.io";
+    private static final String MOVE_FILE = "demenagement.json";
+    private static final long MOVE_TIMEOUT_MS = 25_000;
     private static final int REQ_FILE = 1, REQ_LOC = 2, REQ_NOTIF = 3;
     private static final int BAR = Color.parseColor("#1d2a24");
 
@@ -63,6 +71,10 @@ public class MainActivity extends Activity {
     private GeolocationPermissions.Callback geoCb;
     private String geoOrigin;
     private volatile String sharedText;
+    private boolean moving;
+    private String afterMove;
+    private final Handler ui = new Handler(Looper.getMainLooper());
+    private final Runnable moveTimeout = () -> endMove(false);
 
     private TextToSpeech tts;
     private volatile boolean ttsReady;
@@ -174,6 +186,7 @@ public class MainActivity extends Activity {
 
         String back = appLink(getIntent());
         if (back == null) readShared(getIntent());
+        if (!prefs().getBoolean("moved", false)) { startMove(back); return; }
         if (state != null) web.restoreState(state);
         if (back != null) web.loadUrl(back);
         else if (web.getUrl() == null) web.loadUrl(HOME);
@@ -190,7 +203,7 @@ public class MainActivity extends Activity {
         super.onNewIntent(intent);
         setIntent(intent);
         String back = appLink(intent);
-        if (back != null) { web.loadUrl(back); return; }
+        if (back != null) { if (moving) afterMove = back; else web.loadUrl(back); return; }
         if (readShared(intent)) web.evaluateJavascript("window.pisteoCheckShared && window.pisteoCheckShared()", null);
     }
 
@@ -228,8 +241,9 @@ public class MainActivity extends Activity {
         String scheme = u.getScheme() == null ? "" : u.getScheme().toLowerCase(Locale.ROOT);
         String host = u.getHost() == null ? "" : u.getHost().toLowerCase(Locale.ROOT);
         // la connexion Strava (et Google) se fait dans le navigateur ou l'appli Strava : Google refuse les WebView
-        if ((scheme.equals("https") || scheme.equals("http")) && host.equals(HOST)
-                && !String.valueOf(u.getPath()).startsWith("/balise-gpx/retour-strava")) return false;
+        String path = String.valueOf(u.getPath());
+        if ((scheme.equals("https") || scheme.equals("http")) && (host.equals(HOST) || host.equals(OLD_HOST))
+                && !path.startsWith("/app/retour-strava") && !path.startsWith("/balise-gpx/retour-strava")) return false;
         try {
             Intent i = scheme.equals("intent") ? Intent.parseUri(u.toString(), Intent.URI_INTENT_SCHEME) : new Intent(Intent.ACTION_VIEW, u);
             if (scheme.equals("intent")) { i.addCategory(Intent.CATEGORY_BROWSABLE); i.setComponent(null); i.setSelector(null); }
@@ -276,9 +290,38 @@ public class MainActivity extends Activity {
         if (intent == null || !Intent.ACTION_VIEW.equals(intent.getAction()) || intent.getData() == null) return null;
         Uri u = intent.getData();
         String scheme = u.getScheme() == null ? "" : u.getScheme().toLowerCase(Locale.ROOT);
-        if (!scheme.equals("https") || !HOST.equalsIgnoreCase(u.getHost())) return null;
+        // les liens de l'ancienne adresse (parcours déjà partagés) ouvrent aussi l'appli, sur la nouvelle
+        if (!scheme.equals("https") || !(HOST.equalsIgnoreCase(u.getHost()) || OLD_HOST.equalsIgnoreCase(u.getHost()))) return null;
         String q = u.getEncodedQuery(), f = u.getEncodedFragment();
         return HOME + (q == null ? "" : "?" + q) + (f == null ? "" : "#" + f); // lien de parcours : tout est après « # »
+    }
+
+    // ---------- déménagement vers pisteo.app ----------
+    // Les données de la page (sorties, traces, réglages) sont liées à l'adresse du site. Au premier lancement,
+    // on charge une fois l'ancienne adresse (elle marche aussi hors ligne, grâce à son cache) : sa page rassemble
+    // les données et les confie à migrationData() ; la nouvelle page les reprend avec takeMigration().
+    private SharedPreferences prefs() { return getSharedPreferences("pisteo", MODE_PRIVATE); }
+
+    private void startMove(String back) {
+        moving = true;
+        afterMove = back;
+        web.setVisibility(View.INVISIBLE); // l'ancienne page ne fait que passer
+        Toast.makeText(this, "Pisteo change d'adresse : tes données suivent…", Toast.LENGTH_SHORT).show();
+        web.loadUrl(OLD_HOME + "?migrate=1");
+        ui.postDelayed(moveTimeout, MOVE_TIMEOUT_MS);
+    }
+
+    // done : l'ancienne page a répondu (même vide). Sinon (pas de réponse) on réessaiera au prochain lancement.
+    private void endMove(boolean done) {
+        if (!moving) return;
+        moving = false;
+        ui.removeCallbacks(moveTimeout);
+        if (done) prefs().edit().putBoolean("moved", true).apply();
+        if (web == null) return;
+        web.clearHistory();
+        web.setVisibility(View.VISIBLE);
+        web.loadUrl(afterMove != null ? afterMove : HOME);
+        afterMove = null;
     }
 
     // position venue du service de navigation (GPS actif même écran verrouillé) : transmise à la page
@@ -486,6 +529,39 @@ public class MainActivity extends Activity {
         @JavascriptInterface
         public boolean saveDownload(String name, String mime, String content) {
             return saveToDownloads(name, mime, content);
+        }
+
+        @JavascriptInterface
+        public void migrationData(String json) {
+            try {
+                if (json != null && !json.isEmpty()) {
+                    try (OutputStream os = new FileOutputStream(new File(getFilesDir(), MOVE_FILE))) {
+                        os.write(json.getBytes(StandardCharsets.UTF_8));
+                    }
+                }
+                runOnUiThread(() -> endMove(true));
+            } catch (Exception e) {
+                runOnUiThread(() -> endMove(false));
+            }
+        }
+
+        // la nouvelle page reprend les données une seule fois
+        @JavascriptInterface
+        public String takeMigration() {
+            File f = new File(getFilesDir(), MOVE_FILE);
+            if (!f.exists()) return "";
+            try (InputStream is = new java.io.FileInputStream(f)) {
+                ByteArrayOutputStream bo = new ByteArrayOutputStream();
+                byte[] buf = new byte[65536];
+                int n;
+                while ((n = is.read(buf)) > 0) bo.write(buf, 0, n);
+                return bo.toString(StandardCharsets.UTF_8.name());
+            } catch (Exception e) {
+                return "";
+            } finally {
+                //noinspection ResultOfMethodCallIgnored
+                f.delete();
+            }
         }
 
         @JavascriptInterface
