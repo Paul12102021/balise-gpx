@@ -5,7 +5,7 @@
 
 // La page et le code doivent être de la même version. Sinon (page gardée en cache
 // par le téléphone ou par GitHub), on recharge une page fraîche, au plus 3 fois.
-const APP_VERSION = 190;
+const APP_VERSION = 191;
 try {
   const meta = document.querySelector('meta[name="balise-version"]');
   const pageV = meta ? +meta.content : 0;
@@ -1483,7 +1483,9 @@ function onPos(pos) {
   if (!meShown) { meMk.addTo(map); meShown = true; if (!nav) map.easeTo({ center: [pos.lon, pos.lat], zoom: Math.max(map.getZoom(), 15), duration: 800 }); }
 
   onActFix(pos);
-  if (track) { progress = project(track, pos); updateDone(pos); }
+  // la partie « déjà faite » n'avance qu'en navigation : en simple aperçu (ou trace inversée sous tes pieds),
+  // être à l'arrivée ne doit pas marquer tout le parcours comme fait
+  if (track) { progress = project(track, pos); if (nav) updateDone(pos); }
   if (rejoin) {
     if (rejoin.straight) { const why = rejoin.why; setRejoinPath([{ lat: pos.lat, lon: pos.lon }, rejoin.target], rejoin.target, true); rejoin.why = why; }
     rejoinProg = project(rejoin, pos);
