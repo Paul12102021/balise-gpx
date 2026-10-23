@@ -36,6 +36,13 @@
         android:theme="@style/Pisteo"
         android:usesCleartextTraffic="false">
 
+        <!-- import Strava dans l'appli (page d'import du site, le GPX de la sortie est donné directement) -->
+        <activity
+            android:name=".StravaActivity"
+            android:exported="false"
+            android:screenOrientation="portrait"
+            android:windowSoftInputMode="adjustResize"
+            android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboard|keyboardHidden|navigation|uiMode|density|fontScale|locale|layoutDirection" />
         <activity
             android:name=".MainActivity"
             android:exported="true"

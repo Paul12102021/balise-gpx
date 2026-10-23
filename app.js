@@ -5,7 +5,7 @@
 
 // La page et le code doivent être de la même version. Sinon (page gardée en cache
 // par le téléphone ou par GitHub), on recharge une page fraîche, au plus 3 fois.
-const APP_VERSION = 181;
+const APP_VERSION = 182;
 try {
   const meta = document.querySelector('meta[name="balise-version"]');
   const pageV = meta ? +meta.content : 0;
@@ -1148,16 +1148,43 @@ function saveFile(text, fname) {
   document.body.appendChild(a); a.click(); setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 1500);
 }
 // un seul bouton : enregistre le GPX et ouvre l'import Strava ; au retour dans Pisteo, on demande si c'est publié
-let smAway = false;
+let smAway = false, smChrome = false, smIt = null, smManual = null;
+// retour de la page d'import dans l'appli : identifiant de l'activité créée, « chrome » ou rien
+window.pisteoStravaDone = async id => {
+  const it = smIt; if (!it) return;
+  if (id === 'chrome') { smChrome = true; openStvManual(it); if (smManual) smManual(); return; }
+  if (id && /^\d+$/.test(id)) {
+    it.strava = id; delete it.stvPending; delete it.stravaManual;
+    await idb('readwrite', st => st.put(it)).catch(() => {});
+    $('stvMan').hidden = true; toast('Sortie publiée sur Strava', 4000, { label: 'Voir', run: () => window.open('https://www.strava.com/activities/' + id, '_blank') });
+    if (!$('soDetail').hidden) stvButton(it);
+    return;
+  }
+  $('smGo').hidden = true; $('smBack').hidden = false; // fermée sans fin détectée : on demande
+};
 function openStvManual(it, why) {
   const d = new Date(it.start || it.date), pad = n => String(n).padStart(2, '0');
   const fname = `pisteo-${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}-${pad(d.getHours())}h${pad(d.getMinutes())}.gpx`;
   const strava = () => { smAway = true; window.open('https://www.strava.com/upload/select', '_blank'); };
+  // appli 2.3+ : la page d'import s'ouvre dans l'appli et reçoit directement le fichier
+  const inApp = !!(AND && AND.stravaImport) && !smChrome;
+  $('smIn').hidden = $('smInNote').hidden = !inApp; $('smOut').hidden = $('smOutNote').hidden = inApp;
+  $('smOpen').textContent = tr(inApp ? 'Ouvrir l\'import Strava' : 'Enregistrer et ouvrir Strava');
+  const manual = () => { const got = saveFile(gpxForStrava(it), fname); if (got) $('smFile').textContent = $('smFile2').textContent = got; strava(); };
+  smIt = it;
   $('smWhy').textContent = why || 'Strava bloque l\'envoi direct sans abonnement : on passe par sa page d\'import.';
   $('smFile').textContent = $('smFile2').textContent = fname;
   $('smGo').hidden = false; $('smBack').hidden = true; smAway = false;
-  $('smOpen').onclick = () => { const got = saveFile(gpxForStrava(it), fname); if (got) $('smFile').textContent = $('smFile2').textContent = got; strava(); };
-  $('smAgain').onclick = strava;
+  $('smOpen').onclick = () => {
+    if (!inApp) { manual(); return; }
+    const L = { title: tr('Mettre sur Strava'), close: tr('Fermer'), chrome: 'Chrome',
+      hint: tr('Touche « Sélect. fichiers » : ta sortie est choisie toute seule. Puis « Enregistrer et afficher ».'),
+      sent: tr('Ta sortie est choisie. Vérifie le titre et le type, puis « Enregistrer et afficher ».'), done: tr('Sortie publiée sur Strava') };
+    let ok = false; try { ok = AND.stravaImport(fname, gpxForStrava(it), JSON.stringify(L)); } catch {}
+    if (!ok) manual();
+  };
+  smManual = manual;
+  $('smAgain').onclick = () => $('smOpen').onclick();
   $('smLater').onclick = () => { $('stvMan').hidden = true; };
   $('smDone').onclick = async () => {
     it.stravaManual = Date.now(); delete it.stvPending;

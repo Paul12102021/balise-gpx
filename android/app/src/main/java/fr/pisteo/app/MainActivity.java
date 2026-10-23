@@ -61,7 +61,7 @@ public class MainActivity extends Activity {
     private String pendingUrl;
     private boolean clearHist;
     private final android.os.Handler ui = new android.os.Handler(android.os.Looper.getMainLooper());
-    private static final int REQ_FILE = 1, REQ_LOC = 2, REQ_NOTIF = 3;
+    private static final int REQ_FILE = 1, REQ_LOC = 2, REQ_NOTIF = 3, REQ_STRAVA = 4;
     private static final int BAR = Color.parseColor("#1d2a24");
 
     private WebView web;
@@ -270,6 +270,11 @@ public class MainActivity extends Activity {
     @Override
     protected void onActivityResult(int code, int result, Intent data) {
         super.onActivityResult(code, result, data);
+        if (code == REQ_STRAVA) {
+            String id = data != null ? data.getStringExtra(StravaActivity.RESULT_ID) : null;
+            web.evaluateJavascript("window.pisteoStravaDone && window.pisteoStravaDone(" + (id == null ? "null" : org.json.JSONObject.quote(id)) + ")", null);
+            return;
+        }
         if (code == REQ_FILE && fileCb != null) {
             Uri[] uris = null;
             if (result == RESULT_OK && data != null) {
@@ -448,6 +453,21 @@ public class MainActivity extends Activity {
 
     /** Ce que la page peut demander au téléphone (window.PisteoAndroid). */
     private class Bridge {
+        // import Strava dans l'appli : la page d'import reçoit directement le GPX de la sortie (2.3.0)
+        @JavascriptInterface
+        public boolean stravaImport(String name, String content, String labels) {
+            try {
+                File f = writeCache(name, content);
+                runOnUiThread(() -> {
+                    Intent i = new Intent(MainActivity.this, StravaActivity.class);
+                    i.putExtra(StravaActivity.EXTRA_FILE, f.getAbsolutePath());
+                    i.putExtra(StravaActivity.EXTRA_LABELS, labels);
+                    startActivityForResult(i, REQ_STRAVA);
+                });
+                return true;
+            } catch (Exception e) { return false; }
+        }
+
         // navigation ou enregistrement : GPS gardé actif en arrière-plan (notification « Pisteo · … en cours »)
         @JavascriptInterface
         public void tracking(boolean on, String text) {

@@ -9,13 +9,13 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<meta name="balise-version" content="181">
+<meta name="balise-version" content="182">
 <title>Pisteo</title>
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" href="icon.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
 <link rel="stylesheet" href="vendor/maplibre-gl.css">
-<link rel="stylesheet" href="app.css?v=181">
+<link rel="stylesheet" href="app.css?v=182">
 </head>
 <body>
 <div id="map" aria-label="Carte"></div>
@@ -430,7 +430,16 @@
     <div id="smGo" class="sm-part">
       <p class="note" id="smWhy">Strava bloque l'envoi direct sans abonnement : on passe par sa page d'import.</p>
       <button id="smOpen" class="btn strava sm-big">Enregistrer et ouvrir Strava</button>
-      <div class="sm-box">
+      <div class="sm-box" id="smIn" hidden>
+        <b>Sur la page Strava :</b>
+        <ol>
+          <li>La première fois, connecte-toi avec ton <b>e-mail</b> et ton mot de passe Strava</li>
+          <li>Touche <b>« Sélect. fichiers »</b> : ta sortie est choisie toute seule</li>
+          <li>Valide <b>« Enregistrer et afficher »</b></li>
+        </ol>
+      </div>
+      <small class="sm-dim" id="smInNote" hidden>La connexion avec Google ne marche pas dans l'appli : bouton « Chrome » en haut de la page pour passer par le navigateur.</small>
+      <div class="sm-box" id="smOut">
         <b>Ensuite, sur la page Strava :</b>
         <ol>
           <li>Touche <b>« Sélect. fichiers »</b></li>
@@ -439,7 +448,7 @@
           <li>Valide <b>« Enregistrer et afficher »</b></li>
         </ol>
       </div>
-      <small class="sm-dim">Page mal affichée ? Menu ⋮ de Chrome → « Version pour ordinateur ».</small>
+      <small class="sm-dim" id="smOutNote">Page mal affichée ? Menu ⋮ de Chrome → « Version pour ordinateur ».</small>
     </div>
     <div id="smBack" class="sm-part" hidden>
       <div class="sm-ask"><span class="sm-ico" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M9 14 4 9l5-5"/><path d="M4 9h10a6 6 0 0 1 0 12h-3"/></svg></span>
@@ -688,8 +697,8 @@
 <div id="toast" class="toast" hidden></div>
 
 <script src="vendor/maplibre-gl.js"></script>
-<script src="i18n/en.js?v=181"></script>
-<script src="i18n/es.js?v=181"></script>
-<script src="app.js?v=181"></script>
+<script src="i18n/en.js?v=182"></script>
+<script src="i18n/es.js?v=182"></script>
+<script src="app.js?v=182"></script>
 </body>
 </html>
