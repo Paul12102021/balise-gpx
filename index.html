@@ -9,13 +9,13 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<meta name="balise-version" content="189">
+<meta name="balise-version" content="190">
 <title>Pisteo</title>
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" href="icon.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
 <link rel="stylesheet" href="vendor/maplibre-gl.css">
-<link rel="stylesheet" href="app.css?v=189">
+<link rel="stylesheet" href="app.css?v=190">
 </head>
 <body>
 <div id="map" aria-label="Carte"></div>
@@ -137,6 +137,9 @@
   <div class="trackrow">
     <div class="trackname" id="trackName">Aucune trace chargée</div>
     <button id="btnSaveTr" class="closebtn save" hidden aria-label="Enregistrer la trace dans Mes traces"></button>
+    <button id="btnWx" class="closebtn icon wx-btn" hidden aria-label="Météo le long du parcours" title="Météo">
+      <svg viewBox="0 0 24 24"><path d="M8 3v1.5M3.5 8H5M4.8 4.8l1 1M12.2 4.8l-1 1"/><path d="M5.6 10.4A3.5 3.5 0 1 1 11.6 7"/><path d="M8.5 20h9a3.5 3.5 0 0 0 .4-7 5 5 0 0 0-9.6 1.2A3 3 0 0 0 8.5 20z"/></svg>
+    </button>
     <button id="btnReverse" class="closebtn icon" hidden aria-label="Inverser le sens de la trace" title="Inverser le sens">
       <svg viewBox="0 0 24 24"><path d="M7 4 3 8l4 4"/><path d="M3 8h13"/><path d="m17 12 4 4-4 4"/><path d="M21 16H8"/></svg>
     </button>
@@ -148,8 +151,7 @@
     </button>
   </div>
   <div id="trChips" class="tr-chips" hidden>
-    <button id="btnWx" class="chip wx-btn">⛅ Météo</button>
-    <span id="sunChip" class="chip sun-chip" hidden></span>
+    <span id="sunChip" class="chip sun-chip"></span>
   </div>
   <canvas id="profile" aria-label="Profil altimétrique"></canvas>
   <div id="actBar" class="actbar" hidden>
@@ -266,6 +268,7 @@
         <b>Mes sorties</b>
         <button id="soClose" class="closebtn" aria-label="Fermer"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></svg>Fermer</button>
       </div>
+      <button id="soFold" class="bl-fold" hidden><span id="soFoldTxt"></span><span class="chev" id="soFoldChev"></span></button>
       <div id="soSum" class="lib-sum bl" hidden></div>
       <ul id="soItems" class="lib-list"></ul>
       <p id="soEmpty" class="note" hidden>Tes sorties enregistrées apparaîtront ici. En navigation, touche ● pour enregistrer, puis « Terminer » et « Garder ».</p>
@@ -707,8 +710,8 @@
 <div id="toast" class="toast" hidden></div>
 
 <script src="vendor/maplibre-gl.js"></script>
-<script src="i18n/en.js?v=189"></script>
-<script src="i18n/es.js?v=189"></script>
-<script src="app.js?v=189"></script>
+<script src="i18n/en.js?v=190"></script>
+<script src="i18n/es.js?v=190"></script>
+<script src="app.js?v=190"></script>
 </body>
 </html>

@@ -123,6 +123,8 @@ const exact = {
   'Météo : le parcours est trop loin dans le temps pour la prévision.': 'Tiempo: la ruta está demasiado lejos en el tiempo para la previsión.',
   'Météo : pas de réseau pour l\'instant.': 'Tiempo: sin cobertura por ahora.',
   'Météo indisponible pour l\'instant, réessaie dans un moment.': 'Tiempo no disponible, inténtalo en un momento.',
+  'Bilan': 'Resumen',
+  'Afficher': 'Mostrar',
   'Hors ligne': 'Sin conexión', 'Sorties et traces': 'Salidas y tracks', 'Navigation': 'Navegación', 'Voix et vibrations': 'Voz y vibración', 'Affichage': 'Pantalla', 'Import manuel': 'Importación manual', 'Envoi automatique': 'Envío automático',
   'Je me déplace': 'Me desplazo', 'Pour les itinéraires et le temps estimé': 'Para las rutas y el tiempo estimado', 'À pied': 'A pie', 'À vélo': 'En bici',
   'Cartes hors ligne': 'Mapas sin conexión', 'Trace, département ou zone': 'Track, región o zona', 'Mes cartes': 'Mis mapas',

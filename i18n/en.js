@@ -123,6 +123,8 @@ const exact = {
   'Météo : le parcours est trop loin dans le temps pour la prévision.': 'Weather: the route is too far ahead for the forecast.',
   'Météo : pas de réseau pour l\'instant.': 'Weather: no signal right now.',
   'Météo indisponible pour l\'instant, réessaie dans un moment.': 'Weather unavailable right now, try again shortly.',
+  'Bilan': 'Summary',
+  'Afficher': 'Show',
   'Hors ligne': 'Offline', 'Sorties et traces': 'Outings and tracks', 'Navigation': 'Navigation', 'Voix et vibrations': 'Voice and vibration', 'Affichage': 'Display', 'Import manuel': 'Manual import', 'Envoi automatique': 'Auto upload',
   'Je me déplace': 'I travel', 'Pour les itinéraires et le temps estimé': 'For routes and estimated time', 'À pied': 'On foot', 'À vélo': 'By bike',
   'Cartes hors ligne': 'Offline maps', 'Trace, département ou zone': 'Track, French département or area', 'Mes cartes': 'My maps',

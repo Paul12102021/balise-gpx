@@ -5,7 +5,7 @@
 
 // La page et le code doivent être de la même version. Sinon (page gardée en cache
 // par le téléphone ou par GitHub), on recharge une page fraîche, au plus 3 fois.
-const APP_VERSION = 189;
+const APP_VERSION = 190;
 try {
   const meta = document.querySelector('meta[name="balise-version"]');
   const pageV = meta ? +meta.content : 0;
@@ -842,8 +842,8 @@ async function showSoList() {
   const list = $('soItems'); list.innerHTML = '';
   $('soEmpty').hidden = items.length > 0;
   const d = items.reduce((a, it) => a + (it.dist || 0), 0), ms = items.reduce((a, it) => a + (it.ms || 0), 0), up = items.reduce((a, it) => a + (it.up || 0), 0);
-  $('soSum').hidden = !items.length;
   if (items.length) renderBilan(items);
+  bilanFold(items.length > 0);
   let month = '';
   for (const it of items) {
     const when = it.start || it.date;
@@ -937,7 +937,7 @@ function stvUI() {
 }
 // ---------- Sauvegarde : sorties, traces et réglages dans un fichier, et restauration ----------
 // réglages choisis par l'utilisateur (pas l'état en cours, ni les caches, ni la connexion Strava)
-const BK_KEYS = ['thr', 'voice', 'vib', 'autoRec', 'alertNight', 'eco', 'ecoSeen', 'banner', 'theme', 'profile', 'layerId', 'soLayer',
+const BK_KEYS = ['thr', 'voice', 'vib', 'autoRec', 'alertNight', 'soBilan', 'eco', 'ecoSeen', 'banner', 'theme', 'profile', 'layerId', 'soLayer',
   'rtFilt', 'npProfOnly', 'showPacks', 'stvAuto', 'recHint'];
 const bkCount = items => {
   const r = items.filter(isRec).length;
@@ -5888,11 +5888,11 @@ function sunInfo() {
 // pastille « coucher du soleil » : seulement s'il fait jour et que la marge est courte (moins d'une heure)
 function trChipsUpdate() {
   const show = !!track && track.hasEle && !nav;
-  $('trChips').hidden = !show;
-  if (!show) return;
-  const si = sunInfo(), el = $('sunChip');
-  const warn = si && Date.now() < si.set && si.margin < 60;
-  el.hidden = !warn;
+  $('btnWx').hidden = !show;
+  const si = show ? sunInfo() : null, el = $('sunChip');
+  const warn = !!si && Date.now() < si.set && si.margin < 60;
+  $('trChips').hidden = !warn;
+  if (!show) { document.body.classList.remove('wx-on'); return; }
   if (warn) el.innerHTML = si.margin >= 1
     ? `🌙 <span>${tr('Coucher du soleil')}</span> ${hm(si.set)} · ${fmtDur(si.margin * 60)} <span>${tr('de marge')}</span>`
     : `🌙 <span>${tr('Coucher du soleil')}</span> ${hm(si.set)} · <span>${tr('arrivée vers')}</span> ${hm(si.arr)}`;
@@ -6011,7 +6011,16 @@ function homeUI() {
 }
 $('npHome').onclick = () => { if (navHome) goTo({ lat: navHome.lat, lon: navHome.lon, label: tr('le départ') }); };
 
-// ---------- bilan des sorties : mois, année, tout ----------
+// ---------- bilan des sorties : mois, année, tout (repliable, choix retenu) ----------
+function bilanFold(has) {
+  const open = store.get('soBilan') === '1';
+  $('soFold').hidden = !has; $('soSum').hidden = !has || !open;
+  if (!has) return;
+  const now = new Date(), cur = blItems.filter(it => { const d = new Date(it.start || it.date); return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear(); }), S = blStats(cur);
+  $('soFoldTxt').innerHTML = `📊 <b>${tr('Bilan')}</b> · ${now.toLocaleDateString(LOC, { month: 'long' })} : <b>${fmtDist(S.d)}</b> · ${S.n} ${tr(S.n > 1 ? 'sorties' : 'sortie')}`;
+  $('soFoldChev').textContent = open ? tr('Masquer') + ' ▴' : tr('Afficher') + ' ▾';
+}
+$('soFold').onclick = () => { store.set('soBilan', store.get('soBilan') === '1' ? '0' : '1'); bilanFold(true); };
 var blPeriod = 'm', blOff = 0, blItems = [];
 function blRange(p, off) {
   const now = new Date();
