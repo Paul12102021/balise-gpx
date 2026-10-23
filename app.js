@@ -5,7 +5,7 @@
 
 // La page et le code doivent être de la même version. Sinon (page gardée en cache
 // par le téléphone ou par GitHub), on recharge une page fraîche, au plus 3 fois.
-const APP_VERSION = 186;
+const APP_VERSION = 187;
 try {
   const meta = document.querySelector('meta[name="balise-version"]');
   const pageV = meta ? +meta.content : 0;
@@ -4655,7 +4655,8 @@ let deps = null, regs = null, regCc = 'fr';
 async function loadDeps() {
   if (!deps) deps = await loadRegs('fr');
   if (!$('depCountry').options.length) {
-    COUNTRIES.forEach(c => { const o = document.createElement('option'); o.value = c.id; o.textContent = c.name; $('depCountry').appendChild(o); });
+    // par ordre alphabétique, dans la langue de l'appli
+    COUNTRIES.map(c => [c.id, tr(c.name)]).sort((a, b) => a[1].localeCompare(b[1], LANG)).forEach(([id, name]) => { const o = document.createElement('option'); o.value = id; o.textContent = name; $('depCountry').appendChild(o); });
     // présélection : le pays où l'on se trouve (ou au centre de la carte), sinon le dernier choisi
     const c = me ? { lon: me.lon, lat: me.lat } : (() => { const m = map.getCenter(); return { lon: m.lng, lat: m.lat }; })();
     const nat = natAt(c.lon, c.lat), here = COUNTRIES.find(x => x.nat === nat);
