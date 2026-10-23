@@ -95,6 +95,7 @@ const exact = {
   'Touche « Sélect. fichiers » : ta sortie est choisie toute seule. Puis « Enregistrer et afficher ».': 'Toca «Seleccionar archivos»: tu salida se elige sola. Luego «Guardar y ver».',
   'Ta sortie est choisie. Vérifie le titre et le type, puis « Enregistrer et afficher ».': 'Tu salida está elegida. Revisa el título y el tipo, luego «Guardar y ver».',
   'Sortie publiée sur Strava': 'Salida publicada en Strava',
+  'Google refuse la connexion dans une appli. Connecte-toi avec ton e-mail Strava (« Mot de passe oublié » pour t\'en créer un), ou touche « Chrome » en haut.': 'Google bloquea el inicio de sesión dentro de las apps. Inicia sesión con tu correo de Strava («¿Olvidaste tu contraseña?» para crear una), o toca «Chrome» arriba.',
   'Hors ligne': 'Sin conexión', 'Sorties et traces': 'Salidas y tracks', 'Navigation': 'Navegación', 'Voix et vibrations': 'Voz y vibración', 'Affichage': 'Pantalla', 'Import manuel': 'Importación manual', 'Envoi automatique': 'Envío automático',
   'Je me déplace': 'Me desplazo', 'Pour les itinéraires et le temps estimé': 'Para las rutas y el tiempo estimado', 'À pied': 'A pie', 'À vélo': 'En bici',
   'Cartes hors ligne': 'Mapas sin conexión', 'Trace, département ou zone': 'Track, región o zona', 'Mes cartes': 'Mis mapas',

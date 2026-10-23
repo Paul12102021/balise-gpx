@@ -5,7 +5,7 @@
 
 // La page et le code doivent être de la même version. Sinon (page gardée en cache
 // par le téléphone ou par GitHub), on recharge une page fraîche, au plus 3 fois.
-const APP_VERSION = 182;
+const APP_VERSION = 183;
 try {
   const meta = document.querySelector('meta[name="balise-version"]');
   const pageV = meta ? +meta.content : 0;
@@ -1179,7 +1179,8 @@ function openStvManual(it, why) {
     if (!inApp) { manual(); return; }
     const L = { title: tr('Mettre sur Strava'), close: tr('Fermer'), chrome: 'Chrome',
       hint: tr('Touche « Sélect. fichiers » : ta sortie est choisie toute seule. Puis « Enregistrer et afficher ».'),
-      sent: tr('Ta sortie est choisie. Vérifie le titre et le type, puis « Enregistrer et afficher ».'), done: tr('Sortie publiée sur Strava') };
+      sent: tr('Ta sortie est choisie. Vérifie le titre et le type, puis « Enregistrer et afficher ».'), done: tr('Sortie publiée sur Strava'),
+      google: tr('Google refuse la connexion dans une appli. Connecte-toi avec ton e-mail Strava (« Mot de passe oublié » pour t\'en créer un), ou touche « Chrome » en haut.') };
     let ok = false; try { ok = AND.stravaImport(fname, gpxForStrava(it), JSON.stringify(L)); } catch {}
     if (!ok) manual();
   };

@@ -126,7 +126,13 @@ public class StravaActivity extends Activity {
         web.setWebViewClient(new WebViewClient() {
             @Override
             public boolean shouldOverrideUrlLoading(WebView view, WebResourceRequest req) {
-                String s = req.getUrl().getScheme();
+                String s = req.getUrl().getScheme(), h = String.valueOf(req.getUrl().getHost());
+                // Google refuse toute connexion dans une appli : on le dit tout de suite plutôt que d'afficher son erreur
+                if (h.equals("accounts.google.com") || h.endsWith(".accounts.google.com")) {
+                    hint.setBackgroundColor(Color.parseColor("#8A3A12"));
+                    hint.setText(t("google", "Google refuse la connexion dans une appli. Connecte-toi avec ton e-mail Strava (« Mot de passe oublié » pour t'en créer un), ou touche « Chrome » en haut."));
+                    return true;
+                }
                 // liens vers l'appli Strava ou le Play Store : on reste sur le site
                 return s == null || !(s.equals("https") || s.equals("http"));
             }

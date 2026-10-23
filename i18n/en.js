@@ -95,6 +95,7 @@ const exact = {
   'Touche « Sélect. fichiers » : ta sortie est choisie toute seule. Puis « Enregistrer et afficher ».': 'Tap "Choose files": your outing is picked automatically. Then "Save & View".',
   'Ta sortie est choisie. Vérifie le titre et le type, puis « Enregistrer et afficher ».': 'Your outing is selected. Check the title and type, then "Save & View".',
   'Sortie publiée sur Strava': 'Outing published on Strava',
+  'Google refuse la connexion dans une appli. Connecte-toi avec ton e-mail Strava (« Mot de passe oublié » pour t\'en créer un), ou touche « Chrome » en haut.': 'Google blocks sign-in inside apps. Sign in with your Strava email ("Forgot password" to create one), or tap "Chrome" at the top.',
   'Hors ligne': 'Offline', 'Sorties et traces': 'Outings and tracks', 'Navigation': 'Navigation', 'Voix et vibrations': 'Voice and vibration', 'Affichage': 'Display', 'Import manuel': 'Manual import', 'Envoi automatique': 'Auto upload',
   'Je me déplace': 'I travel', 'Pour les itinéraires et le temps estimé': 'For routes and estimated time', 'À pied': 'On foot', 'À vélo': 'By bike',
   'Cartes hors ligne': 'Offline maps', 'Trace, département ou zone': 'Track, French département or area', 'Mes cartes': 'My maps',
