@@ -5,7 +5,7 @@
 
 // La page et le code doivent être de la même version. Sinon (page gardée en cache
 // par le téléphone ou par GitHub), on recharge une page fraîche, au plus 3 fois.
-const APP_VERSION = 183;
+const APP_VERSION = 184;
 try {
   const meta = document.querySelector('meta[name="balise-version"]');
   const pageV = meta ? +meta.content : 0;
@@ -1148,6 +1148,9 @@ function saveFile(text, fname) {
   document.body.appendChild(a); a.click(); setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 1500);
 }
 // un seul bouton : enregistre le GPX et ouvre l'import Strava ; au retour dans Pisteo, on demande si c'est publié
+// page d'import Strava dans l'appli (Android 2.3+) : en pause (23 oct.) — la connexion Google y est refusée par Google,
+// l'import par Chrome reste plus simple pour la plupart. Passer à true pour la réactiver.
+const STV_INAPP = false;
 let smAway = false, smChrome = false, smIt = null, smManual = null;
 // retour de la page d'import dans l'appli : identifiant de l'activité créée, « chrome » ou rien
 window.pisteoStravaDone = async id => {
@@ -1167,7 +1170,7 @@ function openStvManual(it, why) {
   const fname = `pisteo-${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}-${pad(d.getHours())}h${pad(d.getMinutes())}.gpx`;
   const strava = () => { smAway = true; window.open('https://www.strava.com/upload/select', '_blank'); };
   // appli 2.3+ : la page d'import s'ouvre dans l'appli et reçoit directement le fichier
-  const inApp = !!(AND && AND.stravaImport) && !smChrome;
+  const inApp = STV_INAPP && !!(AND && AND.stravaImport) && !smChrome;
   $('smIn').hidden = $('smInNote').hidden = !inApp; $('smOut').hidden = $('smOutNote').hidden = inApp;
   $('smOpen').textContent = tr(inApp ? 'Ouvrir l\'import Strava' : 'Enregistrer et ouvrir Strava');
   const manual = () => { const got = saveFile(gpxForStrava(it), fname); if (got) $('smFile').textContent = $('smFile2').textContent = got; strava(); };
