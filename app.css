@@ -704,3 +704,8 @@ body.wx-on #navProfile { height: 150px; }
 
 .scrub-dot { width: 18px; height: 18px; border-radius: 50%; background: var(--track); border: 3px solid #fff; box-shadow: 0 1px 6px rgba(0,0,0,.45); }
 #profile { touch-action: pan-y; }
+
+#btnSaveTr { padding: 0; width: 34px; justify-content: center; }
+#btnSaveTr svg { width: 16px; height: 16px; margin: 0; }
+.trackname { font-size: 15px; cursor: pointer; }
+.trackname.full { white-space: normal; overflow: visible; }

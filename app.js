@@ -5,7 +5,7 @@
 
 // La page et le code doivent être de la même version. Sinon (page gardée en cache
 // par le téléphone ou par GitHub), on recharge une page fraîche, au plus 3 fois.
-const APP_VERSION = 192;
+const APP_VERSION = 193;
 try {
   const meta = document.querySelector('meta[name="balise-version"]');
   const pageV = meta ? +meta.content : 0;
@@ -640,9 +640,12 @@ async function refreshSaveBtn() {
   const saved = (await listRecent()).some(it => it.id === id);
   if (track !== mine) return;
   b.classList.toggle('done', saved);
-  b.innerHTML = saved ? ICON_OK + 'Enregistrée' : ICON_SAVE + 'Enregistrer';
-  b.setAttribute('aria-label', saved ? 'Trace enregistrée dans Mes traces' : 'Enregistrer la trace dans Mes traces');
+  b.innerHTML = saved ? ICON_OK : ICON_SAVE; // icône seule : le nom de la trace garde la place
+  const lab = tr(saved ? 'Trace enregistrée dans Mes traces' : 'Enregistrer la trace dans Mes traces');
+  b.setAttribute('aria-label', lab); b.title = lab;
 }
+// nom trop long : un toucher l'affiche en entier
+$('trackName').onclick = () => $('trackName').classList.toggle('full');
 $('btnSaveTr').onclick = async () => {
   if (!track) return;
   if ($('btnSaveTr').classList.contains('done')) { toast('Déjà dans « Mes traces »', 3000, { label: 'Voir', run: openLib }); return; }
