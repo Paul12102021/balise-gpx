@@ -5,7 +5,7 @@
 
 // La page et le code doivent être de la même version. Sinon (page gardée en cache
 // par le téléphone ou par GitHub), on recharge une page fraîche, au plus 3 fois.
-const APP_VERSION = 188;
+const APP_VERSION = 189;
 try {
   const meta = document.querySelector('meta[name="balise-version"]');
   const pageV = meta ? +meta.content : 0;
@@ -581,6 +581,7 @@ function fitTo(ptsList) {
 async function showTrack(t, fit = true) {
   joinNear = false;
   track = makePath(t.pts, t.name); progress = null; clearRejoin(); loadDone();
+  setTimeout(trChipsUpdate, 0);
   // carrefours à feux de l'itinéraire (position le long du tracé), pour le temps estimé
   track.sig = (t.signals || []).map(s => { const pr = project(track, s, true); return pr && pr.dist < 60 ? pr.along : null; }).filter(v => v != null).sort((x, y) => x - y);
   // le texte et le profil s'affichent tout de suite, la carte suit dès qu'elle est prête
@@ -842,8 +843,7 @@ async function showSoList() {
   $('soEmpty').hidden = items.length > 0;
   const d = items.reduce((a, it) => a + (it.dist || 0), 0), ms = items.reduce((a, it) => a + (it.ms || 0), 0), up = items.reduce((a, it) => a + (it.up || 0), 0);
   $('soSum').hidden = !items.length;
-  const byMode = m => { const g = items.filter(it => recMode(it) === m); return g.length ? `<span class="so-mode">${modeIcon(m)}<b>${fmtDist(g.reduce((a, it) => a + (it.dist || 0), 0))}</b> ${m === 'bike' ? 'à vélo' : 'à pied'} (${g.length})</span>` : ''; };
-  $('soSum').innerHTML = `<b>${items.length}</b> sortie${items.length > 1 ? 's' : ''} · <b>${fmtDist(d)}</b> · ${fmtDur(ms / 1000)}${up ? ' · D+ ' + fmtM(up) : ''}<br>${byMode('bike')}${byMode('foot')}`;
+  if (items.length) renderBilan(items);
   let month = '';
   for (const it of items) {
     const when = it.start || it.date;
@@ -937,7 +937,7 @@ function stvUI() {
 }
 // ---------- Sauvegarde : sorties, traces et réglages dans un fichier, et restauration ----------
 // réglages choisis par l'utilisateur (pas l'état en cours, ni les caches, ni la connexion Strava)
-const BK_KEYS = ['thr', 'voice', 'vib', 'autoRec', 'eco', 'ecoSeen', 'banner', 'theme', 'profile', 'layerId', 'soLayer',
+const BK_KEYS = ['thr', 'voice', 'vib', 'autoRec', 'alertNight', 'eco', 'ecoSeen', 'banner', 'theme', 'profile', 'layerId', 'soLayer',
   'rtFilt', 'npProfOnly', 'showPacks', 'stvAuto', 'recHint'];
 const bkCount = items => {
   const r = items.filter(isRec).length;
@@ -1458,6 +1458,7 @@ function waitFix(ms) {
 }
 let fullT = 0;
 function onPos(pos) {
+  if (nav && !navHome && !pos.sim) navHome = { lat: pos.lat, lon: pos.lon };
   if (sim && !pos.sim) return; // pendant la simulation on ignore le vrai GPS
   // économie : loin des virages, une position sur deux secondes est traitée en entier ;
   // les autres servent seulement à l'enregistrement et au point bleu
@@ -1548,7 +1549,9 @@ async function startNav(free = false) {
   if (!startGPS()) return;
   nav = true; arrived = false; isOff = false; offCount = 0; milestones = {};
   navTrackId = track ? track.id : null;
-  navStartT = Date.now(); freeD = 0; freeRef = null;
+  navStartT = Date.now(); freeD = 0; freeRef = null; nightSaid = 0;
+  navHome = track && track.pts.length ? { lat: track.pts[0].lat, lon: track.pts[0].lon } : me && !me.sim ? { lat: me.lat, lon: me.lon } : null;
+  setTimeout(trChipsUpdate, 0);
   if (track && done && track.total - done.along < 25) { resetDone(); setDone(0, true); } // trace déjà finie : on repart de zéro
   document.body.classList.add('nav'); document.body.classList.toggle('free', !track); toggleMore(false, true);
   setFollow(true);
@@ -4112,7 +4115,7 @@ function updateStats() {
   }
   if (nav && info) {
     $('nbL2').textContent = 'restant'; $('nbL3').textContent = 'D+ restant';
-    $('nbEta').textContent = fmtClock(info.secs);
+    $('nbEta').textContent = fmtClock(info.secs); nightCheck(info);
     $('nbDur').textContent = 'arrivée · ' + fmtDur(info.secs);
     $('nbRem').textContent = fmtDist(info.rem);
     $('nbUp').textContent = track.hasEle ? fmtM(info.up) : '–';
@@ -4141,8 +4144,10 @@ function drawProfileOn(cv) {
   const E = track.ele, C = track.cum, n = E.length;
   let lo = Infinity, hi = -Infinity; E.forEach(e => { if (e != null) { lo = Math.min(lo, e); hi = Math.max(hi, e); } });
   const pad = Math.max(20, (hi - lo) * .08); lo -= pad; hi += pad;
-  const L0 = 38, B = 16, w = W - L0 - 4, h = H - B - 4;
-  const X = d => L0 + d / track.total * w, Y = e => 4 + (1 - (e - lo) / (hi - lo)) * h;
+  const T = wxShown() ? 44 : 0; // place pour la météo au-dessus du profil
+  const L0 = 38, B = 16, w = W - L0 - 4, h = H - B - 4 - T;
+  const X = d => L0 + d / track.total * w, Y = e => 4 + T + (1 - (e - lo) / (hi - lo)) * h;
+  if (T) wxBands(ctx, X, 4 + T, h);
   ctx.strokeStyle = cssVar('--line'); ctx.lineWidth = 1; ctx.textAlign = 'right'; ctx.textBaseline = 'middle';
   for (const [v, lab] of eleTicks(lo, hi, [10, 20, 50, 100, 200, 250, 500, 1000])) {
     const y = Math.round(Y(v)) + .5; ctx.beginPath(); ctx.moveTo(L0, y); ctx.lineTo(W, y); ctx.stroke(); ctx.fillText(lab, L0 - 4, y);
@@ -4153,7 +4158,7 @@ function drawProfileOn(cv) {
   const path = new Path2D(); let first = true;
   for (let i = 0; i < n; i += stride) { if (E[i] == null) continue; const x = X(C[i]), y = Y(E[i]); first ? path.moveTo(x, y) : path.lineTo(x, y); first = false; }
   if (E[n - 1] != null) path.lineTo(X(C[n - 1]), Y(E[n - 1]));
-  const area = new Path2D(path); area.lineTo(X(track.total), 4 + h); area.lineTo(L0, 4 + h); area.closePath();
+  const area = new Path2D(path); area.lineTo(X(track.total), 4 + T + h); area.lineTo(L0, 4 + T + h); area.closePath();
   ctx.fillStyle = COL.track; ctx.globalAlpha = .14; ctx.fill(area); ctx.globalAlpha = 1;
   ctx.strokeStyle = COL.track; ctx.lineWidth = 2; ctx.stroke(path);
   const di = doneInfo();
@@ -4166,10 +4171,11 @@ function drawProfileOn(cv) {
   if (di.started && E[di.idx] != null) {
     const x = X(di.along), y = Y(E[di.idx]);
     ctx.strokeStyle = COL.me; ctx.lineWidth = 1; ctx.setLineDash([3, 3]);
-    ctx.beginPath(); ctx.moveTo(x, 4); ctx.lineTo(x, 4 + h); ctx.stroke(); ctx.setLineDash([]);
+    ctx.beginPath(); ctx.moveTo(x, 4 + T); ctx.lineTo(x, 4 + T + h); ctx.stroke(); ctx.setLineDash([]);
     ctx.fillStyle = COL.me; ctx.beginPath(); ctx.arc(x, y, 5, 0, 7); ctx.fill();
     ctx.strokeStyle = '#fff'; ctx.lineWidth = 2; ctx.stroke();
   }
+  if (T) wxMarks(ctx, X, L0, W);
 }
 window.addEventListener('resize', drawProfile);
 
@@ -4198,6 +4204,7 @@ function toggleNavMore(open, instant) {
 }
 function updateNavMore() {
   if ($('navMore').hidden) return;
+  homeUI();
   if (!track) { // balade libre : distance, durée et vitesse depuis le départ
     const navS = (Date.now() - navStartT) / 1000, rec = actState !== 'idle';
     const el = rec ? actElapsed() / 1000 : navS, d = rec ? act.d : freeD;
@@ -5842,6 +5849,224 @@ if (AND) {
   window.pisteoCheckShared = checkShared;
 }
 window.__balise = { onPos, get state() { return { nav, isOff, rejoin: !!rejoin, straight: rejoin && rejoin.straight, progress, act: Object.assign({ elapsed: actElapsed(), state: actState, points: rec.length }, act) }; } };
+
+// =====================================================================
+// Soleil, météo le long du parcours, retour au départ, bilan des sorties
+// =====================================================================
+const hm = t => new Date(t).toLocaleTimeString(LOC, { hour: '2-digit', minute: '2-digit' });
+const escH = s => String(s).replace(/[<&>"]/g, c => ({ '<': '&lt;', '&': '&amp;', '>': '&gt;', '"': '&quot;' }[c]));
+// lever et coucher du soleil (équation du lever du soleil, précision ~1 min), sans réseau
+function sunTimes(t, lat, lon) {
+  const r = Math.PI / 180, d = new Date(t);
+  const n = Math.round(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate(), 12) / 864e5 + 2440587.5 - 2451545);
+  const Js = n - lon / 360, M = (357.5291 + 0.98560028 * Js) % 360;
+  const C = 1.9148 * Math.sin(M * r) + 0.02 * Math.sin(2 * M * r) + 0.0003 * Math.sin(3 * M * r);
+  const L = (M + C + 180 + 102.9372) % 360, Jt = 2451545 + Js + 0.0053 * Math.sin(M * r) - 0.0069 * Math.sin(2 * L * r);
+  const dec = Math.asin(Math.sin(L * r) * Math.sin(23.4397 * r));
+  const cw = (Math.sin(-0.833 * r) - Math.sin(lat * r) * Math.sin(dec)) / (Math.cos(lat * r) * Math.cos(dec));
+  if (cw < -1 || cw > 1) return null; // jour ou nuit polaire
+  const w = Math.acos(cw) / r / 360, ms = j => (j - 2440587.5) * 864e5;
+  return { rise: ms(Jt - w), set: ms(Jt + w) };
+}
+// temps estimé jusqu'à un point de la trace : allure de base (marche ou vélo + dénivelé),
+// corrigée en navigation par le temps restant réel (qui tient compte de ta vitesse)
+function baseSecs(x, y) {
+  const s = lpSpeed(), u = z => track.totalUp - infoAt(z).upLeft;
+  return Math.max(0, y - x) / (s.v / 3.6) + (track.hasEle ? Math.max(0, u(y) - u(x)) / s.climb * 3600 : 0);
+}
+function etaAlong(d) {
+  const a = (doneInfo() || {}).along || 0;
+  let k = 1;
+  if (nav) { const ri = remainingInfo(), b = baseSecs(a, track.total); if (ri && b > 60) k = ri.secs / b; }
+  return Date.now() + k * baseSecs(a, Math.max(a, d)) * 1000;
+}
+function sunInfo() {
+  if (!track || !track.pts.length) return null;
+  const end = track.pts[track.pts.length - 1], arr = etaAlong(track.total), st = sunTimes(arr, end.lat, end.lon);
+  return st ? { arr, set: st.set, margin: (st.set - arr) / 60000 } : null;
+}
+// pastille « coucher du soleil » : seulement s'il fait jour et que la marge est courte (moins d'une heure)
+function trChipsUpdate() {
+  const show = !!track && track.hasEle && !nav;
+  $('trChips').hidden = !show;
+  if (!show) return;
+  const si = sunInfo(), el = $('sunChip');
+  const warn = si && Date.now() < si.set && si.margin < 60;
+  el.hidden = !warn;
+  if (warn) el.innerHTML = si.margin >= 1
+    ? `🌙 <span>${tr('Coucher du soleil')}</span> ${hm(si.set)} · ${fmtDur(si.margin * 60)} <span>${tr('de marge')}</span>`
+    : `🌙 <span>${tr('Coucher du soleil')}</span> ${hm(si.set)} · <span>${tr('arrivée vers')}</span> ${hm(si.arr)}`;
+  $('btnWx').classList.toggle('on', wxShown()); document.body.classList.toggle('wx-on', wxShown());
+}
+setInterval(() => { if (track && !nav) trChipsUpdate(); }, 60000);
+
+// ---------- météo le long du parcours (Open-Meteo, gratuit, sans clé) : à la demande ----------
+var wxOn = false, meteo = null; // meteo = { key, at, marks: [{ d, ic, val, t }], rain: [[d0, d1]] }
+function wxKey() { return track ? track.name + '|' + Math.round(track.total) : ''; }
+function wxShown() { return !!(wxOn && meteo && track && meteo.key === wxKey()); }
+const wxCat = c => c <= 1 ? 0 : c <= 3 ? 1 : c <= 48 ? 2 : (c <= 67 || (c >= 80 && c <= 82)) ? 3 : c <= 86 ? 4 : 5;
+const wxIcon = c => c <= 1 ? '☀️' : c === 2 ? '⛅' : c === 3 ? '☁️' : c <= 48 ? '🌫️' : c <= 57 ? '🌦️' : (c <= 67 || (c >= 80 && c <= 82)) ? '🌧️' : c <= 86 ? '🌨️' : '⛈️';
+async function loadWx() {
+  const a = (doneInfo() || {}).along || 0, N = 10, pts = [];
+  for (let k = 0; k <= N; k++) { const d = a + (track.total - a) * k / N, q = pointAt(track, d); pts.push({ d, lat: q.lat, lon: q.lon, t: etaAlong(d) }); }
+  const url = 'https://api.open-meteo.com/v1/forecast?latitude=' + pts.map(p => p.lat.toFixed(3)).join(',') + '&longitude=' + pts.map(p => p.lon.toFixed(3)).join(',')
+    + '&hourly=temperature_2m,precipitation_probability,weather_code,wind_speed_10m,is_day&forecast_days=3&timeformat=unixtime&timezone=GMT';
+  const ctrl = new AbortController(), timer = setTimeout(() => ctrl.abort(), 15000);
+  let js;
+  try { const r = await fetch(url, { signal: ctrl.signal }); if (!r.ok) throw new Error('HTTP ' + r.status); js = await r.json(); }
+  finally { clearTimeout(timer); }
+  wxBuild(pts, Array.isArray(js) ? js : [js], a);
+}
+// prévisions heure par heure aux points du parcours → étiquettes aux changements de temps + bandes de pluie
+function wxBuild(pts, js, a) {
+  const S = [];
+  pts.forEach((p, i) => {
+    const h = js[i] && js[i].hourly; if (!h) return;
+    let j = -1, best = Infinity; h.time.forEach((tt, k) => { const df = Math.abs(tt * 1000 - p.t); if (df < best) { best = df; j = k; } });
+    if (j < 0 || best > 2 * 3600e3) return; // trop loin dans le temps pour la prévision
+    S.push({ d: p.d, t: p.t, temp: h.temperature_2m[j], prob: h.precipitation_probability[j] || 0, code: h.weather_code[j], wind: h.wind_speed_10m[j] || 0, day: !h.is_day || h.is_day[j] !== 0 });
+  });
+  if (S.length < 2) throw new Error('far');
+  const wet = s => s.prob >= 40 || (wxCat(s.code) >= 3 && s.prob >= 25), windy = s => s.wind >= 40;
+  // on ne garde que le départ, l'arrivée et les moments où le temps change vraiment
+  let marks = [], last = null;
+  S.forEach((s, i) => {
+    if (!last || i === S.length - 1 || wxCat(s.code) !== wxCat(last.code) || wet(s) !== wet(last) || Math.abs(s.temp - last.temp) >= 4 || windy(s) !== windy(last)) { marks.push(s); last = s; }
+  });
+  // assez d'écart entre deux étiquettes pour rester lisibles (au moins 18 % du parcours affiché)
+  const span = track.total - a, keep = [marks[0]];
+  for (let k = 1; k < marks.length; k++) {
+    const m = marks[k], prev = keep[keep.length - 1];
+    if (m.d - prev.d >= span * 0.18) keep.push(m);
+    else if (k === marks.length - 1) { if (keep.length > 1) keep[keep.length - 1] = m; else keep.push(m); }
+  }
+  marks = keep.slice(0, 5);
+  const step = span / (pts.length - 1), rain = [];
+  let r0 = null;
+  S.forEach((s, i) => {
+    if (wet(s) && r0 == null) r0 = i;
+    if (r0 != null && (!wet(s) || i === S.length - 1)) { const i1 = wet(s) ? i : i - 1; rain.push([Math.max(a, S[r0].d - step / 2), Math.min(track.total, S[i1].d + step / 2)]); r0 = null; }
+  });
+  meteo = { key: wxKey(), at: Date.now(), rain,
+    marks: marks.map(s => ({ d: s.d, t: s.t, ic: windy(s) && !wet(s) ? '💨' : !s.day && s.code <= 2 ? '🌙' : wxIcon(s.code),
+      val: wet(s) ? s.prob + ' %' : windy(s) ? Math.round(s.wind * (IMP ? 0.621 : 1)) + (IMP ? ' mph' : ' km/h') : Math.round(IMP ? s.temp * 9 / 5 + 32 : s.temp) + '°' })) };
+}
+function wxBands(ctx, X, top, h) {
+  ctx.save(); ctx.fillStyle = 'rgba(47,128,237,.14)'; ctx.strokeStyle = 'rgba(47,128,237,.45)'; ctx.setLineDash([3, 3]); ctx.lineWidth = 1;
+  for (const [d0, d1] of meteo.rain) { const x0 = X(d0), x1 = X(d1); ctx.fillRect(x0, top, x1 - x0, h); ctx.strokeRect(x0 + .5, top + .5, x1 - x0 - 1, h - 1); }
+  ctx.restore();
+}
+function wxMarks(ctx, X, L0, W) {
+  ctx.save(); ctx.textAlign = 'center'; ctx.textBaseline = 'alphabetic';
+  for (const m of meteo.marks) {
+    const x = clamp(X(m.d), L0 + 14, W - 18);
+    ctx.font = '16px system-ui, sans-serif'; ctx.fillText(m.ic, x, 17);
+    ctx.font = '700 11px system-ui, sans-serif'; ctx.fillStyle = cssVar('--ink'); ctx.fillText(m.val, x, 30);
+    ctx.font = '10px system-ui, sans-serif'; ctx.fillStyle = cssVar('--muted'); ctx.fillText(hm(m.t), x, 42);
+  }
+  ctx.restore();
+}
+async function toggleWx() {
+  if (!track) return;
+  if (wxShown()) { wxOn = false; }
+  else {
+    wxOn = true;
+    if (!meteo || meteo.key !== wxKey() || Date.now() - meteo.at > 30 * 60000) {
+      $('btnWx').classList.add('busy'); $('npWx').classList.add('busy');
+      try { await loadWx(); }
+      catch (e) { wxOn = false; toast(e.message === 'far' ? 'Météo : le parcours est trop loin dans le temps pour la prévision.' : navigator.onLine === false ? 'Météo : pas de réseau pour l\'instant.' : 'Météo indisponible pour l\'instant, réessaie dans un moment.', 4000); }
+      $('btnWx').classList.remove('busy'); $('npWx').classList.remove('busy');
+    }
+  }
+  wxApply();
+}
+function wxApply() {
+  const on = wxShown();
+  document.body.classList.toggle('wx-on', on);
+  $('btnWx').classList.toggle('on', on); $('npWx').classList.toggle('on', on);
+  drawProfile(); if (!$('navMore').hidden) drawProfileOn($('navProfile'));
+}
+$('btnWx').onclick = toggleWx;
+$('npWx').onclick = toggleWx;
+
+// ---------- prévenir avant la nuit (réglage, désactivé par défaut) ----------
+$('alertNight').checked = store.get('alertNight') === '1';
+$('alertNight').onchange = e => store.set('alertNight', e.target.checked ? '1' : '0');
+var nightSaid = 0;
+function nightCheck(info) {
+  if (store.get('alertNight') !== '1' || !track || !track.pts.length) return;
+  const end = track.pts[track.pts.length - 1], now = Date.now(), arr = now + info.secs * 1000, st = sunTimes(arr, end.lat, end.lon);
+  if (!st || now > st.set || st.set - arr > 30 * 60000 || now - nightSaid < 45 * 60000) return;
+  nightSaid = now;
+  toast(`🌙 ${tr('Il te reste')} ${fmtDur((st.set - now) / 1000)} ${tr('de jour')} · ${tr('arrivée prévue')} ${hm(arr)}, ${tr('coucher du soleil à')} ${hm(st.set)}`, 9000);
+  say(tr('Attention : tu risques d\'arriver après la tombée de la nuit.'));
+}
+
+// ---------- ramène-moi au départ ----------
+var navHome = null;
+function homeUI() {
+  const b = $('npHome'), home = navHome, ok = !!(nav && home && me && !me.sim && hav(me, home) > 150);
+  b.hidden = !ok;
+  if (ok) $('npHomeD').textContent = '· ' + fmtDist(hav(me, home));
+}
+$('npHome').onclick = () => { if (navHome) goTo({ lat: navHome.lat, lon: navHome.lon, label: tr('le départ') }); };
+
+// ---------- bilan des sorties : mois, année, tout ----------
+var blPeriod = 'm', blOff = 0, blItems = [];
+function blRange(p, off) {
+  const now = new Date();
+  if (p === 'm') { const a = new Date(now.getFullYear(), now.getMonth() + off, 1); return [a.getTime(), new Date(a.getFullYear(), a.getMonth() + 1, 1).getTime(), a]; }
+  if (p === 'y') { const a = new Date(now.getFullYear() + off, 0, 1); return [a.getTime(), new Date(a.getFullYear() + 1, 0, 1).getTime(), a]; }
+  return [0, Infinity, null];
+}
+function blStats(items) {
+  return { n: items.length, d: items.reduce((a, it) => a + (it.dist || 0), 0), up: items.reduce((a, it) => a + (it.up || 0), 0), ms: items.reduce((a, it) => a + (it.ms || 0), 0) };
+}
+function renderBilan(items) {
+  if (items) blItems = items;
+  const all = blItems, when = it => it.start || it.date;
+  const [t0, t1, a] = blRange(blPeriod, blOff), cur = all.filter(it => when(it) >= t0 && when(it) < t1);
+  const S = blStats(cur);
+  let prevS = null;
+  if (blPeriod !== 'all') { const [p0, p1] = blRange(blPeriod, blOff - 1); prevS = blStats(all.filter(it => when(it) >= p0 && when(it) < p1)); }
+  const delta = (v, pv) => { if (!prevS || !prevS.n || !pv || !S.n) return ''; const k = Math.round((v - pv) / pv * 100); return k ? `<em class="${k < 0 ? 'dn' : ''}">${k > 0 ? '▲' : '▼'} ${Math.abs(k)} %</em>` : ''; };
+  const title = blPeriod === 'm' ? a.toLocaleDateString(LOC, { month: 'long', year: 'numeric' }) : blPeriod === 'y' ? String(a.getFullYear()) : tr('Depuis le début');
+  const oldest = all.length ? Math.min(...all.map(when)) : Date.now();
+  const canPrev = blPeriod !== 'all' && blRange(blPeriod, blOff)[0] > oldest, canNext = blPeriod !== 'all' && blOff < 0;
+  // colonnes : semaines du mois (lundi), mois de l'année, ou années
+  const sum = (list, s, e) => list.filter(it => when(it) >= s && when(it) < e).reduce((x, it) => x + (it.dist || 0), 0);
+  const cols = [], now = Date.now();
+  if (blPeriod === 'm') {
+    const first = new Date(t0); first.setDate(1 - ((first.getDay() + 6) % 7));
+    for (let s = first.getTime(); s < t1; ) { const e = new Date(s); e.setDate(e.getDate() + 7); const ds = new Date(Math.max(s, t0)); cols.push({ lab: String(ds.getDate()), v: sum(cur, s, e.getTime()), cur: now >= s && now < e.getTime() }); s = e.getTime(); }
+  } else if (blPeriod === 'y') {
+    for (let m = 0; m < 12; m++) { const s = new Date(a.getFullYear(), m, 1).getTime(), e = new Date(a.getFullYear(), m + 1, 1).getTime(); cols.push({ lab: new Date(s).toLocaleDateString(LOC, { month: 'narrow' }), v: sum(cur, s, e), cur: now >= s && now < e }); }
+  } else {
+    const y1 = new Date().getFullYear(), y0 = Math.max(new Date(oldest).getFullYear(), y1 - 5);
+    for (let y = y0; y <= y1; y++) cols.push({ lab: String(y), v: sum(all, new Date(y, 0, 1).getTime(), new Date(y + 1, 0, 1).getTime()), cur: y === y1 });
+  }
+  const vmax = Math.max(1, ...cols.map(c => c.v));
+  const fmtK = v => v >= 1000 ? (IMP ? Math.round(v / 1609.34) + ' mi' : Math.round(v / 1000) + ' km') : '';
+  const foot = cur.filter(it => recMode(it) !== 'bike'), bike = cur.filter(it => recMode(it) === 'bike'), fd = blStats(foot).d, bd = blStats(bike).d;
+  const longest = cur.reduce((b, it) => !b || (it.dist || 0) > (b.dist || 0) ? it : b, null);
+  const climb = cur.reduce((b, it) => (it.up || 0) > ((b && b.up) || 0) ? it : b, null);
+  const day = it => escH(it.title || new Date(when(it)).toLocaleDateString(LOC, { weekday: 'long', day: 'numeric', month: 'long' }));
+  $('soSum').innerHTML = `
+    <div class="bl-seg"><button data-p="m" class="${blPeriod === 'm' ? 'on' : ''}">${tr('Mois')}</button><button data-p="y" class="${blPeriod === 'y' ? 'on' : ''}">${tr('Année')}</button><button data-p="all" class="${blPeriod === 'all' ? 'on' : ''}">${tr('Tout')}</button></div>
+    <div class="bl-head"><button data-o="-1" ${canPrev ? '' : 'disabled'} aria-label="${tr('Précédent')}">‹</button><span>${title}</span><button data-o="1" ${canNext ? '' : 'disabled'} aria-label="${tr('Suivant')}">›</button></div>
+    <div class="bl-tiles">
+      <div><b>${fmtDist(S.d)}</b><span>${S.n} ${tr(S.n > 1 ? 'sorties' : 'sortie')}</span>${delta(S.d, prevS && prevS.d)}</div>
+      <div><b>${fmtM(S.up)}</b><span>D+</span>${delta(S.up, prevS && prevS.up)}</div>
+      <div><b>${fmtDur(S.ms / 1000)}</b><span>${tr('en mouvement')}</span>${delta(S.ms, prevS && prevS.ms)}</div>
+    </div>
+    ${S.n ? `<div class="bl-chart">${cols.map(c => `<div class="${c.cur ? 'cur' : ''}"><small>${c.v && c.v === vmax ? fmtK(c.v) : ''}</small><i style="height:${c.v ? Math.max(4, c.v / vmax * 100) : 2}%;${c.v ? '' : 'opacity:.25'}"></i><span>${c.lab}</span></div>`).join('')}</div>
+    <div class="bl-mix">${fd ? `<div style="flex:${fd};background:var(--go)"></div>` : ''}${bd ? `<div style="flex:${bd};background:#e07b39"></div>` : ''}</div>
+    <div class="bl-leg">${foot.length ? `<span><i style="background:var(--go)"></i>${tr('À pied')} · ${fmtDist(fd)} · ${foot.length}</span>` : ''}${bike.length ? `<span><i style="background:#e07b39"></i>${tr('À vélo')} · ${fmtDist(bd)} · ${bike.length}</span>` : ''}</div>
+    <div class="bl-rec"><div>🏆 ${tr('Plus longue')}<b>${fmtDist(longest.dist || 0)}</b><span>${day(longest)}</span></div>${climb ? `<div>⛰️ ${tr('Plus de D+')}<b>${fmtM(climb.up)}</b><span>${day(climb)}</span></div>` : ''}</div>`
+    : `<p class="bl-empty">${tr('Aucune sortie sur cette période.')}</p>`}`;
+  $('soSum').querySelectorAll('[data-p]').forEach(b => b.onclick = () => { blPeriod = b.dataset.p; blOff = 0; renderBilan(); });
+  $('soSum').querySelectorAll('[data-o]').forEach(b => b.onclick = () => { blOff += +b.dataset.o; renderBilan(); });
+}
 })();
 
 // au doigt, une liste ou une case garde le cadre bleu de sélection après le choix : on le retire une fois la valeur choisie

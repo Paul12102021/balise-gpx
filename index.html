@@ -9,13 +9,13 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<meta name="balise-version" content="188">
+<meta name="balise-version" content="189">
 <title>Pisteo</title>
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" href="icon.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
 <link rel="stylesheet" href="vendor/maplibre-gl.css">
-<link rel="stylesheet" href="app.css?v=188">
+<link rel="stylesheet" href="app.css?v=189">
 </head>
 <body>
 <div id="map" aria-label="Carte"></div>
@@ -97,9 +97,11 @@
     <canvas id="navProfile" aria-label="Profil altimétrique et position"></canvas>
     <div class="np-proftools">
       <span id="npProfInfo"></span>
+      <button id="npWx" class="linkbtn">Météo</button>
       <button id="npProfOnly" class="linkbtn">Profil seul</button>
     </div>
     <div class="np-acts">
+      <button id="npHome" class="btn np-home" hidden><svg viewBox="0 0 24 24"><path d="M9 14 4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11"/></svg><span>Ramène-moi au départ</span><small id="npHomeD"></small></button>
       <button id="npRec" class="btn"></button>
       <button id="npEnd" class="btn ghost" hidden>Terminer</button>
     </div>
@@ -144,6 +146,10 @@
     <button id="btnClose" class="closebtn icon" hidden aria-label="Fermer la trace" title="Fermer la trace">
       <svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></svg>
     </button>
+  </div>
+  <div id="trChips" class="tr-chips" hidden>
+    <button id="btnWx" class="chip wx-btn">⛅ Météo</button>
+    <span id="sunChip" class="chip sun-chip" hidden></span>
   </div>
   <canvas id="profile" aria-label="Profil altimétrique"></canvas>
   <div id="actBar" class="actbar" hidden>
@@ -190,6 +196,10 @@
       <div class="row">
         <label for="optBanner">Indications<br><small>Taille du bandeau de direction</small></label>
         <select id="optBanner"><option value="normal">Grandes</option><option value="compact">Réduites</option><option value="hidden">Masquées</option></select>
+      </div>
+      <div class="row">
+        <label for="alertNight">Prévenir avant la nuit<br><small>Si l'arrivée risque de tomber après le coucher du soleil</small></label>
+        <input type="checkbox" id="alertNight" class="check">
       </div>
       <div class="row">
         <label for="autoRec">Enregistrer automatiquement<br><small>Dès que la navigation démarre</small></label>
@@ -256,7 +266,7 @@
         <b>Mes sorties</b>
         <button id="soClose" class="closebtn" aria-label="Fermer"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></svg>Fermer</button>
       </div>
-      <p id="soSum" class="lib-sum" hidden></p>
+      <div id="soSum" class="lib-sum bl" hidden></div>
       <ul id="soItems" class="lib-list"></ul>
       <p id="soEmpty" class="note" hidden>Tes sorties enregistrées apparaîtront ici. En navigation, touche ● pour enregistrer, puis « Terminer » et « Garder ».</p>
     </div>
@@ -697,8 +707,8 @@
 <div id="toast" class="toast" hidden></div>
 
 <script src="vendor/maplibre-gl.js"></script>
-<script src="i18n/en.js?v=188"></script>
-<script src="i18n/es.js?v=188"></script>
-<script src="app.js?v=188"></script>
+<script src="i18n/en.js?v=189"></script>
+<script src="i18n/es.js?v=189"></script>
+<script src="app.js?v=189"></script>
 </body>
 </html>
