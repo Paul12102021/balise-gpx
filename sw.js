@@ -1,6 +1,6 @@
 /* Service worker : appli disponible hors ligne + tuiles de carte en cache */
-const APP = 'app-v185', TILES = 'tiles-v2';
-const SHELL = ['./', 'index.html', 'app.css?v=185', 'app.js?v=185', 'i18n/en.js?v=185', 'i18n/es.js?v=185', 'vendor/maplibre-gl.js', 'vendor/maplibre-gl.css',
+const APP = 'app-v186', TILES = 'tiles-v2';
+const SHELL = ['./', 'index.html', 'app.css?v=186', 'app.js?v=186', 'i18n/en.js?v=186', 'i18n/es.js?v=186', 'vendor/maplibre-gl.js', 'vendor/maplibre-gl.css',
   'departements.json', 'regions/countries.json', 'manifest.webmanifest', 'icon.svg', 'icon-192.png', 'icon-512.png', 'icon-maskable-512.png', 'apple-touch-icon.png'];
 
 // Clé de cache commune avec la page : https://tiles.balise/<fond>/<z>/<x>/<y>
@@ -27,6 +27,8 @@ function parseTile(url) {
   }
   if (url.hostname === 'wmts.geo.admin.ch' && (m = url.pathname.match(/^\/1\.0\.0\/ch\.swisstopo\.pixelkarte-farbe\/default\/current\/3857\/(\d+)\/(\d+)\/(\d+)\.jpeg$/)))
     return { prov: 'ch', z: +m[1], x: +m[2], y: +m[3] };
+  if (url.hostname === 'api.os.uk' && (m = url.pathname.match(/^\/maps\/raster\/v1\/zxy\/Outdoor_3857\/(\d+)\/(\d+)\/(\d+)\.png$/)))
+    return { prov: 'gb', z: +m[1], x: +m[2], y: +m[3] };
   if (url.hostname === 'sgx.geodatenzentrum.de' && (m = url.pathname.match(/^\/wmts_topplus_open\/tile\/1\.0\.0\/web\/default\/WEBMERCATOR\/(\d+)\/(\d+)\/(\d+)\.png$/)))
     return { prov: 'de', z: +m[1], x: +m[3], y: +m[2] };
   if (url.hostname === 'basemap.nationalmap.gov' && (m = url.pathname.match(/^\/arcgis\/rest\/services\/USGSTopo\/MapServer\/tile\/(\d+)\/(\d+)\/(\d+)$/)))

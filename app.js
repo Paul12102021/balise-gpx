@@ -5,7 +5,7 @@
 
 // La page et le code doivent être de la même version. Sinon (page gardée en cache
 // par le téléphone ou par GitHub), on recharge une page fraîche, au plus 3 fois.
-const APP_VERSION = 185;
+const APP_VERSION = 186;
 try {
   const meta = document.querySelector('meta[name="balise-version"]');
   const pageV = meta ? +meta.content : 0;
@@ -338,6 +338,10 @@ const NAT = {
   // swisstopo : carte nationale suisse (données ouvertes, usage libre avec la mention « © swisstopo »)
   ch: { name: 'swisstopo', max: 18, kb: 35, par: 4, attr: '© <a href="https://www.swisstopo.admin.ch">swisstopo</a>',
     url: 'https://wmts.geo.admin.ch/1.0.0/ch.swisstopo.pixelkarte-farbe/default/current/3857/{z}/{x}/{y}.jpeg' },
+  // Ordnance Survey (Grande-Bretagne) : carte Outdoor, gratuite jusqu'au niveau 16 (OS OpenData), téléchargement permis ;
+  // limite de 600 tuiles par minute pour toute l'appli → téléchargements cadencés (rate)
+  gb: { name: 'Ordnance Survey', max: 16, kb: 25, par: 2, rate: 450, attr: 'Contains OS data © Crown copyright and database rights 2026',
+    url: 'https://api.os.uk/maps/raster/v1/zxy/Outdoor_3857/{z}/{x}/{y}.png?key=nrlrimaly1yk6su7XFpdMCAtA5r6DQPs' },
   // TopPlusOpen (BKG) : carte topo officielle allemande, libre (dl-de/by-2-0), détaillée jusqu'au niveau 18 en Allemagne
   de: { name: 'TopPlusOpen', max: 18, kb: 30, par: 4, attr: '© <a href="https://www.bkg.bund.de">BKG</a> (2026) <a href="https://www.govdata.de/dl-de/by-2-0">dl-de/by-2-0</a> · <a href="https://sgx.geodatenzentrum.de/web_public/gdz/datenquellen/datenquellen_topplusopen.html">Datenquellen</a>',
     url: 'https://sgx.geodatenzentrum.de/wmts_topplus_open/tile/1.0.0/web/default/WEBMERCATOR/{z}/{y}/{x}.png' },
@@ -4635,6 +4639,7 @@ const COUNTRIES = [
   { id: 'at', nat: 'at', name: 'Autriche', file: 'regions/at.json' },
   { id: 'be', nat: 'be', name: 'Belgique', file: 'regions/be.json' },
   { id: 'ca', nat: 'ca', name: 'Canada', file: 'regions/ca.json' }, // parcs nationaux, comme aux États-Unis
+  { id: 'gb', nat: 'gb', name: 'Royaume-Uni', file: 'regions/gb.json' }, // parcs nationaux et grands massifs (sans l'Irlande du Nord)
   { id: 'ch', nat: 'ch', name: 'Suisse', file: 'regions/ch.json' }, // cantons
   { id: 'us', nat: 'us', name: 'États-Unis', file: 'regions/us.json' }, // parcs nationaux : un État entier serait trop lourd
 ];
@@ -4761,8 +4766,10 @@ async function downloadPack(pack, tiles) {
   const prov = pack.prov || 'ign';
   let tileUrl = NAT[prov] ? natTileUrl(prov) : ignTileUrl;
   if (prov === 'ofm') { const tpl = await getOfmTiles(); tileUrl = (z, x, y) => tpl.replace('{z}', z).replace('{x}', x).replace('{y}', y); await precacheOfm(); }
+  const gap = NAT[prov] && NAT[prov].rate ? 60000 / NAT[prov].rate : 0; let nextAt = 0; // serveur à débit limité
   const getTile = async (z, x, y) => {
     for (let attempt = 0; attempt < 2; attempt++) {
+      if (gap) { const now = Date.now(), at = Math.max(now, nextAt); nextAt = at + gap; if (at > now) await new Promise(r => setTimeout(r, at - now)); }
       const ctrl = new AbortController(), timer = setTimeout(() => ctrl.abort(), 20000);
       try {
         const r = await fetch(tileUrl(z, x, y), { mode: 'cors', cache: 'no-store', signal: ctrl.signal });
@@ -4771,7 +4778,7 @@ async function downloadPack(pack, tiles) {
         if (r.status >= 400 && r.status < 500 && r.status !== 429) return null; // demande refusée : inutile d'insister
       } catch (e) { lastErr = e.name === 'AbortError' ? 'le serveur de la carte ne répond pas' : 'pas de connexion'; }
       finally { clearTimeout(timer); }
-      await new Promise(r => setTimeout(r, 1500));
+      await new Promise(r => setTimeout(r, lastErr === 'le serveur de la carte répond 429' ? 10000 : 1500));
     }
     return null;
   };
