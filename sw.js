@@ -1,6 +1,6 @@
 /* Service worker : appli disponible hors ligne + tuiles de carte en cache */
-const APP = 'app-v179', TILES = 'tiles-v2';
-const SHELL = ['./', 'index.html', 'app.css?v=179', 'app.js?v=179', 'i18n/en.js?v=179', 'i18n/es.js?v=179', 'vendor/maplibre-gl.js', 'vendor/maplibre-gl.css',
+const APP = 'app-v180', TILES = 'tiles-v2';
+const SHELL = ['./', 'index.html', 'app.css?v=180', 'app.js?v=180', 'i18n/en.js?v=180', 'i18n/es.js?v=180', 'vendor/maplibre-gl.js', 'vendor/maplibre-gl.css',
   'departements.json', 'regions/countries.json', 'manifest.webmanifest', 'icon.svg', 'icon-192.png', 'icon-512.png', 'icon-maskable-512.png', 'apple-touch-icon.png'];
 
 // Clé de cache commune avec la page : https://tiles.balise/<fond>/<z>/<x>/<y>
@@ -82,9 +82,13 @@ async function serveTile(req, t) {
   const cache = await caches.open(TILES), key = tileKey(t.prov, t.z, t.x, t.y);
   const own = await cache.match(key);
   if (own) return own;
+  // serveur lent (ex. BKG en Allemagne) : au bout de 8 s on affiche la version agrandie, mais la tuile
+  // continue d'arriver en arrière-plan et sera prête (en cache) au prochain affichage
+  const net = fetch(req).then(r => { if (r.ok) cache.put(key, r.clone()); return r; });
+  net.catch(() => {});
   try {
-    const r = await fetchWithTimeout(req, 8000);
-    if (r.ok) { cache.put(key, r.clone()); return r; }
+    const r = await Promise.race([net, new Promise(ok => setTimeout(() => ok(null), 8000))]);
+    if (r && r.ok) return r;
   } catch { /* pas de réseau */ }
   // hors ligne : la même tuile en version IGN téléchargée, sinon une tuile moins détaillée agrandie
   if (t.prov === 'ofm') return new Response('', { status: 504 });
