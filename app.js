@@ -5,7 +5,7 @@
 
 // La page et le code doivent être de la même version. Sinon (page gardée en cache
 // par le téléphone ou par GitHub), on recharge une page fraîche, au plus 3 fois.
-const APP_VERSION = 180;
+const APP_VERSION = 181;
 try {
   const meta = document.querySelector('meta[name="balise-version"]');
   const pageV = meta ? +meta.content : 0;
@@ -4579,7 +4579,9 @@ function polyTiles(polys, zmax) {
 // pour ajouter un pays : sa carte dans NAT, ses régions (code, nom, names, polys) dans regions/<pays>.json
 const COUNTRIES = [
   { id: 'fr', nat: 'ign', name: 'France', file: 'departements.json' },
-  { id: 'de', nat: 'de', name: 'Allemagne', file: 'regions/de.json' }, // Länder
+  // Allemagne (TopPlusOpen, BKG) : en pause, le serveur ne répond plus (23 oct.). Pour la remettre : cette ligne
+  // + le contour regions/de-outline.json sous la clé "de" dans regions/countries.json
+  // { id: 'de', nat: 'de', name: 'Allemagne', file: 'regions/de.json' }, // Länder
   { id: 'es', nat: 'es', name: 'Espagne', file: 'regions/es.json' },
   { id: 'at', nat: 'at', name: 'Autriche', file: 'regions/at.json' },
   { id: 'be', nat: 'be', name: 'Belgique', file: 'regions/be.json' },

@@ -327,7 +327,7 @@ const exact = {
   'Impossible d\'ouvrir la fenêtre réduite': 'No se puede abrir la ventana reducida',
   'La position GPS sera recherchée': 'Se buscará tu posición GPS', 'Position GPS actuelle': 'Posición GPS actual',
   'Suit les chemins': 'Sigue los caminos', 'Ligne droite': 'Línea recta', 'Départ : ta position · l\'itinéraire suit les chemins': 'Salida: tu posición · la ruta sigue los caminos',
-  "Cartes téléchargées : cartes officielles libres (IGN en France, IGN España, BKG en Allemagne, basemap.at, IGN Belgique, swisstopo en Suisse, Toporama au Canada, USGS aux États-Unis) ou carte Monde ailleurs. Sans réseau, l'appli passe toute seule sur ces cartes. Garde l'écran allumé pendant un téléchargement.": "Mapas descargados: mapas oficiales libres (IGN en Francia, IGN España, BKG en Alemania, basemap.at, IGN Bélgica, swisstopo en Suiza, Toporama en Canadá, USGS en EE. UU.) o el mapa Mundo en otros sitios. Sin cobertura, la app cambia sola a estos mapas. Mantén la pantalla encendida durante una descarga.",
+  "Cartes téléchargées : cartes officielles libres (IGN en France, IGN España, basemap.at, IGN Belgique, swisstopo en Suisse, Toporama au Canada, USGS aux États-Unis) ou carte Monde ailleurs. Sans réseau, l'appli passe toute seule sur ces cartes. Garde l'écran allumé pendant un téléchargement.": "Mapas descargados: mapas oficiales libres (IGN en Francia, IGN España, basemap.at, IGN Bélgica, swisstopo en Suiza, Toporama en Canadá, USGS en EE. UU.) o el mapa Mundo en otros sitios. Sin cobertura, la app cambia sola a estos mapas. Mantén la pantalla encendida durante una descarga.",
   "Un département ou une région": "Una región entera",
   "Pays": "País",
   "France": "Francia",
