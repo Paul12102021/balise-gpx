@@ -457,6 +457,17 @@ const patterns = [
   [/^Fichier : (.+)$/, 'Archivo: $1'],
 ];
 const bits = [
+  ['Sortie matinale à pied', 'Caminata matinal'],
+  ['Sortie du midi à pied', 'Caminata de mediodía'],
+  ['Sortie de l\'après-midi à pied', 'Caminata de la tarde'],
+  ['Sortie du soir à pied', 'Caminata nocturna'],
+  ['Sortie matinale à vélo', 'Salida matinal en bici'],
+  ['Sortie du midi à vélo', 'Salida de mediodía en bici'],
+  ['Sortie de l\'après-midi à vélo', 'Salida de la tarde en bici'],
+  ['Sortie du soir à vélo', 'Salida nocturna en bici'],
+  ['Grande randonnée · ', 'Gran recorrido · '],
+  ['Randonnée régionale · ', 'Sendero regional · '],
+  ['Randonnée locale · ', 'Sendero local · '],
   [' · chaque toucher ajoute un point', ' · cada toque añade un punto'],
   [' · glisse un point pour le déplacer, touche-le pour le supprimer', ' · arrastra un punto para moverlo, tócalo para eliminarlo'],
   ['Touche la carte pour ajouter un passage · Naviguer pour partir', 'Toca el mapa para añadir un paso · Navegar para salir'],

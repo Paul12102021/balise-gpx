@@ -408,7 +408,7 @@ const patterns = [
   [/^(\d+) cartes? de ta sauvegarde (?:sont|est) à retélécharger \(~(.+)\)\. Mieux vaut être en Wi-Fi\.$/, m => `${plural(m[1], 'map', 'maps')} from your backup to download again (~${m[2]}). Wi-Fi recommended.`],
   [/^⚠️ Enregistrement interrompu (\d+) fois \((.+) sans position, (.+) tracés en ligne droite\)\..*$/, m => `⚠️ Recording interrupted ${m[1]} time${m[1] > 1 ? 's' : ''} (${m[2]} without position, ${m[3]} drawn as straight lines). The phone probably paused the app with the screen off.`],
   [/^Boucle (à vélo|à pied) de (.+)$/, (m, t) => `${m[2]} ${m[1] === 'à vélo' ? 'bike' : 'walking'} loop`],
-  [/^(.*)environ (.+?)( \(demandé : (.+)\))?$/, (m) => `${m[1]}about ${m[2]}${m[3] ? ` (requested: ${m[4]})` : ''}`],
+  [/^(.*)environ (.+?)( \(demandé : (.+)\))?$/, (m, t) => `${m[1] ? t(m[1]) : ''}about ${m[2]}${m[3] ? ` (requested: ${m[4]})` : ''}`],
   [/^(.+) jusqu'à (.+) (à vélo|à pied)(?:, itinéraire (.+))?$/, (m, t) => `${m[1]} to ${m[2]} ${m[3] === 'à vélo' ? 'by bike' : 'on foot'}${m[4] ? ', ' + t(m[4]) + ' route' : ''}`],
   [/^Vers (.+)$/, 'To $1'],
   [/^(.+) autour de toi$/, (m, t) => t(m[1]) + ' around you'],
@@ -460,6 +460,17 @@ const patterns = [
 ];
 // pieces replaced inside longer texts (longest first)
 const bits = [
+  ['Sortie matinale à pied', 'Morning walk'],
+  ['Sortie du midi à pied', 'Lunchtime walk'],
+  ['Sortie de l\'après-midi à pied', 'Afternoon walk'],
+  ['Sortie du soir à pied', 'Evening walk'],
+  ['Sortie matinale à vélo', 'Morning ride'],
+  ['Sortie du midi à vélo', 'Lunchtime ride'],
+  ['Sortie de l\'après-midi à vélo', 'Afternoon ride'],
+  ['Sortie du soir à vélo', 'Evening ride'],
+  ['Grande randonnée · ', 'Long-distance trail · '],
+  ['Randonnée régionale · ', 'Regional trail · '],
+  ['Randonnée locale · ', 'Local trail · '],
   [' · chaque toucher ajoute un point', ' · each tap adds a point'],
   [' · glisse un point pour le déplacer, touche-le pour le supprimer', ' · drag a point to move it, tap it to delete it'],
   ['Touche la carte pour ajouter un passage · Naviguer pour partir', 'Tap the map to add a waypoint · Navigate to start'],
