@@ -5,7 +5,7 @@
 
 // La page et le code doivent être de la même version. Sinon (page gardée en cache
 // par le téléphone ou par GitHub), on recharge une page fraîche, au plus 3 fois.
-const APP_VERSION = 193;
+const APP_VERSION = 194;
 try {
   const meta = document.querySelector('meta[name="balise-version"]');
   const pageV = meta ? +meta.content : 0;
@@ -3658,7 +3658,7 @@ async function rtSelect(it) {
   if ($('routes').hidden) rtSheetOpen(true);
   $('rtpDot').style.background = rtColor(it); $('rtpTitle').textContent = it.name;
   $('rtpSub').textContent = 'Chargement du tracé…'; rtMiniProfile($('rtpProf'), null);
-  $('rtpGo').disabled = $('rtpKeep').disabled = true; $('rtpKeep').textContent = 'Garder';
+  $('rtpGo').disabled = $('rtpKeep').disabled = $('rtpView').disabled = true; $('rtpKeep').textContent = 'Garder';
   rtCardMode('prev');
   let g;
   try { g = await rtGeom(it); }
@@ -3671,7 +3671,7 @@ async function rtSelect(it) {
   const pts = rtOrient(g.pts, me || it.at);
   rtSelDraw([rtFeat(it, pts)]);
   rtPrevFill(it, pts, g.partial);
-  $('rtpGo').disabled = $('rtpKeep').disabled = false;
+  $('rtpGo').disabled = $('rtpKeep').disabled = $('rtpView').disabled = false;
   // toute la ligne visible au-dessus du panneau
   setTimeout(() => { try { map.fitBounds(boundsOf([pts]), { padding: { top: 90, bottom: rtPeek() + 30, left: 30, right: 70 }, bearing: 0, pitch: 0, duration: 600, maxZoom: 15 }); } catch {} }, 80);
   rtRender();
@@ -3707,6 +3707,28 @@ $('rtpGo').onclick = () => {
   loadText(text, false); store.set('gpx', text);
   startNav();
 };
+// « Aperçu » : le parcours s'ouvre comme un itinéraire (profil, météo, glisser sur le profil…) ; « Autres parcours » ramène à la liste
+$('rtpView').onclick = () => {
+  if (!rt.sel || !rt.selPts) return;
+  const it = rt.sel, pts = rt.selPts, partial = rt.selPartial;
+  rtUnselect(); closeRoutes(true);
+  rtShow(it, pts, partial);
+};
+// parcours balisés : glisser vers le bas dans le panneau le réduit (la carte reste avec les parcours), vers le haut l'agrandit
+(() => {
+  const pnl = $('rtPanel'); let y0 = null, x0 = 0, top0 = 0;
+  pnl.addEventListener('touchstart', e => {
+    if (e.touches.length > 1 || e.target.closest('#rtGrab, input, select, canvas')) { y0 = null; return; }
+    y0 = e.touches[0].clientY; x0 = e.touches[0].clientX; top0 = pnl.scrollTop;
+  }, { passive: true });
+  pnl.addEventListener('touchend', e => {
+    if (y0 == null) return;
+    const t = e.changedTouches[0], dy = t.clientY - y0, dx = t.clientX - x0; y0 = null;
+    if (Math.abs(dy) < 50 || Math.abs(dy) < Math.abs(dx) * 1.5) return;
+    if (dy > 0 && top0 <= 2 && !rtSheet.collapsed) rtSetCollapsed(true);
+    else if (dy < 0 && rtSheet.collapsed && !$('routes').classList.contains('has-card')) rtSetCollapsed(false);
+  });
+})();
 $('rtpKeep').onclick = async () => {
   if (!rt.sel || !rt.selPts) return;
   const name = rt.sel.name + (rt.selPartial ? ' (portion)' : ''), text = loopGPX(rt.selPts, name);
@@ -5717,7 +5739,7 @@ function closeSheetPanel(lib) {
   if (btn) btn.click(); else lib.hidden = true;
 }
 document.querySelectorAll('.lib').forEach(lib => {
-  const panel = lib.querySelector('.lib-panel'); if (!panel) return;
+  const panel = lib.querySelector('.lib-panel'); if (!panel || lib.id === 'routes') return; // parcours balisés : geste à part (réduire, pas fermer)
   let x0 = null, y0 = 0, dy = 0, decided = false, swiping = false, top0 = 0, lastY = 0, lastT = 0, vy = 0;
   const set = (v, anim) => { panel.style.transition = anim ? 'transform .22s ease-out' : ''; panel.style.transform = v ? `translateY(${v}px)` : ''; };
   panel.addEventListener('touchstart', e => {
