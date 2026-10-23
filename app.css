@@ -701,3 +701,6 @@ body.wx-on #navProfile { height: 150px; }
 .np-acts { flex-wrap: wrap; }
 .np-acts .np-home { flex: 1 1 100%; }
 .closebtn.icon.wx-btn.on svg { stroke: #fff; }
+
+.scrub-dot { width: 18px; height: 18px; border-radius: 50%; background: var(--track); border: 3px solid #fff; box-shadow: 0 1px 6px rgba(0,0,0,.45); }
+#profile { touch-action: pan-y; }

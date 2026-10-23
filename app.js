@@ -4178,6 +4178,7 @@ function drawProfileOn(cv) {
     ctx.strokeStyle = '#fff'; ctx.lineWidth = 2; ctx.stroke();
   }
   if (T) wxMarks(ctx, X, L0, W);
+  if (cv === $('profile') && scrubD != null) scrubDraw(ctx, X, Y, T, h, L0, W);
 }
 window.addEventListener('resize', drawProfile);
 
@@ -6078,6 +6079,60 @@ function renderBilan(items) {
   $('soSum').querySelectorAll('[data-p]').forEach(b => b.onclick = () => { blPeriod = b.dataset.p; blOff = 0; renderBilan(); });
   $('soSum').querySelectorAll('[data-o]').forEach(b => b.onclick = () => { blOff += +b.dataset.o; renderBilan(); });
 }
+
+// ---------- glisser le doigt sur le profil : le point correspondant s'affiche sur la carte ----------
+var scrubD = null, scrubMk = null, scrubT = null;
+function scrubAt(clientX) {
+  if (!track || !track.hasEle) return;
+  const r = cv.getBoundingClientRect(), L0 = 38, w = r.width - L0 - 4;
+  scrubD = clamp((clientX - r.left - L0) / w, 0, 1) * track.total;
+  const q = pointAt(track, scrubD);
+  if (!scrubMk) { const el = document.createElement('div'); el.className = 'scrub-dot'; scrubMk = new maplibregl.Marker({ element: el }); }
+  scrubMk.setLngLat([q.lon, q.lat]).addTo(map);
+  // point hors de l'écran : la carte le suit
+  const pt = map.project([q.lon, q.lat]), mc = map.getContainer(), sheetTop = $('sheet').getBoundingClientRect().top;
+  if (pt.x < 20 || pt.y < 70 || pt.x > mc.clientWidth - 20 || pt.y > sheetTop - 20) map.easeTo({ center: [q.lon, q.lat], duration: 300 });
+  clearTimeout(scrubT); drawProfile();
+}
+function scrubEnd(delay = 2500) {
+  clearTimeout(scrubT);
+  scrubT = setTimeout(() => { scrubD = null; if (scrubMk) scrubMk.remove(); drawProfile(); }, delay);
+}
+function scrubDraw(ctx, X, Y, T, h, L0, W) {
+  const q = pointAt(track, scrubD), e = track.ele[q.i], x = X(scrubD);
+  ctx.save();
+  ctx.strokeStyle = cssVar('--ink'); ctx.globalAlpha = .55; ctx.lineWidth = 1; ctx.setLineDash([3, 3]);
+  ctx.beginPath(); ctx.moveTo(x, 4 + T); ctx.lineTo(x, 4 + T + h); ctx.stroke(); ctx.setLineDash([]); ctx.globalAlpha = 1;
+  if (e != null) { ctx.fillStyle = COL.track; ctx.beginPath(); ctx.arc(x, Y(e), 5, 0, 7); ctx.fill(); ctx.strokeStyle = '#fff'; ctx.lineWidth = 2; ctx.stroke(); }
+  const up = track.totalUp - infoAt(scrubD).upLeft;
+  const txt = `${fmtDist(scrubD)}${e != null ? ' · ' + fmtM(e) : ''}${track.hasEle && up > 0 ? ' · D+ ' + fmtM(up) : ''} · ≈${hm(etaAlong(scrubD))}`;
+  ctx.font = '600 11px system-ui, sans-serif';
+  const tw = ctx.measureText(txt).width + 12, bx = clamp(x - tw / 2, L0, W - tw), by = 4 + T;
+  ctx.fillStyle = cssVar('--ink'); ctx.globalAlpha = .88; ctx.beginPath();
+  if (ctx.roundRect) ctx.roundRect(bx, by, tw, 18, 9); else ctx.rect(bx, by, tw, 18);
+  ctx.fill(); ctx.globalAlpha = 1;
+  ctx.fillStyle = cssVar('--panel') || '#fff'; ctx.textAlign = 'left'; ctx.textBaseline = 'middle'; ctx.fillText(txt, bx + 6, by + 9.5);
+  ctx.restore();
+}
+(() => {
+  let sx = 0, sy = 0, mode = null; // null : pas encore décidé · 'scrub' : glissé horizontal · 'sheet' : le panneau
+  cv.addEventListener('touchstart', e => {
+    if (!track || !track.hasEle || e.touches.length > 1) return;
+    sx = e.touches[0].clientX; sy = e.touches[0].clientY; mode = null; scrubAt(sx);
+  }, { passive: true });
+  cv.addEventListener('touchmove', e => {
+    if (!track || !track.hasEle) return;
+    const x = e.touches[0].clientX, dx = x - sx, dy = e.touches[0].clientY - sy;
+    if (!mode && (Math.abs(dx) > 8 || Math.abs(dy) > 8)) mode = Math.abs(dy) > Math.abs(dx) * 1.2 ? 'sheet' : 'scrub';
+    if (mode === 'sheet') { scrubEnd(0); return; }
+    if (mode === 'scrub') { if (e.cancelable) e.preventDefault(); e.stopPropagation(); scrubAt(x); }
+  }, { passive: false });
+  cv.addEventListener('touchend', () => { if (mode !== 'sheet') scrubEnd(); });
+  cv.addEventListener('touchcancel', () => scrubEnd(0));
+  // souris (ordinateur) : survol
+  cv.addEventListener('mousemove', e => { if (e.sourceCapabilities && e.sourceCapabilities.firesTouchEvents) return; scrubAt(e.clientX); });
+  cv.addEventListener('mouseleave', () => scrubEnd(800));
+})();
 })();
 
 // au doigt, une liste ou une case garde le cadre bleu de sélection après le choix : on le retire une fois la valeur choisie
