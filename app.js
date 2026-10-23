@@ -5,7 +5,7 @@
 
 // La page et le code doivent être de la même version. Sinon (page gardée en cache
 // par le téléphone ou par GitHub), on recharge une page fraîche, au plus 3 fois.
-const APP_VERSION = 184;
+const APP_VERSION = 185;
 try {
   const meta = document.querySelector('meta[name="balise-version"]');
   const pageV = meta ? +meta.content : 0;
@@ -775,6 +775,17 @@ function recGaps(pts) {
   }
   return { n, ms, dist };
 }
+// altitude GPS : ±10 m de bruit d'un point à l'autre → moyenne glissante avant de compter le dénivelé
+function smoothEle(pts) {
+  const e = pts.map(p => p.ele == null || isNaN(p.ele) ? null : +p.ele), out = [];
+  for (let i = 0; i < e.length; i++) {
+    if (e[i] == null) { out.push(null); continue; }
+    let s = 0, n = 0;
+    for (let k = Math.max(0, i - 3); k <= Math.min(e.length - 1, i + 3); k++) if (e[k] != null) { s += e[k]; n++; }
+    out.push(s / n);
+  }
+  return out;
+}
 function recStats(pts) {
   let dist = 0, move = 0, up = 0, down = 0, lo = Infinity, hi = -Infinity, vmax = 0, last = null;
   const segs = [];
@@ -791,11 +802,11 @@ function recStats(pts) {
       if (d >= 60 && dt >= 15) vmax = Math.max(vmax, d / dt);
     }
   }
-  for (const p of pts) {
-    if (p.ele == null || isNaN(p.ele)) continue;
-    lo = Math.min(lo, p.ele); hi = Math.max(hi, p.ele);
-    if (last == null) { last = p.ele; continue; }
-    if (p.ele - last > 3) { up += p.ele - last; last = p.ele; } else if (last - p.ele > 3) { down += last - p.ele; last = p.ele; }
+  for (const ele of smoothEle(pts)) {
+    if (ele == null) continue;
+    lo = Math.min(lo, ele); hi = Math.max(hi, ele);
+    if (last == null) { last = ele; continue; }
+    if (ele - last > 3) { up += ele - last; last = ele; } else if (last - ele > 3) { down += last - ele; last = ele; }
   }
   const ts = pts.map(p => p.t).filter(isFinite);
   return { dist, move, total: ts.length > 1 ? ts[ts.length - 1] - ts[0] : 0, up, down, lo: isFinite(lo) ? lo : null, hi: isFinite(hi) ? hi : null, vmax, start: ts[0] || null };
@@ -4277,7 +4288,7 @@ function onActFix(pos) {
   // distance comptée par pas de 8 m, pour ne pas additionner le flottement du GPS à l'arrêt
   if (!actRef) actRef = pos;
   const d = hav(actRef, pos);
-  if (d >= 8) { if (d < 500) act.d += d; actRef = pos; saveAct(); }
+  if (d >= Math.max(8, 0.6 * (pos.acc || 0))) { if (d < 500) act.d += d; actRef = pos; saveAct(); }
   addRecPoint(pos);
 }
 function pauseActivity() {
@@ -4300,7 +4311,7 @@ function togglePause() { if (actState === 'on') pauseActivity(); else if (actSta
 function recDist() { let d = 0; for (let i = 1; i < rec.length; i++) if ((rec[i].s || 0) === (rec[i - 1].s || 0)) d += hav(rec[i - 1], rec[i]); return d; }
 function recUp() {
   let up = 0, last = null;
-  for (const p of rec) { if (p.ele == null) continue; if (last != null && p.ele - last > 3) { up += p.ele - last; last = p.ele; } else if (last == null || p.ele < last) last = p.ele; }
+  for (const e of smoothEle(rec)) { if (e == null) continue; if (last != null && e - last > 3) { up += e - last; last = e; } else if (last == null || e < last) last = e; }
   return up;
 }
 function drawRec() {
@@ -4311,8 +4322,15 @@ function drawRec() {
 function addRecPoint(p) {
   if (p.sim || p.acc > 50) return;
   const last = rec[rec.length - 1];
-  if (last && (last.s || 0) === recSeg && hav(last, p) < 5) return; // évite d'accumuler des points à l'arrêt
-  rec.push({ lat: +p.lat.toFixed(6), lon: +p.lon.toFixed(6), ele: p.ele != null ? +p.ele.toFixed(1) : null, t: p.t, s: recSeg });
+  if (last && (last.s || 0) === recSeg) {
+    const d = hav(last, p), dt = Math.max(1, (p.t - last.t) / 1000);
+    // à l'arrêt ou dans un bâtiment, la position flotte dans son rayon de précision : on ne la suit pas
+    if (d < Math.max(5, 0.6 * (p.acc || 0))) return;
+    if (d / dt > 30) return; // saut impossible (> 108 km/h) : position aberrante
+  }
+  // altitude gardée seulement pour les positions GPS précises (les positions réseau n'en ont pas de fiable)
+  const ele = p.ele != null && (p.acc || 99) <= 20 ? +p.ele.toFixed(1) : null;
+  rec.push({ lat: +p.lat.toFixed(6), lon: +p.lon.toFixed(6), ele, t: p.t, s: recSeg });
   if (rec.length % 5 === 0) saveRec();
   drawRec();
 }
