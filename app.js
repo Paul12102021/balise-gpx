@@ -5,7 +5,7 @@
 
 // La page et le code doivent être de la même version. Sinon (page gardée en cache
 // par le téléphone ou par GitHub), on recharge une page fraîche, au plus 3 fois.
-const APP_VERSION = 194;
+const APP_VERSION = 195;
 try {
   const meta = document.querySelector('meta[name="balise-version"]');
   const pageV = meta ? +meta.content : 0;
@@ -5917,13 +5917,14 @@ function sunInfo() {
 function trChipsUpdate() {
   const show = !!track && track.hasEle && !nav;
   $('btnWx').hidden = !show;
-  const si = show ? sunInfo() : null, el = $('sunChip');
-  const warn = !!si && Date.now() < si.set && si.margin < 60;
+  // seulement si « Prévenir avant la nuit » est activé, et si l'arrivée frôle ou dépasse le coucher du soleil
+  const si = show && store.get('alertNight') === '1' ? sunInfo() : null, el = $('sunChip');
+  const warn = !!si && Date.now() < si.set && si.margin < 15;
   $('trChips').hidden = !warn;
   if (!show) { document.body.classList.remove('wx-on'); return; }
-  if (warn) el.innerHTML = si.margin >= 1
-    ? `🌙 <span>${tr('Coucher du soleil')}</span> ${hm(si.set)} · ${fmtDur(si.margin * 60)} <span>${tr('de marge')}</span>`
-    : `🌙 <span>${tr('Coucher du soleil')}</span> ${hm(si.set)} · <span>${tr('arrivée vers')}</span> ${hm(si.arr)}`;
+  if (warn) el.innerHTML = si.margin >= 0
+    ? `🌙 <span>${tr('Coucher du soleil')}</span> ${hm(si.set)} · <span>${tr('arrivée vers')}</span> ${hm(si.arr)}`
+    : `🌙 <span>${tr('Arrivée vers')}</span> ${hm(si.arr)}, <span>${tr('après le coucher du soleil')}</span> (${hm(si.set)})`;
   $('btnWx').classList.toggle('on', wxShown()); document.body.classList.toggle('wx-on', wxShown());
 }
 setInterval(() => { if (track && !nav) trChipsUpdate(); }, 60000);
@@ -6019,7 +6020,7 @@ $('npWx').onclick = toggleWx;
 
 // ---------- prévenir avant la nuit (réglage, désactivé par défaut) ----------
 $('alertNight').checked = store.get('alertNight') === '1';
-$('alertNight').onchange = e => store.set('alertNight', e.target.checked ? '1' : '0');
+$('alertNight').onchange = e => { store.set('alertNight', e.target.checked ? '1' : '0'); trChipsUpdate(); };
 var nightSaid = 0;
 function nightCheck(info) {
   if (store.get('alertNight') !== '1' || !track || !track.pts.length) return;

@@ -654,7 +654,7 @@ select { pointer-events: none; }
 /* ---------- météo et soleil sur le profil ---------- */
 .tr-chips { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; margin: 2px 0 4px; }
 .tr-chips[hidden] { display: none; }
-.tr-chips .chip { font-size: 13px; padding: 5px 11px; }
+.tr-chips .chip { font-size: 12.5px; padding: 4px 10px; }
 .closebtn.icon.wx-btn.on { background: var(--go); color: var(--go-ink, #fff); border-color: transparent; }
 .bl-fold { display: flex; width: 100%; justify-content: space-between; align-items: center; gap: 8px; padding: 10px 12px; border: 0; border-radius: 10px; background: var(--field); color: var(--ink); font: inherit; font-size: 14px; text-align: left; margin-bottom: 6px; }
 .bl-fold[hidden] { display: none; }
