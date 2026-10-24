@@ -134,6 +134,7 @@ const exact = {
   'Source (eau non garantie)': 'Spring (water not guaranteed)',
   'Refuge gardé': 'Staffed hut',
   'Cabane non gardée': 'Unstaffed hut',
+  'Eau, refuges, abris, sommets, points de vue, toilettes · France et pays voisins': 'Water, huts, shelters, summits, viewpoints, toilets · France and neighbouring countries',
   'Hors ligne': 'Offline', 'Sorties et traces': 'Outings and tracks', 'Navigation': 'Navigation', 'Voix et vibrations': 'Voice and vibration', 'Affichage': 'Display', 'Import manuel': 'Manual import', 'Envoi automatique': 'Auto upload',
   'Je me déplace': 'I travel', 'Pour les itinéraires et le temps estimé': 'For routes and estimated time', 'À pied': 'On foot', 'À vélo': 'By bike',
   'Cartes hors ligne': 'Offline maps', 'Trace, département ou zone': 'Track, French département or area', 'Mes cartes': 'My maps',

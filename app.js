@@ -5,7 +5,7 @@
 
 // La page et le code doivent être de la même version. Sinon (page gardée en cache
 // par le téléphone ou par GitHub), on recharge une page fraîche, au plus 3 fois.
-const APP_VERSION = 196;
+const APP_VERSION = 197;
 try {
   const meta = document.querySelector('meta[name="balise-version"]');
   const pageV = meta ? +meta.content : 0;
@@ -6162,7 +6162,8 @@ function scrubDraw(ctx, X, Y, T, h, L0, W) {
 
 // ---------- points utiles sur la carte (eau, sources, refuges, abris, toilettes) : dépôt pisteo-data ----------
 const POI = { w: ['💧', '#2f80ed', 'Eau potable', 5], s: ['💧', '#6aa7d8', 'Source (eau non garantie)', 3], r: ['🏠', '#b0532b', 'Refuge gardé', 6],
-  c: ['🛖', '#8a5a3b', 'Cabane non gardée', 5], a: ['⛺', '#3a7556', 'Abri', 4], t: ['🚻', '#7a5cc2', 'Toilettes', 1] };
+  c: ['🛖', '#8a5a3b', 'Cabane non gardée', 5], a: ['⛺', '#3a7556', 'Abri', 4], t: ['🚻', '#7a5cc2', 'Toilettes', 1],
+  v: ['🔭', '#d08a1e', 'Point de vue', 3], p: ['⛰️', '#6b6f73', 'Sommet', 2] };
 var poiMan = null, poiTiles = new Map(), poiBusy = false;
 const poiOn = () => store.get('poi') !== '0';
 function poiImages() {
@@ -6204,7 +6205,7 @@ async function poiUpdate() {
       for (let y = Math.floor((b.getSouth() + 90) / g); y <= Math.floor((b.getNorth() + 90) / g); y++) if (have.has(`${x}_${y}`) && names.length < 12) names.push(`${x}_${y}`);
     await Promise.all(names.filter(n => !poiTiles.has(n)).map(n => rtdGet(`p/${n}.json?d=${poiMan.date}`, 0).then(T => poiTiles.set(n, T.p || [])).catch(() => {})));
     const feats = [];
-    for (const n of names) for (const [lat, lon, k, nm] of poiTiles.get(n) || []) if (POI[k]) feats.push({ type: 'Feature', properties: { k, n: nm || '', pr: POI[k][3] }, geometry: { type: 'Point', coordinates: [lon, lat] } });
+    for (const n of names) for (const [lat, lon, k, nm, ele] of poiTiles.get(n) || []) if (POI[k]) feats.push({ type: 'Feature', properties: { k, n: [nm, ele != null ? fmtM(ele) : ''].filter(Boolean).join(' · '), pr: POI[k][3] }, geometry: { type: 'Point', coordinates: [lon, lat] } });
     map.getSource('poi').setData({ type: 'FeatureCollection', features: feats });
   } finally { poiBusy = false; }
 }
