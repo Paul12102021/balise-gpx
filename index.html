@@ -9,13 +9,13 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<meta name="balise-version" content="195">
+<meta name="balise-version" content="196">
 <title>Pisteo</title>
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" href="icon.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
 <link rel="stylesheet" href="vendor/maplibre-gl.css">
-<link rel="stylesheet" href="app.css?v=195">
+<link rel="stylesheet" href="app.css?v=196">
 </head>
 <body>
 <div id="map" aria-label="Carte"></div>
@@ -231,6 +231,10 @@
 
     <h3 class="set-h">Affichage</h3>
     <div class="set-group">
+      <div class="row">
+        <label for="optPoi">Points utiles sur la carte<br><small>Eau potable, sources, refuges, abris, toilettes · en France</small></label>
+        <input type="checkbox" id="optPoi" class="check">
+      </div>
       <div class="row">
         <label for="optTheme">Thème</label>
         <select id="optTheme"><option value="auto">Automatique</option><option value="light">Clair</option><option value="dark">Sombre</option></select>
@@ -710,8 +714,8 @@
 <div id="toast" class="toast" hidden></div>
 
 <script src="vendor/maplibre-gl.js"></script>
-<script src="i18n/en.js?v=195"></script>
-<script src="i18n/es.js?v=195"></script>
-<script src="app.js?v=195"></script>
+<script src="i18n/en.js?v=196"></script>
+<script src="i18n/es.js?v=196"></script>
+<script src="app.js?v=196"></script>
 </body>
 </html>

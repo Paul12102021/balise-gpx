@@ -5,7 +5,7 @@
 
 // La page et le code doivent être de la même version. Sinon (page gardée en cache
 // par le téléphone ou par GitHub), on recharge une page fraîche, au plus 3 fois.
-const APP_VERSION = 195;
+const APP_VERSION = 196;
 try {
   const meta = document.querySelector('meta[name="balise-version"]');
   const pageV = meta ? +meta.content : 0;
@@ -940,7 +940,7 @@ function stvUI() {
 }
 // ---------- Sauvegarde : sorties, traces et réglages dans un fichier, et restauration ----------
 // réglages choisis par l'utilisateur (pas l'état en cours, ni les caches, ni la connexion Strava)
-const BK_KEYS = ['thr', 'voice', 'vib', 'autoRec', 'alertNight', 'soBilan', 'eco', 'ecoSeen', 'banner', 'theme', 'profile', 'layerId', 'soLayer',
+const BK_KEYS = ['thr', 'voice', 'vib', 'autoRec', 'alertNight', 'soBilan', 'poi', 'eco', 'ecoSeen', 'banner', 'theme', 'profile', 'layerId', 'soLayer',
   'rtFilt', 'npProfOnly', 'showPacks', 'stvAuto', 'recHint'];
 const bkCount = items => {
   const r = items.filter(isRec).length;
@@ -6159,6 +6159,60 @@ function scrubDraw(ctx, X, Y, T, h, L0, W) {
   cv.addEventListener('mousemove', e => { if (e.sourceCapabilities && e.sourceCapabilities.firesTouchEvents) return; scrubAt(e.clientX); });
   cv.addEventListener('mouseleave', () => scrubEnd(800));
 })();
+
+// ---------- points utiles sur la carte (eau, sources, refuges, abris, toilettes) : dépôt pisteo-data ----------
+const POI = { w: ['💧', '#2f80ed', 'Eau potable', 5], s: ['💧', '#6aa7d8', 'Source (eau non garantie)', 3], r: ['🏠', '#b0532b', 'Refuge gardé', 6],
+  c: ['🛖', '#8a5a3b', 'Cabane non gardée', 5], a: ['⛺', '#3a7556', 'Abri', 4], t: ['🚻', '#7a5cc2', 'Toilettes', 1] };
+var poiMan = null, poiTiles = new Map(), poiBusy = false;
+const poiOn = () => store.get('poi') !== '0';
+function poiImages() {
+  for (const [k, [ic, col]] of Object.entries(POI)) {
+    if (map.hasImage('poi-' + k)) continue;
+    const S = 64, c = document.createElement('canvas'); c.width = c.height = S; const x = c.getContext('2d');
+    x.fillStyle = col; x.strokeStyle = '#fff'; x.lineWidth = 6; x.beginPath(); x.arc(S / 2, S / 2, S / 2 - 5, 0, 7); x.fill(); x.stroke();
+    x.font = '30px system-ui, "Apple Color Emoji", "Noto Color Emoji", sans-serif'; x.textAlign = 'center'; x.textBaseline = 'middle'; x.fillText(ic, S / 2, S / 2 + 2);
+    map.addImage('poi-' + k, x.getImageData(0, 0, S, S), { pixelRatio: 2 });
+  }
+}
+function poiLayer() {
+  if (map.getSource('poi')) return;
+  poiImages();
+  map.addSource('poi', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
+  map.addLayer({ id: 'poi', type: 'symbol', source: 'poi', minzoom: 12.5,
+    layout: { 'icon-image': ['concat', 'poi-', ['get', 'k']], 'icon-size': ['interpolate', ['linear'], ['zoom'], 12.5, .7, 16, 1], 'icon-allow-overlap': false,
+      'symbol-sort-key': ['-', 0, ['get', 'pr']], 'icon-padding': 1 } });
+  map.on('click', 'poi', e => {
+    const f = e.features && e.features[0]; if (!f) return;
+    const P = POI[f.properties.k]; toast(`${P[0]} ${tr(P[2])}${f.properties.n ? ' · ' + f.properties.n : ''}`, 3500);
+  });
+  map.on('mouseenter', 'poi', () => { map.getCanvas().style.cursor = 'pointer'; });
+  map.on('mouseleave', 'poi', () => { map.getCanvas().style.cursor = ''; });
+}
+async function poiUpdate() {
+  if (!map.isStyleLoaded()) return;
+  poiLayer();
+  const show = poiOn() && map.getZoom() >= 12.5;
+  map.setLayoutProperty('poi', 'visibility', poiOn() ? 'visible' : 'none');
+  if (!show || poiBusy) return;
+  poiBusy = true;
+  try {
+    if (!poiMan) poiMan = await rtdGet('poi.json', 864e5).catch(() => null);
+    if (!poiMan || !poiMan.tiles) return;
+    const b = map.getBounds(), have = new Set(poiMan.tiles);
+    const g = poiMan.grid || 0.25, names = [];
+    for (let x = Math.floor((b.getWest() + 180) / g); x <= Math.floor((b.getEast() + 180) / g); x++)
+      for (let y = Math.floor((b.getSouth() + 90) / g); y <= Math.floor((b.getNorth() + 90) / g); y++) if (have.has(`${x}_${y}`) && names.length < 12) names.push(`${x}_${y}`);
+    await Promise.all(names.filter(n => !poiTiles.has(n)).map(n => rtdGet(`p/${n}.json?d=${poiMan.date}`, 0).then(T => poiTiles.set(n, T.p || [])).catch(() => {})));
+    const feats = [];
+    for (const n of names) for (const [lat, lon, k, nm] of poiTiles.get(n) || []) if (POI[k]) feats.push({ type: 'Feature', properties: { k, n: nm || '', pr: POI[k][3] }, geometry: { type: 'Point', coordinates: [lon, lat] } });
+    map.getSource('poi').setData({ type: 'FeatureCollection', features: feats });
+  } finally { poiBusy = false; }
+}
+map.on('moveend', () => { if (poiOn()) poiUpdate(); });
+map.on('load', poiUpdate);
+if (map.loaded()) poiUpdate();
+$('optPoi').checked = poiOn();
+$('optPoi').onchange = e => { store.set('poi', e.target.checked ? '1' : '0'); poiUpdate(); };
 })();
 
 // au doigt, une liste ou une case garde le cadre bleu de sélection après le choix : on le retire une fois la valeur choisie
