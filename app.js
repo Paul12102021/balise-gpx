@@ -5,7 +5,7 @@
 
 // La page et le code doivent être de la même version. Sinon (page gardée en cache
 // par le téléphone ou par GitHub), on recharge une page fraîche, au plus 3 fois.
-const APP_VERSION = 197;
+const APP_VERSION = 198;
 try {
   const meta = document.querySelector('meta[name="balise-version"]');
   const pageV = meta ? +meta.content : 0;
@@ -6190,8 +6190,8 @@ function poiLayer() {
   map.on('mouseleave', 'poi', () => { map.getCanvas().style.cursor = ''; });
 }
 async function poiUpdate() {
-  if (!map.isStyleLoaded()) return;
-  poiLayer();
+  // pas isStyleLoaded() : il reste faux tant qu'un fond de carte lent charge ses tuiles
+  try { poiLayer(); } catch { map.once('idle', poiUpdate); return; }
   const show = poiOn() && map.getZoom() >= 12.5;
   map.setLayoutProperty('poi', 'visibility', poiOn() ? 'visible' : 'none');
   if (!show || poiBusy) return;
