@@ -50,4 +50,6 @@ android {
 
 dependencies {
     implementation 'androidx.core:core:1.13.1'
+    // sauvegarde Google Drive : autorisation Google (champ drive.appdata)
+    implementation 'com.google.android.gms:play-services-auth:21.2.0'
 }

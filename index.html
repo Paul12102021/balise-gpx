@@ -9,13 +9,13 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<meta name="balise-version" content="203">
+<meta name="balise-version" content="204">
 <title>Pisteo</title>
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" href="icon.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
 <link rel="stylesheet" href="vendor/maplibre-gl.css">
-<link rel="stylesheet" href="app.css?v=203">
+<link rel="stylesheet" href="app.css?v=204">
 </head>
 <body>
 <div id="map" aria-label="Carte"></div>
@@ -353,6 +353,12 @@
     <button id="bkSave" class="btn go">Créer une sauvegarde</button>
     <button id="bkLoad" class="btn">Restaurer une sauvegarde</button>
     <p id="bkMsg" class="fin-msg" role="status" hidden></p>
+    <div class="gd-box set-group">
+      <div class="gd-head"><b>Google Drive</b><small id="gdState"></small></div>
+      <div class="gd-acts"><button id="gdNow" class="btn go">Sauvegarder sur Drive</button><button id="gdRestore" class="btn">Restaurer depuis Drive</button></div>
+      <div class="row"><label for="gdAutoChk">Sauvegarde automatique<br><small>Après chaque sortie gardée, et une fois par jour</small></label><input type="checkbox" id="gdAutoChk" class="check"></div>
+      <small class="sm-dim">Dans un dossier caché réservé à Pisteo : l'appli ne voit pas tes autres fichiers.</small>
+    </div>
     <p class="note">La restauration ajoute les sorties et traces du fichier à celles déjà présentes, sans rien effacer. Les cartes hors ligne ne sont pas copiées dans le fichier (trop lourdes), seulement leur liste : après une restauration, « Mes cartes » propose de toutes les retélécharger. La connexion Strava est à refaire.</p>
     <input type="file" id="bkIn" accept=".json,application/json" hidden>
   </div>
@@ -714,8 +720,8 @@
 <div id="toast" class="toast" hidden></div>
 
 <script src="vendor/maplibre-gl.js"></script>
-<script src="i18n/en.js?v=203"></script>
-<script src="i18n/es.js?v=203"></script>
-<script src="app.js?v=203"></script>
+<script src="i18n/en.js?v=204"></script>
+<script src="i18n/es.js?v=204"></script>
+<script src="app.js?v=204"></script>
 </body>
 </html>

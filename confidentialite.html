@@ -83,7 +83,10 @@ footer { margin-top: 40px; color: var(--muted); font-size: 14px; }
     <tr><td>Photon (Komoot)</td><td>Recherche de lieux</td><td>Le texte recherché et la position du centre de la carte</td></tr>
     <tr><td>Overpass (OpenStreetMap)</td><td>Points utiles (eau, ravitaillement…) et localités pour la recherche hors ligne</td><td>La zone concernée</td></tr>
     <tr><td>geo.api.gouv.fr</td><td>Liste des communes d'un département</td><td>Le numéro du département</td></tr>
-    <tr><td>GitHub Pages</td><td>Hébergement de l'appli et de ses données (départements, chemins)</td><td>Les fichiers demandés</td></tr>
+    <tr><td>GitHub Pages</td><td>Données de l'appli : parcours balisés, points utiles (eau, refuges, sommets…)</td><td>Les fichiers demandés (la zone affichée)</td></tr>
+    <tr><td>Cloudflare</td><td>Hébergement de l'appli (pisteo.app)</td><td>Les fichiers demandés</td></tr>
+    <tr><td>Open-Meteo</td><td>Météo le long du parcours, seulement si tu touches « Météo »</td><td>Une dizaine de points du parcours, sans heure ni identifiant</td></tr>
+    <tr><td>Google Drive</td><td>Seulement si tu actives la sauvegarde Drive : enregistrer et restaurer ta sauvegarde</td><td>Le fichier de sauvegarde (sorties, traces, réglages, liste des cartes), rangé dans un dossier caché réservé à Pisteo sur <b>ton</b> Drive. Pisteo n'a accès qu'à ce dossier, pas à tes autres fichiers (autorisation « drive.appdata »). Aucune copie ne passe par l'éditeur.</td></tr>
     <tr><td>Strava, via un relais Cloudflare</td><td>Seulement si tu connectes ton compte Strava : connexion et envoi des sorties</td><td>Le fichier GPX de la sortie envoyée et ton jeton de connexion. Le relais transmet la demande à Strava sans rien enregistrer.</td></tr>
   </tbody>
 </table>
@@ -102,6 +105,7 @@ footer { margin-top: 40px; color: var(--muted); font-size: 14px; }
 <ul>
   <li>Une sortie, une trace ou une carte : bouton de suppression dans l'appli.</li>
   <li>Tout d'un coup : efface les données de l'appli dans les réglages du téléphone, ou désinstalle-la.</li>
+  <li>Google Drive : désactive la sauvegarde automatique dans l'appli, puis retire l'accès de Pisteo sur myaccount.google.com › Sécurité › Applications tierces : la sauvegarde rangée dans le dossier caché est alors supprimée de ton Drive.</li>
   <li>Strava : « Se déconnecter de Strava » dans l'appli, puis retire l'accès de Pisteo dans les réglages de ton compte Strava. Les sorties déjà envoyées sur Strava se suppriment depuis Strava.</li>
 </ul>
 <p>L'éditeur ne détenant aucune de tes données, il n'a rien à supprimer de son côté.</p>

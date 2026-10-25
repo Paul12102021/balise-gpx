@@ -61,7 +61,7 @@ public class MainActivity extends Activity {
     private String pendingUrl;
     private boolean clearHist;
     private final android.os.Handler ui = new android.os.Handler(android.os.Looper.getMainLooper());
-    private static final int REQ_FILE = 1, REQ_LOC = 2, REQ_NOTIF = 3, REQ_STRAVA = 4;
+    private static final int REQ_FILE = 1, REQ_LOC = 2, REQ_NOTIF = 3, REQ_STRAVA = 4, REQ_DRIVE = 5;
     private static final int BAR = Color.parseColor("#1d2a24");
 
     private WebView web;
@@ -270,6 +270,13 @@ public class MainActivity extends Activity {
     @Override
     protected void onActivityResult(int code, int result, Intent data) {
         super.onActivityResult(code, result, data);
+        if (code == REQ_DRIVE) {
+            try {
+                com.google.android.gms.auth.api.identity.AuthorizationResult r = com.google.android.gms.auth.api.identity.Identity.getAuthorizationClient(this).getAuthorizationResultFromIntent(data);
+                driveResult(r.getAccessToken(), r.getAccessToken() == null ? "refus" : null);
+            } catch (Exception e) { driveResult(null, result == RESULT_CANCELED ? "annulé" : String.valueOf(e.getMessage())); }
+            return;
+        }
         if (code == REQ_STRAVA) {
             String id = data != null ? data.getStringExtra(StravaActivity.RESULT_ID) : null;
             web.evaluateJavascript("window.pisteoStravaDone && window.pisteoStravaDone(" + (id == null ? "null" : org.json.JSONObject.quote(id)) + ")", null);
@@ -451,8 +458,34 @@ public class MainActivity extends Activity {
         }
     }
 
+    // ---------- Google Drive : jeton d'accès au dossier caché de l'appli (drive.appdata) ----------
+    private void driveAuthorize(boolean interactive) {
+        com.google.android.gms.auth.api.identity.AuthorizationRequest req = com.google.android.gms.auth.api.identity.AuthorizationRequest.builder()
+                .setRequestedScopes(java.util.Collections.singletonList(new com.google.android.gms.common.api.Scope("https://www.googleapis.com/auth/drive.appdata")))
+                .build();
+        com.google.android.gms.auth.api.identity.Identity.getAuthorizationClient(this).authorize(req)
+                .addOnSuccessListener(res -> {
+                    if (res.hasResolution()) {
+                        // il faut choisir le compte ou accepter : seulement si l'utilisateur l'a demandé
+                        if (!interactive || res.getPendingIntent() == null) { driveResult(null, "consent"); return; }
+                        try { startIntentSenderForResult(res.getPendingIntent().getIntentSender(), REQ_DRIVE, null, 0, 0, 0); }
+                        catch (Exception e) { driveResult(null, String.valueOf(e.getMessage())); }
+                    } else driveResult(res.getAccessToken(), res.getAccessToken() == null ? "refus" : null);
+                })
+                .addOnFailureListener(e -> driveResult(null, String.valueOf(e.getMessage())));
+    }
+
+    private void driveResult(String token, String err) {
+        String js = "window.pisteoDrive && window.pisteoDrive(" + (token == null ? "null" : org.json.JSONObject.quote(token)) + "," + (err == null ? "null" : org.json.JSONObject.quote(err)) + ")";
+        runOnUiThread(() -> { if (web != null) web.evaluateJavascript(js, null); });
+    }
+
     /** Ce que la page peut demander au téléphone (window.PisteoAndroid). */
     private class Bridge {
+        // sauvegarde Drive : demande un jeton (interactive = fenêtre Google si besoin) ; réponse par window.pisteoDrive
+        @JavascriptInterface
+        public void driveAuth(boolean interactive) { runOnUiThread(() -> driveAuthorize(interactive)); }
+
         // import Strava dans l'appli : la page d'import reçoit directement le GPX de la sortie (2.3.0)
         @JavascriptInterface
         public boolean stravaImport(String name, String content, String labels) {

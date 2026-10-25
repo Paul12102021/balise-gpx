@@ -727,3 +727,12 @@ body.side .lib-panel, body.side .lib-panel.tall { max-height: none; height: 100%
 body.side .lib-panel::before { display: none; }
 body.side #profile { height: 170px; }
 body.side.wx-on #profile { height: 200px; }
+
+/* ---------- sauvegarde Google Drive ---------- */
+.gd-box { border: 1px solid var(--line); border-radius: 14px; padding: 12px; margin: 10px 0; display: flex; flex-direction: column; gap: 10px; }
+.gd-head { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+.gd-head small { color: var(--muted); font-size: 12.5px; text-align: right; }
+.gd-acts { display: flex; gap: 8px; }
+.gd-acts .btn { flex: 1; }
+.gd-box .row { padding: 0; border: 0; }
+.gd-box .busy { opacity: .6; pointer-events: none; }

@@ -5,7 +5,7 @@
 
 // La page et le code doivent être de la même version. Sinon (page gardée en cache
 // par le téléphone ou par GitHub), on recharge une page fraîche, au plus 3 fois.
-const APP_VERSION = 203;
+const APP_VERSION = 204;
 try {
   const meta = document.querySelector('meta[name="balise-version"]');
   const pageV = meta ? +meta.content : 0;
@@ -959,7 +959,7 @@ function stvUI() {
 }
 // ---------- Sauvegarde : sorties, traces et réglages dans un fichier, et restauration ----------
 // réglages choisis par l'utilisateur (pas l'état en cours, ni les caches, ni la connexion Strava)
-const BK_KEYS = ['thr', 'voice', 'vib', 'autoRec', 'alertNight', 'soBilan', 'poi', 'eco', 'ecoSeen', 'banner', 'theme', 'profile', 'layerId', 'soLayer',
+const BK_KEYS = ['thr', 'voice', 'vib', 'autoRec', 'alertNight', 'soBilan', 'poi', 'gdAuto', 'eco', 'ecoSeen', 'banner', 'theme', 'profile', 'layerId', 'soLayer',
   'rtFilt', 'npProfOnly', 'showPacks', 'stvAuto', 'recHint'];
 const bkCount = items => {
   const r = items.filter(isRec).length;
@@ -972,10 +972,21 @@ async function bkRefresh() {
   const items = await listRecent();
   $('bkSum').textContent = items.length ? 'Sur ce téléphone : ' + bkCount(items) : 'Aucune sortie ni trace sur ce téléphone pour l\'instant.';
 }
-function openBackup() { $('backup').hidden = false; $('bkSum').textContent = '…'; bkSay(''); bkRefresh(); }
+function openBackup() { $('backup').hidden = false; $('bkSum').textContent = '…'; bkSay(''); bkRefresh(); gdUI(); }
 $('btnBackup').onclick = openBackup;
 $('bkClose').onclick = () => { $('backup').hidden = true; };
 $('backup').onclick = e => { if (e.target === $('backup')) $('backup').hidden = true; };
+// contenu d'une sauvegarde : sorties, traces, réglages et liste des cartes (sans leurs images)
+async function bkData() {
+  const items = await listRecent();
+  const packs = (await listPacks()).filter(p => Array.isArray(p.tiles) && p.tiles.length).map(p => ({
+    id: p.id, kind: p.kind, name: p.name, detail: p.detail, code: p.code, cc: p.cc, prov: p.prov, bbox: p.bbox, line: p.line,
+    tiles: p.tiles, count: p.tiles.length, graphWanted: !!(p.graph || p.graphWanted) }));
+  if (!items.length && !packs.length) return null;
+  const settings = {};
+  for (const k of BK_KEYS) { const v = store.get(k); if (v != null && v !== '') settings[k] = v; }
+  return { app: 'pisteo', format: 1, version: APP_VERSION, date: new Date().toISOString(), settings, tracks: items, packs };
+}
 $('bkSave').onclick = async () => {
   const items = await listRecent();
   // les cartes : seulement leur description (pas les images), pour pouvoir les retélécharger
@@ -1003,6 +1014,9 @@ $('bkIn').onchange = async e => {
   bkSay('Lecture du fichier…');
   let data;
   try { data = JSON.parse(await f.text()); } catch { data = null; }
+  await bkRestore(data);
+};
+async function bkRestore(data) {
   if (!data || data.app !== 'pisteo' || !Array.isArray(data.tracks)) { bkSay('Ce fichier n\'est pas une sauvegarde Pisteo.'); return; }
   const ok = data.tracks.filter(it => it && typeof it.id === 'string' && typeof it.text === 'string' && /<gpx/i.test(it.text));
   const have = new Set((await listRecent()).map(it => it.id));
@@ -4552,6 +4566,7 @@ async function endActivity(keep) {
       await saveRecent({ name, total: recDist(), hasEle: rec.some(p => p.ele != null), totalUp: recUp() }, toGPX(name), true,
         { kind: 'rec', ms: act.ms, start: act.start || (rec[0] && rec[0].t) || Date.now(), mode: profile === 'trekking' ? 'bike' : 'foot' });
       savedId = name + '|' + Math.round(recDist());
+      setTimeout(() => gdAuto(true), 4000); // sauvegarde Drive automatique, si activée
     } catch {
       // on ne perd rien : la sortie reste en cours (en pause) et peut être exportée
       if (actState === 'on') { act.since = Date.now(); }
@@ -6270,6 +6285,103 @@ map.on('load', poiUpdate);
 if (map.loaded()) poiUpdate();
 $('optPoi').checked = poiOn();
 $('optPoi').onchange = e => { store.set('poi', e.target.checked ? '1' : '0'); poiUpdate(); };
+
+// ---------- sauvegarde sur Google Drive (dossier caché de l'appli, champ drive.appdata) ----------
+// appli Android 2.3+ : jeton demandé par la coquille (Google refuse les connexions dans une page intégrée) ;
+// navigateur : fenêtre Google (Google Identity Services). Rien ne passe par un serveur Pisteo.
+const GD_WEB_ID = '188110201759-japec6qf0ispjqvcgq05mk1l74lo7k68.apps.googleusercontent.com';
+const GD_SCOPE = 'https://www.googleapis.com/auth/drive.appdata', GD_NAME = 'pisteo-sauvegarde.json', GD_API = 'https://www.googleapis.com';
+var gdTok = null, gdExp = 0, gdWait = null, gdBusy = false;
+const gdSupported = () => AND ? !!AND.driveAuth : true;
+window.pisteoDrive = (tok, err) => {
+  const w = gdWait; gdWait = null; if (!w) return;
+  if (tok) { gdTok = tok; gdExp = Date.now() + 3300e3; w.ok(tok); } else w.ko(new Error(err || 'refus'));
+};
+function gdGis() {
+  if (window.google && google.accounts && google.accounts.oauth2) return Promise.resolve();
+  return new Promise((ok, ko) => { const s = document.createElement('script'); s.src = 'https://accounts.google.com/gsi/client'; s.onload = ok; s.onerror = () => ko(new Error('réseau')); document.head.appendChild(s); });
+}
+function gdToken(interactive) {
+  if (gdTok && Date.now() < gdExp) return Promise.resolve(gdTok);
+  if (AND) {
+    if (!AND.driveAuth) return Promise.reject(new Error('update'));
+    return new Promise((ok, ko) => {
+      gdWait = { ok, ko };
+      try { AND.driveAuth(!!interactive); } catch (e) { gdWait = null; ko(e); return; }
+      setTimeout(() => { if (gdWait && gdWait.ok === ok) { gdWait = null; ko(new Error('timeout')); } }, 180000);
+    });
+  }
+  if (!interactive) return Promise.reject(new Error('consent')); // le navigateur ne peut pas le faire sans un toucher
+  return gdGis().then(() => new Promise((ok, ko) => {
+    const c = google.accounts.oauth2.initTokenClient({ client_id: GD_WEB_ID, scope: GD_SCOPE,
+      callback: r => { if (r && r.access_token) { gdTok = r.access_token; gdExp = Date.now() + ((+r.expires_in || 3600) - 120) * 1000; ok(gdTok); } else ko(new Error((r && r.error) || 'refus')); },
+      error_callback: e => ko(new Error((e && e.type) || 'refus')) });
+    c.requestAccessToken({ prompt: '' });
+  }));
+}
+async function gdFetch(url, opt = {}, interactive = false) {
+  const t = await gdToken(interactive);
+  const r = await fetch(url, Object.assign({}, opt, { headers: Object.assign({ Authorization: 'Bearer ' + t }, opt.headers || {}) }));
+  if (r.status === 401) { gdTok = null; throw new Error('auth'); }
+  if (!r.ok) throw new Error('HTTP ' + r.status);
+  return r;
+}
+async function gdFind(i) {
+  const q = encodeURIComponent(`name='${GD_NAME}'`);
+  const r = await gdFetch(`${GD_API}/drive/v3/files?spaces=appDataFolder&q=${q}&fields=files(id,modifiedTime,size)&orderBy=modifiedTime%20desc`, {}, i);
+  return ((await r.json()).files || [])[0] || null;
+}
+async function gdSave(i) {
+  const data = await bkData(); if (!data) return null;
+  const body = JSON.stringify(data), f = await gdFind(i);
+  if (f) await gdFetch(`${GD_API}/upload/drive/v3/files/${f.id}?uploadType=media`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body }, i);
+  else {
+    const b = 'pisteo' + Date.now(), meta = JSON.stringify({ name: GD_NAME, parents: ['appDataFolder'] });
+    await gdFetch(`${GD_API}/upload/drive/v3/files?uploadType=multipart`, { method: 'POST', headers: { 'Content-Type': 'multipart/related; boundary=' + b },
+      body: `--${b}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n${meta}\r\n--${b}\r\nContent-Type: application/json\r\n\r\n${body}\r\n--${b}--` }, i);
+  }
+  store.set('gdDate', String(Date.now()));
+  return data;
+}
+const gdErr = e => e.message === 'update' ? 'Mets à jour l\'appli Pisteo (Play Store) pour la sauvegarde Drive.'
+  : /refus|cancel|consent|12501|16:/i.test(e.message) ? 'Connexion à Google annulée.'
+  : navigator.onLine === false ? 'Pas de réseau.' : 'Drive indisponible pour l\'instant (' + e.message + ').';
+function gdUI() {
+  const ok = gdSupported(), d = +store.get('gdDate') || 0;
+  $('gdNow').disabled = $('gdRestore').disabled = $('gdAutoChk').disabled = !ok;
+  $('gdAutoChk').checked = store.get('gdAuto') === '1';
+  $('gdState').textContent = !ok ? tr('Mise à jour de l\'appli nécessaire') : d ? tr('Dernière sauvegarde :') + ' ' + new Date(d).toLocaleString(LOC, { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }) : tr('Pas encore utilisée');
+}
+const gdBtnBusy = (b, on) => b.classList.toggle('busy', on);
+$('gdNow').onclick = async () => {
+  if (gdBusy) return; gdBusy = true; gdBtnBusy($('gdNow'), true); bkSay('Sauvegarde sur Google Drive…');
+  try { const d = await gdSave(true); bkSay(d ? 'Sauvegardé sur Google Drive : ' + bkCount(d.tracks) + '.' : 'Rien à sauvegarder pour l\'instant.'); if (d && store.get('gdAuto') == null) { store.set('gdAuto', '1'); } }
+  catch (e) { bkSay(gdErr(e)); }
+  gdBusy = false; gdBtnBusy($('gdNow'), false); gdUI();
+};
+$('gdRestore').onclick = async () => {
+  if (gdBusy) return; gdBusy = true; gdBtnBusy($('gdRestore'), true); bkSay('Recherche de ta sauvegarde sur Google Drive…');
+  try {
+    const f = await gdFind(true);
+    if (!f) bkSay('Aucune sauvegarde Pisteo sur ce compte Google.');
+    else { const r = await gdFetch(`${GD_API}/drive/v3/files/${f.id}?alt=media`, {}, true); await bkRestore(await r.json()); }
+  } catch (e) { bkSay(gdErr(e)); }
+  gdBusy = false; gdBtnBusy($('gdRestore'), false); gdUI();
+};
+$('gdAutoChk').onchange = async e => {
+  store.set('gdAuto', e.target.checked ? '1' : '0');
+  if (e.target.checked && !store.get('gdDate')) $('gdNow').onclick(); // première fois : connexion + première sauvegarde
+  gdUI();
+};
+// automatique : après une sortie gardée (now) et au plus une fois par jour, sans rien demander (pas de fenêtre Google)
+async function gdAuto(now) {
+  if (store.get('gdAuto') !== '1' || !gdSupported() || gdBusy || navigator.onLine === false) return;
+  if (!now && Date.now() - (+store.get('gdDate') || 0) < 20 * 3600e3) return;
+  gdBusy = true;
+  try { await gdSave(false); } catch { /* nouvel essai plus tard */ }
+  gdBusy = false;
+}
+setTimeout(() => gdAuto(false), 15000);
 })();
 
 // au doigt, une liste ou une case garde le cadre bleu de sélection après le choix : on le retire une fois la valeur choisie
