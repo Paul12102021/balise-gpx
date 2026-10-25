@@ -5,7 +5,7 @@
 
 // La page et le code doivent être de la même version. Sinon (page gardée en cache
 // par le téléphone ou par GitHub), on recharge une page fraîche, au plus 3 fois.
-const APP_VERSION = 213;
+const APP_VERSION = 214;
 try {
   const meta = document.querySelector('meta[name="balise-version"]');
   const pageV = meta ? +meta.content : 0;
@@ -960,7 +960,7 @@ function stvUI() {
 }
 // ---------- Sauvegarde : sorties, traces et réglages dans un fichier, et restauration ----------
 // réglages choisis par l'utilisateur (pas l'état en cours, ni les caches, ni la connexion Strava)
-const BK_KEYS = ['thr', 'voice', 'vib', 'autoRec', 'alertNight', 'wxMode', 'soBilan', 'poi', 'gdAuto', 'eco', 'ecoSeen', 'banner', 'theme', 'profile', 'layerId', 'soLayer',
+const BK_KEYS = ['thr', 'voice', 'vib', 'autoRec', 'alertNight', 'soBilan', 'poi', 'gdAuto', 'eco', 'ecoSeen', 'banner', 'theme', 'profile', 'layerId', 'soLayer',
   'rtFilt', 'npProfOnly', 'showPacks', 'stvAuto', 'recHint'];
 const bkCount = items => {
   const r = items.filter(isRec).length;
@@ -5967,7 +5967,7 @@ function trChipsUpdate() {
   if (warn) el.innerHTML = si.margin >= 0
     ? `🌙 <span>${tr('Coucher du soleil')}</span> ${hm(si.set)} · <span>${tr('arrivée vers')}</span> ${hm(si.arr)}`
     : `🌙 <span>${tr('Arrivée vers')}</span> ${hm(si.arr)}, <span>${tr('après le coucher du soleil')}</span> (${hm(si.set)})`;
-  $('btnWx').classList.toggle('on', wxShown()); document.body.classList.toggle('wx-on', wxOnProf()); wxMap(); wxHours();
+  $('btnWx').classList.toggle('on', wxShown()); document.body.classList.toggle('wx-on', wxOnProf()); wxMap(); depUI();
 }
 setInterval(() => { if (track && !nav) trChipsUpdate(); }, 60000);
 
@@ -5976,9 +5976,8 @@ var wxOn = false, meteo = null, wxDep = null; // meteo = { key, at, marks: [{ d,
 function trKey() { return track ? track.name + '|' + Math.round(track.total) : ''; }
 function wxKey() { return track ? trKey() + '|' + (depAt() || 0) : ''; }
 function wxShown() { return !!(wxOn && meteo && track && meteo.key === wxKey()); }
-// réglage : où afficher la météo — 'profil' (bande, étiquettes, températures) ou 'heures' (vignettes sous le profil) ; sur la carte : le vent
-function wxMode() { return store.get('wxMode') === 'heures' ? 'heures' : 'profil'; }
-function wxOnProf() { return wxShown() && wxMode() === 'profil'; }
+// météo sur le profil (bande, étiquettes, températures) ; sur la carte : le vent
+function wxOnProf() { return wxShown(); }
 const wxCat = c => c <= 1 ? 0 : c <= 3 ? 1 : c <= 48 ? 2 : (c <= 67 || (c >= 80 && c <= 82)) ? 3 : c <= 86 ? 4 : 5;
 const wxIcon = c => c <= 1 ? '☀️' : c === 2 ? '⛅' : c === 3 ? '☁️' : c <= 48 ? '🌫️' : c <= 57 ? '🌦️' : (c <= 67 || (c >= 80 && c <= 82)) ? '🌧️' : c <= 86 ? '🌨️' : '⛈️';
 async function loadWx() {
@@ -6117,47 +6116,13 @@ function wxMap() {
   });
 }
 function wxApply() {
-  const on = wxShown(); wxMap(); wxHours(); depUI();
+  const on = wxShown(); wxMap(); depUI();
   document.body.classList.toggle('wx-on', wxOnProf());
   $('btnWx').classList.toggle('on', on); $('npWx').classList.toggle('on', on);
   drawProfile(); if (!$('navMore').hidden) drawProfileOn($('navProfile'));
 }
 $('btnWx').onclick = toggleWx;
 $('npWx').onclick = toggleWx;
-// vignettes heure par heure (mode 'heures'), sous le profil et dans la progression détaillée
-function wxHours() {
-  const on = wxShown() && wxMode() === 'heures';
-  for (const id of ['wxHours', 'npHours']) {
-    const box = $(id); box.hidden = !on; box.innerHTML = ''; if (!on) continue;
-    // chaque vignette sous le point du profil où l'on passera, autant qu'il en tient sans se chevaucher
-    const W = box.clientWidth || (id === 'wxHours' ? cv : $('navProfile')).clientWidth; if (!W) continue;
-    const L0 = 38, w = W - L0 - 4, CW = 50, GAP = 4, S = meteo.samples, keep = [];
-    const left = i => clamp(L0 + S[i].d / track.total * w - CW / 2, 0, W - CW);
-    // de gauche à droite sans chevauchement ; l'arrivée est toujours gardée (on retire ce qui la gêne)
-    S.forEach((sm, i) => { if (!keep.length || left(i) - left(keep[keep.length - 1]) >= CW + GAP) keep.push(i); });
-    const last = S.length - 1;
-    if (keep[keep.length - 1] !== last) { while (keep.length > 1 && left(last) - left(keep[keep.length - 1]) < CW + GAP) keep.pop(); keep.push(last); }
-    box.innerHTML = keep.map(i => { const sm = S[i];
-      return `<button class="wh" data-i="${i}" style="left:${left(i)}px"><b>${!sm.day && sm.code <= 2 ? '🌙' : wxIcon(sm.code)} ${Math.round(IMP ? sm.temp * 9 / 5 + 32 : sm.temp)}°</b><i style="width:${Math.max(4, Math.round(sm.prob * .36))}px;opacity:${sm.wet ? 1 : .35}"></i><em>${sm.prob} %</em><span>${hm(sm.t)}</span></button>`; }).join('');
-  }
-  wxHoursMark();
-}
-window.addEventListener('resize', () => { if (wxShown() && wxMode() === 'heures') wxHours(); });
-// vignette du moment montré sur le profil (doigt) ou de la position actuelle
-function wxHoursMark() {
-  if (!wxShown() || wxMode() !== 'heures') return;
-  const d = scrubD != null ? scrubD : (doneInfo() || {}).along || 0;
-  const S = meteo.samples;
-  for (const id of ['wxHours', 'npHours']) {
-    const els = [...$(id).querySelectorAll('.wh')]; if (!els.length) continue;
-    const k = els.reduce((b, el) => Math.abs(S[+el.dataset.i].d - d) < Math.abs(S[+b.dataset.i].d - d) ? el : b);
-    els.forEach(el => el.classList.toggle('on', el === k));
-  }
-}
-for (const id of ['wxHours', 'npHours']) $(id).addEventListener('click', e => {
-  const b = e.target.closest('.wh'); if (!b || !wxShown()) return;
-  scrubToD(meteo.samples[+b.dataset.i].d); scrubEnd(4000);
-});
 // ---------- heure de départ (météo à l'avance) ----------
 function depLabel() {
   const t = depAt(); if (!t) return tr('maintenant');
@@ -6209,14 +6174,11 @@ $('depOk').onclick = async () => {
 };
 $('wxDepBtn').onclick = depOpen;
 $('wxInfo').onclick = () => {
-  const m = wxMode(); document.querySelectorAll('#wxLegSheet .leg-sec').forEach(e => { e.hidden = !!e.dataset.mode && e.dataset.mode !== m; });
   $('wxLegSheet').hidden = false;
 };
 $('wxLegClose').onclick = () => { $('wxLegSheet').hidden = true; };
 $('wxLegSheet').onclick = e => { if (e.target === $('wxLegSheet')) $('wxLegSheet').hidden = true; };
 window.addEventListener('resize', () => { if (wxShown()) depUI(); });
-$('wxMode').value = wxMode();
-$('wxMode').onchange = e => { store.set('wxMode', e.target.value); wxApply(); };
 
 // ---------- prévenir avant la nuit (réglage, désactivé par défaut) ----------
 $('alertNight').checked = store.get('alertNight') === '1';
@@ -6322,11 +6284,11 @@ function scrubToD(d) {
   // point hors de l'écran : la carte le suit
   const pt = map.project([q.lon, q.lat]), mc = map.getContainer(), sheetTop = isSide() ? mc.clientHeight : $('sheet').getBoundingClientRect().top;
   if (pt.x < 20 || pt.y < 70 || pt.x > mc.clientWidth - 20 || pt.y > sheetTop - 20) map.easeTo({ center: [q.lon, q.lat], duration: 300 });
-  clearTimeout(scrubT); drawProfile(); wxHoursMark();
+  clearTimeout(scrubT); drawProfile();
 }
 function scrubEnd(delay = 2500) {
   clearTimeout(scrubT);
-  scrubT = setTimeout(() => { scrubD = null; if (scrubMk) scrubMk.remove(); drawProfile(); wxHoursMark(); }, delay);
+  scrubT = setTimeout(() => { scrubD = null; if (scrubMk) scrubMk.remove(); drawProfile(); }, delay);
 }
 function scrubDraw(ctx, X, Y, T, h, L0, W) {
   const q = pointAt(track, scrubD), e = track.ele[q.i], x = X(scrubD);

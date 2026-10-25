@@ -738,14 +738,6 @@ body.side.wx-on #profile { height: 200px; }
 .gd-box .busy { opacity: .6; pointer-events: none; }
 
 /* météo : vignettes heure par heure et pastilles sur la carte */
-.wx-hours { position: relative; height: 62px; margin: 2px 0 4px; }
-.wx-hours[hidden] { display: none; }
-.wx-hours .wh { position: absolute; top: 0; width: 50px; background: var(--field); border: 0; border-radius: 10px; padding: 5px 2px 4px; text-align: center; font: 10.5px system-ui, sans-serif; color: var(--muted); cursor: pointer; }
-.wx-hours .wh b { display: block; font-size: 12.5px; color: var(--ink); white-space: nowrap; }
-.wx-hours .wh i { display: block; height: 4px; border-radius: 2px; background: #2f80ed; margin: 3px auto 1px; }
-.wx-hours .wh em { display: block; font-style: normal; }
-.wx-hours .wh span { display: block; font-weight: 700; color: var(--ink); margin-top: 1px; }
-.wx-hours .wh.on { outline: 2px solid var(--go); outline-offset: -2px; }
 
 /* vent sur le tracé, heure de départ */
 .wind-arrow { width: 26px; height: 26px; border-radius: 50%; display: grid; place-items: center; box-shadow: 0 1px 5px rgba(0,0,0,.35); border: 2px solid #fff; cursor: pointer; }
