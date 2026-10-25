@@ -1,6 +1,6 @@
 /* Service worker : appli disponible hors ligne + tuiles de carte en cache */
-const APP = 'app-v198', TILES = 'tiles-v2';
-const SHELL = ['./', 'index.html', 'app.css?v=198', 'app.js?v=198', 'i18n/en.js?v=198', 'i18n/es.js?v=198', 'vendor/maplibre-gl.js', 'vendor/maplibre-gl.css',
+const APP = 'app-v199', TILES = 'tiles-v2';
+const SHELL = ['./', 'index.html', 'app.css?v=199', 'app.js?v=199', 'i18n/en.js?v=199', 'i18n/es.js?v=199', 'vendor/maplibre-gl.js', 'vendor/maplibre-gl.css',
   'departements.json', 'regions/countries.json', 'manifest.webmanifest', 'icon.svg', 'icon-192.png', 'icon-512.png', 'icon-maskable-512.png', 'apple-touch-icon.png'];
 
 // Clé de cache commune avec la page : https://tiles.balise/<fond>/<z>/<x>/<y>

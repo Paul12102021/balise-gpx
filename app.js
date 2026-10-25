@@ -5,7 +5,7 @@
 
 // La page et le code doivent être de la même version. Sinon (page gardée en cache
 // par le téléphone ou par GitHub), on recharge une page fraîche, au plus 3 fois.
-const APP_VERSION = 198;
+const APP_VERSION = 199;
 try {
   const meta = document.querySelector('meta[name="balise-version"]');
   const pageV = meta ? +meta.content : 0;
@@ -4776,6 +4776,7 @@ async function downloadPack(pack, tiles) {
   if (!('caches' in window)) { toast('Ce navigateur ne permet pas le stockage hors ligne.', 4000); return; }
   if (navigator.onLine === false) { toast('Pas de réseau : connecte-toi pour télécharger.', 4000); return; }
   dl = { stop: false, reason: '', packId: pack.id };
+  if (pack.bbox) poiPrefetch(pack.bbox); // points utiles de la zone, pour les avoir hors ligne
   keepAwake();
   if (navigator.storage && navigator.storage.persist) navigator.storage.persist().catch(() => {});
   $('offProg').hidden = false; $('dlStop').hidden = false; $('dlTrace').disabled = $('dlDep').disabled = true;
@@ -6208,6 +6209,18 @@ async function poiUpdate() {
     for (const n of names) for (const [lat, lon, k, nm, ele] of poiTiles.get(n) || []) if (POI[k]) feats.push({ type: 'Feature', properties: { k, n: [nm, ele != null ? fmtM(ele) : ''].filter(Boolean).join(' · '), pr: POI[k][3] }, geometry: { type: 'Point', coordinates: [lon, lat] } });
     map.getSource('poi').setData({ type: 'FeatureCollection', features: feats });
   } finally { poiBusy = false; }
+}
+// cartes téléchargées : les points utiles de la zone sont gardés aussi (bbox = [ouest, sud, est, nord])
+async function poiPrefetch(bb) {
+  try {
+    if (!poiMan) poiMan = await rtdGet('poi.json', 864e5).catch(() => null);
+    if (!poiMan || !poiMan.tiles) return;
+    const g = poiMan.grid || 0.25, have = new Set(poiMan.tiles), names = [];
+    for (let x = Math.floor((bb[0] + 180) / g); x <= Math.floor((bb[2] + 180) / g); x++)
+      for (let y = Math.floor((bb[1] + 90) / g); y <= Math.floor((bb[3] + 90) / g); y++) if (have.has(`${x}_${y}`)) names.push(`${x}_${y}`);
+    for (let i = 0; i < names.length; i += 4) // par petits groupes, sans gêner le téléchargement de la carte
+      await Promise.all(names.slice(i, i + 4).map(n => rtdGet(`p/${n}.json?d=${poiMan.date}`, 0).then(T => poiTiles.set(n, T.p || [])).catch(() => {})));
+  } catch { /* les points se chargeront à l'affichage */ }
 }
 map.on('moveend', () => { if (poiOn()) poiUpdate(); });
 map.on('load', poiUpdate);
