@@ -5,7 +5,7 @@
 
 // La page et le code doivent être de la même version. Sinon (page gardée en cache
 // par le téléphone ou par GitHub), on recharge une page fraîche, au plus 3 fois.
-const APP_VERSION = 206;
+const APP_VERSION = 207;
 try {
   const meta = document.querySelector('meta[name="balise-version"]');
   const pageV = meta ? +meta.content : 0;
@@ -627,6 +627,7 @@ function closeTrack(quiet) {
   const savedText = store.get('gpx');
   if (nav) stopNav();
   track = null; progress = null; done = null; clearRejoin(); $('loopBar').hidden = true; $('rtBar').hidden = true;
+  wxOn = false; scrubD = null; if (scrubMk) scrubMk.remove(); wxApply(); trChipsUpdate(); // la météo part avec la trace
   // parcours balisés : on quitte leur affichage avec la trace (sauf si leur panneau est ouvert)
   if (rtMapOn && $('routes').hidden) rtHideMap();
   setSrc('track', EMPTY); setSrc('turn', EMPTY);
@@ -6073,7 +6074,7 @@ async function toggleWx() {
 var wxPins = [];
 function wxMap() {
   const on = wxShown() && wxMode() === 'carte', feats = [];
-  wxPins.forEach(m => m.remove()); wxPins = [];
+  (wxPins || []).forEach(m => m.remove()); wxPins = [];
   if (on) for (const m of meteo.marks) {
     const q = pointAt(track, m.d), el = document.createElement('div'); el.className = 'wx-pin';
     el.innerHTML = `<span>${m.ic}</span><small>${escH(m.val)}</small>`; el.title = hm(m.t);
@@ -6099,20 +6100,27 @@ $('npWx').onclick = toggleWx;
 function wxHours() {
   const on = wxShown() && wxMode() === 'heures';
   for (const id of ['wxHours', 'npHours']) {
-    const box = $(id); box.hidden = !on; if (!on) { box.innerHTML = ''; continue; }
-    box.innerHTML = meteo.samples.map((s, i) => `<button class="wh" data-i="${i}">${hm(s.t)}<b>${!s.day && s.code <= 2 ? '🌙' : wxIcon(s.code)}</b><b>${Math.round(IMP ? s.temp * 9 / 5 + 32 : s.temp)}°</b><i style="width:${Math.max(4, Math.round(s.prob * .4))}px;opacity:${s.wet ? 1 : .35}"></i>${s.prob} %</button>`).join('');
+    const box = $(id); box.hidden = !on; box.innerHTML = ''; if (!on) continue;
+    // chaque vignette sous le point du profil où l'on passera, autant qu'il en tient sans se chevaucher
+    const W = box.clientWidth || (id === 'wxHours' ? cv : $('navProfile')).clientWidth; if (!W) continue;
+    const L0 = 38, w = W - L0 - 4, CW = 50, X = d => L0 + d / track.total * w, S = meteo.samples, keep = [];
+    S.forEach((sm, i) => { const x = X(sm.d); if (!keep.length || x - X(S[keep[keep.length - 1]].d) >= CW + 4) keep.push(i); else if (i === S.length - 1 && keep.length > 1) keep[keep.length - 1] = i; });
+    box.innerHTML = keep.map(i => { const sm = S[i], left = clamp(X(sm.d) - CW / 2, 0, W - CW);
+      return `<button class="wh" data-i="${i}" style="left:${left}px"><b>${!sm.day && sm.code <= 2 ? '🌙' : wxIcon(sm.code)} ${Math.round(IMP ? sm.temp * 9 / 5 + 32 : sm.temp)}°</b><i style="width:${Math.max(4, Math.round(sm.prob * .36))}px;opacity:${sm.wet ? 1 : .35}"></i><em>${sm.prob} %</em><span>${hm(sm.t)}</span></button>`; }).join('');
   }
   wxHoursMark();
 }
+window.addEventListener('resize', () => { if (wxShown() && wxMode() === 'heures') wxHours(); });
 // vignette du moment montré sur le profil (doigt) ou de la position actuelle
 function wxHoursMark() {
   if (!wxShown() || wxMode() !== 'heures') return;
   const d = scrubD != null ? scrubD : (doneInfo() || {}).along || 0;
-  const S = meteo.samples, k = S.reduce((b, s, i) => Math.abs(s.d - d) < Math.abs(S[b].d - d) ? i : b, 0);
-  for (const id of ['wxHours', 'npHours']) $(id).querySelectorAll('.wh').forEach((el, i) => {
-    const on = i === k; if (on && !el.classList.contains('on') && scrubD != null) el.scrollIntoView({ block: 'nearest', inline: 'center', behavior: 'smooth' });
-    el.classList.toggle('on', on);
-  });
+  const S = meteo.samples;
+  for (const id of ['wxHours', 'npHours']) {
+    const els = [...$(id).querySelectorAll('.wh')]; if (!els.length) continue;
+    const k = els.reduce((b, el) => Math.abs(S[+el.dataset.i].d - d) < Math.abs(S[+b.dataset.i].d - d) ? el : b);
+    els.forEach(el => el.classList.toggle('on', el === k));
+  }
 }
 for (const id of ['wxHours', 'npHours']) $(id).addEventListener('click', e => {
   const b = e.target.closest('.wh'); if (!b || !wxShown()) return;
