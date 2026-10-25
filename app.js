@@ -939,9 +939,10 @@ function showSoDetail(it) {
 // =====================================================================
 // Connexion via le relais Pisteo (Cloudflare Worker, voir strava-relay/worker.js) : il garde le secret
 // de l'appli Strava hors du code public et transmet les envois.
-const STRAVA_CLIENT_ID = '109821';
+const STRAVA_CLIENT_ID = '290814'; // appli Strava du compte Pisteo (25 oct. 2026)
 const STRAVA_RELAY = 'https://api.pisteo.app'; // relais Cloudflare (strava-relay/worker.js), sur le compte pisteo.app
-const stvTok = () => { try { return JSON.parse(store.get('stvTok') || 'null'); } catch { return null; } };
+// connexion faite avec une autre appli Strava (ancien numéro) : elle ne marche plus, on la retire
+const stvTok = () => { try { const t = JSON.parse(store.get('stvTok') || 'null'); if (t && (t.cid || '109821') !== STRAVA_CLIENT_ID) { store.set('stvTok', ''); store.set('stvInactive', ''); return null; } return t; } catch { return null; } };
 const stvOn = () => !!(stvTok() && STRAVA_RELAY);
 const stvBack = () => location.origin + location.pathname;
 function stvUI() {
@@ -1113,7 +1114,7 @@ async function stvReturn() {
   if (!/activity:write/.test(q.get('scope') || '')) { toast('Il faut laisser cochée l\'autorisation d\'envoyer des activités sur la page Strava. Réessaie.', 6000); openStrava(); return; }
   try {
     const j = await stvTokenReq({ code: q.get('code') });
-    store.set('stvTok', JSON.stringify({ a: j.access_token, r: j.refresh_token, exp: j.expires_at, who: j.athlete ? `${j.athlete.firstname || ''} ${j.athlete.lastname || ''}`.trim() : '' }));
+    store.set('stvTok', JSON.stringify({ cid: STRAVA_CLIENT_ID, a: j.access_token, r: j.refresh_token, exp: j.expires_at, who: j.athlete ? `${j.athlete.firstname || ''} ${j.athlete.lastname || ''}`.trim() : '' }));
     toast('Connecté à Strava 🎉', 4000); openStrava(); stvRetry();
   } catch (e) { toast('Connexion à Strava impossible : ' + e.message, 6000); openStrava(); }
 }

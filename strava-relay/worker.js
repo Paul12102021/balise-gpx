@@ -2,7 +2,7 @@
 // Il garde le « Client Secret » de l'appli Strava hors du code public de Pisteo
 // et transmet les envois de sorties à Strava.
 // Variables à définir dans Cloudflare (Settings → Variables and Secrets) :
-//   STRAVA_CLIENT_ID      (texte)  ex. 109821
+//   STRAVA_CLIENT_ID      (texte)  ex. 290814 (appli du compte Strava Pisteo)
 //   STRAVA_CLIENT_SECRET  (secret) le Client Secret de strava.com/settings/api
 //   ALLOWED_ORIGIN        (texte)  https://pisteo.app,https://paul12102021.github.io
 // Adresse : https://api.pisteo.app (domaine personnalisé du worker « pisteo-strava », compte Cloudflare pisteo.app)
