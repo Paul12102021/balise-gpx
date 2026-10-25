@@ -759,3 +759,5 @@ body.side.wx-on #profile { height: 200px; }
 .dep-row label { color: var(--muted); }
 .dep-row select, .dep-row input { background: var(--field); color: var(--ink); border: 0; border-radius: 10px; padding: 8px 12px; font: 600 15px system-ui, sans-serif; }
 .dep-note { color: var(--muted); font-size: 12.5px; margin: 0; }
+/* météo affichée sur téléphone : la barre est pleine de boutons, le bout de nom ne sert à rien */
+body.wx-on:not(.side) .trackname { visibility: hidden; }
