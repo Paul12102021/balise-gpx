@@ -5,7 +5,7 @@
 
 // La page et le code doivent être de la même version. Sinon (page gardée en cache
 // par le téléphone ou par GitHub), on recharge une page fraîche, au plus 3 fois.
-const APP_VERSION = 204;
+const APP_VERSION = 205;
 try {
   const meta = document.querySelector('meta[name="balise-version"]');
   const pageV = meta ? +meta.content : 0;
@@ -4207,7 +4207,7 @@ function drawProfileOn(cv) {
   let lo = Infinity, hi = -Infinity; E.forEach(e => { if (e != null) { lo = Math.min(lo, e); hi = Math.max(hi, e); } });
   const pad = Math.max(20, (hi - lo) * .08); lo -= pad; hi += pad;
   const T = wxShown() ? 44 : 0; // place pour la météo au-dessus du profil
-  const L0 = 38, B = 16, w = W - L0 - 4, h = H - B - 4 - T;
+  const L0 = 38, B = T ? 26 : 16, w = W - L0 - 4, h = H - B - 4 - T; // météo : place pour la bande « ciel » au-dessus des km
   const X = d => L0 + d / track.total * w, Y = e => 4 + T + (1 - (e - lo) / (hi - lo)) * h;
   if (T) wxBands(ctx, X, 4 + T, h);
   ctx.strokeStyle = cssVar('--line'); ctx.lineWidth = 1; ctx.textAlign = 'right'; ctx.textBaseline = 'middle';
@@ -6025,7 +6025,7 @@ const SKY = { sun: '#f2c94c', night: '#5c6b86', cloud: '#aab3bc', rain: '#2f80ed
 function wxBands(ctx, X, top, h) {
   // fine bande colorée sous le profil : jaune soleil, gris nuages, bleu pluie
   ctx.save();
-  for (const [d0, d1, k] of meteo.sky || []) { ctx.fillStyle = SKY[k]; ctx.fillRect(X(d0), top + h + 1, Math.max(1, X(d1) - X(d0)), 5); }
+  for (const [d0, d1, k] of meteo.sky || []) { ctx.fillStyle = SKY[k]; ctx.fillRect(Math.floor(X(d0)), top + h + 2, Math.ceil(X(d1)) - Math.floor(X(d0)) + 1, 5); }
   ctx.restore();
 }
 function wxMarks(ctx, X, L0, W) {
