@@ -5,7 +5,7 @@
 
 // La page et le code doivent être de la même version. Sinon (page gardée en cache
 // par le téléphone ou par GitHub), on recharge une page fraîche, au plus 3 fois.
-const APP_VERSION = 217;
+const APP_VERSION = 219;
 try {
   const meta = document.querySelector('meta[name="balise-version"]');
   const pageV = meta ? +meta.content : 0;
@@ -4208,11 +4208,14 @@ function drawProfileOn(cv) {
   let lo = Infinity, hi = -Infinity; E.forEach(e => { if (e != null) { lo = Math.min(lo, e); hi = Math.max(hi, e); } });
   const pad = Math.max(20, (hi - lo) * .08); lo -= pad; hi += pad;
   const T = wxOnProf() ? 44 : 0; // place pour la météo au-dessus du profil
-  const L0 = 38, B = T ? 26 : 16, w = W - L0 - 4, h = H - B - 4 - T; // météo : place pour la bande « ciel » au-dessus des km
+  // marge gauche à la largeur des altitudes affichées (pas d'espace perdu avant elles)
+  const ticks = eleTicks(lo, hi, [10, 20, 50, 100, 200, 250, 500, 1000]);
+  const L0 = Math.ceil(Math.max(14, ...ticks.map(t => ctx.measureText(t[1]).width))) + 5; cv._L0 = L0;
+  const B = T ? 26 : 16, w = W - L0 - 4, h = H - B - 4 - T; // météo : place pour la bande « ciel » au-dessus des km
   const X = d => L0 + d / track.total * w, Y = e => 4 + T + (1 - (e - lo) / (hi - lo)) * h;
   if (T) wxBands(ctx, X, 4 + T, h);
   ctx.strokeStyle = cssVar('--line'); ctx.lineWidth = 1; ctx.textAlign = 'right'; ctx.textBaseline = 'middle';
-  for (const [v, lab] of eleTicks(lo, hi, [10, 20, 50, 100, 200, 250, 500, 1000])) {
+  for (const [v, lab] of ticks) {
     const y = Math.round(Y(v)) + .5; ctx.beginPath(); ctx.moveTo(L0, y); ctx.lineTo(W, y); ctx.stroke(); ctx.fillText(lab, L0 - 4, y);
   }
   ctx.textBaseline = 'bottom'; ctx.textAlign = 'left'; ctx.fillText('0', L0, H);
@@ -6272,7 +6275,7 @@ function renderBilan(items) {
 var scrubD = null, scrubMk = null, scrubT = null;
 function scrubAt(clientX) {
   if (!track || !track.hasEle) return;
-  const r = cv.getBoundingClientRect(), L0 = 38, w = r.width - L0 - 4;
+  const r = cv.getBoundingClientRect(), L0 = cv._L0 || 38, w = r.width - L0 - 4;
   scrubToD(clamp((clientX - r.left - L0) / w, 0, 1) * track.total);
 }
 function scrubToD(d) {
