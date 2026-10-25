@@ -736,3 +736,15 @@ body.side.wx-on #profile { height: 200px; }
 .gd-acts .btn { flex: 1; }
 .gd-box .row { padding: 0; border: 0; }
 .gd-box .busy { opacity: .6; pointer-events: none; }
+
+/* météo : vignettes heure par heure et pastilles sur la carte */
+.wx-hours { display: flex; gap: 6px; overflow-x: auto; padding: 4px 0 4px; scrollbar-width: none; -webkit-overflow-scrolling: touch; }
+.wx-hours[hidden] { display: none; }
+.wx-hours::-webkit-scrollbar { display: none; }
+.wx-hours .wh { flex: 0 0 56px; background: var(--field); border: 0; border-radius: 12px; padding: 6px 4px; text-align: center; font: 11px system-ui, sans-serif; color: var(--muted); cursor: pointer; }
+.wx-hours .wh b { display: block; font-size: 14px; color: var(--ink); line-height: 1.35; }
+.wx-hours .wh i { display: block; height: 4px; border-radius: 2px; background: #2f80ed; margin: 4px auto 2px; }
+.wx-hours .wh.on { outline: 2px solid var(--go); outline-offset: -2px; }
+.wx-pin { display: flex; flex-direction: column; align-items: center; cursor: pointer; }
+.wx-pin span { width: 34px; height: 34px; border-radius: 50%; background: var(--panel); display: grid; place-items: center; font-size: 18px; box-shadow: 0 2px 8px rgba(0,0,0,.35); border: 2px solid #fff; }
+.wx-pin small { margin-top: 2px; font: 700 11px system-ui, sans-serif; background: var(--panel); color: var(--ink); padding: 0 5px; border-radius: 6px; box-shadow: 0 1px 4px rgba(0,0,0,.25); }

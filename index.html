@@ -9,13 +9,13 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<meta name="balise-version" content="205">
+<meta name="balise-version" content="206">
 <title>Pisteo</title>
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" href="icon.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
 <link rel="stylesheet" href="vendor/maplibre-gl.css">
-<link rel="stylesheet" href="app.css?v=205">
+<link rel="stylesheet" href="app.css?v=206">
 </head>
 <body>
 <div id="map" aria-label="Carte"></div>
@@ -95,6 +95,7 @@
   </div>
   <div id="navMore" class="nav-more" hidden>
     <canvas id="navProfile" aria-label="Profil altimétrique et position"></canvas>
+    <div id="npHours" class="wx-hours" hidden></div>
     <div class="np-proftools">
       <span id="npProfInfo"></span>
       <button id="npWx" class="linkbtn">Météo</button>
@@ -154,6 +155,7 @@
     <span id="sunChip" class="chip sun-chip"></span>
   </div>
   <canvas id="profile" aria-label="Profil altimétrique"></canvas>
+  <div id="wxHours" class="wx-hours" hidden></div>
   <div id="actBar" class="actbar" hidden>
     <div class="ab-text"><b id="actLabel">Enregistrement</b><span id="actStats"></span></div>
     <button id="actPause" class="btn small"></button>
@@ -202,6 +204,10 @@
       <div class="row">
         <label for="alertNight">Prévenir avant la nuit<br><small>Sur le parcours et en navigation, si l'arrivée tombe après le coucher du soleil</small></label>
         <input type="checkbox" id="alertNight" class="check">
+      </div>
+      <div class="row">
+        <label for="wxMode">Météo du parcours<br><small>Où l'afficher quand tu touches le bouton météo</small></label>
+        <select id="wxMode"><option value="profil">Sur le profil</option><option value="heures">Heure par heure</option><option value="carte">Sur la carte</option></select>
       </div>
       <div class="row">
         <label for="autoRec">Enregistrer automatiquement<br><small>Dès que la navigation démarre</small></label>
@@ -720,8 +726,8 @@
 <div id="toast" class="toast" hidden></div>
 
 <script src="vendor/maplibre-gl.js"></script>
-<script src="i18n/en.js?v=205"></script>
-<script src="i18n/es.js?v=205"></script>
-<script src="app.js?v=205"></script>
+<script src="i18n/en.js?v=206"></script>
+<script src="i18n/es.js?v=206"></script>
+<script src="app.js?v=206"></script>
 </body>
 </html>

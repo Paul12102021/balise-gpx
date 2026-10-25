@@ -151,6 +151,7 @@ const exact = {
   'Aucune sauvegarde Pisteo sur ce compte Google.': 'No Pisteo backup on this Google account.',
   'Mets à jour l\'appli Pisteo (Play Store) pour la sauvegarde Drive.': 'Update the Pisteo app (Play Store) to use Drive backup.',
   'Connexion à Google annulée.': 'Google sign-in cancelled.',
+  'Météo du parcours': 'Route weather', "Où l'afficher quand tu touches le bouton météo": 'Where to show it when you tap the weather button', 'Sur le profil': 'On the profile', 'Heure par heure': 'Hour by hour', 'Sur la carte': 'On the map', 'vers': 'around',
   'Hors ligne': 'Offline', 'Sorties et traces': 'Outings and tracks', 'Navigation': 'Navigation', 'Voix et vibrations': 'Voice and vibration', 'Affichage': 'Display', 'Import manuel': 'Manual import', 'Envoi automatique': 'Auto upload',
   'Je me déplace': 'I travel', 'Pour les itinéraires et le temps estimé': 'For routes and estimated time', 'À pied': 'On foot', 'À vélo': 'By bike',
   'Cartes hors ligne': 'Offline maps', 'Trace, département ou zone': 'Track, French département or area', 'Mes cartes': 'My maps',

@@ -5,7 +5,7 @@
 
 // La page et le code doivent être de la même version. Sinon (page gardée en cache
 // par le téléphone ou par GitHub), on recharge une page fraîche, au plus 3 fois.
-const APP_VERSION = 205;
+const APP_VERSION = 206;
 try {
   const meta = document.querySelector('meta[name="balise-version"]');
   const pageV = meta ? +meta.content : 0;
@@ -959,7 +959,7 @@ function stvUI() {
 }
 // ---------- Sauvegarde : sorties, traces et réglages dans un fichier, et restauration ----------
 // réglages choisis par l'utilisateur (pas l'état en cours, ni les caches, ni la connexion Strava)
-const BK_KEYS = ['thr', 'voice', 'vib', 'autoRec', 'alertNight', 'soBilan', 'poi', 'gdAuto', 'eco', 'ecoSeen', 'banner', 'theme', 'profile', 'layerId', 'soLayer',
+const BK_KEYS = ['thr', 'voice', 'vib', 'autoRec', 'alertNight', 'wxMode', 'soBilan', 'poi', 'gdAuto', 'eco', 'ecoSeen', 'banner', 'theme', 'profile', 'layerId', 'soLayer',
   'rtFilt', 'npProfOnly', 'showPacks', 'stvAuto', 'recHint'];
 const bkCount = items => {
   const r = items.filter(isRec).length;
@@ -4206,7 +4206,7 @@ function drawProfileOn(cv) {
   const E = track.ele, C = track.cum, n = E.length;
   let lo = Infinity, hi = -Infinity; E.forEach(e => { if (e != null) { lo = Math.min(lo, e); hi = Math.max(hi, e); } });
   const pad = Math.max(20, (hi - lo) * .08); lo -= pad; hi += pad;
-  const T = wxShown() ? 44 : 0; // place pour la météo au-dessus du profil
+  const T = wxOnProf() ? 44 : 0; // place pour la météo au-dessus du profil
   const L0 = 38, B = T ? 26 : 16, w = W - L0 - 4, h = H - B - 4 - T; // météo : place pour la bande « ciel » au-dessus des km
   const X = d => L0 + d / track.total * w, Y = e => 4 + T + (1 - (e - lo) / (hi - lo)) * h;
   if (T) wxBands(ctx, X, 4 + T, h);
@@ -4237,7 +4237,7 @@ function drawProfileOn(cv) {
     ctx.fillStyle = COL.me; ctx.beginPath(); ctx.arc(x, y, 5, 0, 7); ctx.fill();
     ctx.strokeStyle = '#fff'; ctx.lineWidth = 2; ctx.stroke();
   }
-  if (T) wxMarks(ctx, X, L0, W);
+  if (T) { wxTemps(ctx, X, 4 + T, h, L0, W); wxMarks(ctx, X, L0, W); }
   if (cv === $('profile') && scrubD != null) scrubDraw(ctx, X, Y, T, h, L0, W);
 }
 window.addEventListener('resize', drawProfile);
@@ -5963,7 +5963,7 @@ function trChipsUpdate() {
   if (warn) el.innerHTML = si.margin >= 0
     ? `🌙 <span>${tr('Coucher du soleil')}</span> ${hm(si.set)} · <span>${tr('arrivée vers')}</span> ${hm(si.arr)}`
     : `🌙 <span>${tr('Arrivée vers')}</span> ${hm(si.arr)}, <span>${tr('après le coucher du soleil')}</span> (${hm(si.set)})`;
-  $('btnWx').classList.toggle('on', wxShown()); document.body.classList.toggle('wx-on', wxShown()); wxMap();
+  $('btnWx').classList.toggle('on', wxShown()); document.body.classList.toggle('wx-on', wxOnProf()); wxMap(); wxHours();
 }
 setInterval(() => { if (track && !nav) trChipsUpdate(); }, 60000);
 
@@ -5971,6 +5971,9 @@ setInterval(() => { if (track && !nav) trChipsUpdate(); }, 60000);
 var wxOn = false, meteo = null; // meteo = { key, at, marks: [{ d, ic, val, t }], rain: [[d0, d1]] }
 function wxKey() { return track ? track.name + '|' + Math.round(track.total) : ''; }
 function wxShown() { return !!(wxOn && meteo && track && meteo.key === wxKey()); }
+// réglage : où afficher la météo — 'profil' (bande, étiquettes, températures), 'heures' (vignettes sous le profil), 'carte' (pastilles sur le tracé)
+function wxMode() { const m = store.get('wxMode'); return m === 'heures' || m === 'carte' ? m : 'profil'; }
+function wxOnProf() { return wxShown() && wxMode() === 'profil'; }
 const wxCat = c => c <= 1 ? 0 : c <= 3 ? 1 : c <= 48 ? 2 : (c <= 67 || (c >= 80 && c <= 82)) ? 3 : c <= 86 ? 4 : 5;
 const wxIcon = c => c <= 1 ? '☀️' : c === 2 ? '⛅' : c === 3 ? '☁️' : c <= 48 ? '🌫️' : c <= 57 ? '🌦️' : (c <= 67 || (c >= 80 && c <= 82)) ? '🌧️' : c <= 86 ? '🌨️' : '⛈️';
 async function loadWx() {
@@ -6017,7 +6020,7 @@ function wxBuild(pts, js, a) {
   // bande « ciel » : une couleur par portion (soleil, nuages, pluie, neige, orage), entre deux points de prévision
   const skyOf = s => wet(s) ? (wxCat(s.code) === 4 ? 'snow' : wxCat(s.code) === 5 ? 'storm' : 'rain') : wxCat(s.code) === 0 ? (s.day ? 'sun' : 'night') : 'cloud';
   const sky = S.map((s, i) => [i ? (S[i - 1].d + s.d) / 2 : s.d, i < S.length - 1 ? (s.d + S[i + 1].d) / 2 : s.d, skyOf(s)]);
-  meteo = { key: wxKey(), at: Date.now(), rain, sky, samples: S.map(s => ({ d: s.d, temp: s.temp, prob: s.prob, code: s.code, day: s.day, wet: wet(s) })),
+  meteo = { key: wxKey(), at: Date.now(), rain, sky, samples: S.map(s => ({ d: s.d, t: s.t, temp: s.temp, prob: s.prob, code: s.code, day: s.day, wet: wet(s) })),
     marks: marks.map(s => ({ d: s.d, t: s.t, ic: windy(s) && !wet(s) ? '💨' : !s.day && s.code <= 2 ? '🌙' : wxIcon(s.code),
       val: wet(s) ? s.prob + ' %' : windy(s) ? Math.round(s.wind * (IMP ? 0.621 : 1)) + (IMP ? ' mph' : ' km/h') : Math.round(IMP ? s.temp * 9 / 5 + 32 : s.temp) + '°' })) };
 }
@@ -6026,6 +6029,20 @@ function wxBands(ctx, X, top, h) {
   // fine bande colorée sous le profil : jaune soleil, gris nuages, bleu pluie
   ctx.save();
   for (const [d0, d1, k] of meteo.sky || []) { ctx.fillStyle = SKY[k]; ctx.fillRect(Math.floor(X(d0)), top + h + 2, Math.ceil(X(d1)) - Math.floor(X(d0)) + 1, 5); }
+  ctx.restore();
+}
+// courbe des températures (pointillés rouges), avec le maximum et le minimum
+function wxTemps(ctx, X, top, h, L0, W) {
+  const S = meteo.samples || []; if (S.length < 2) return;
+  let t0 = Infinity, t1 = -Infinity; S.forEach(s => { t0 = Math.min(t0, s.temp); t1 = Math.max(t1, s.temp); });
+  const mid = (t0 + t1) / 2, half = Math.max(5, (t1 - t0) / 2 + 1.5), Y = t => top + h * .08 + (1 - (t - (mid - half)) / (2 * half)) * h * .84;
+  ctx.save(); ctx.strokeStyle = '#e04848'; ctx.lineWidth = 2; ctx.setLineDash([4, 3]); ctx.beginPath();
+  S.forEach((s, i) => i ? ctx.lineTo(X(s.d), Y(s.temp)) : ctx.moveTo(X(s.d), Y(s.temp))); ctx.stroke(); ctx.setLineDash([]);
+  ctx.fillStyle = '#e04848'; ctx.font = '600 10px system-ui, sans-serif'; ctx.textBaseline = 'middle';
+  const deg = t => Math.round(IMP ? t * 9 / 5 + 32 : t) + '°';
+  const hi = S.reduce((b, s) => s.temp > b.temp ? s : b), lo = S.reduce((b, s) => s.temp < b.temp ? s : b);
+  const lab = (s, dy) => { const x = X(s.d); ctx.textAlign = x > W - 30 ? 'right' : x < L0 + 20 ? 'left' : 'center'; ctx.fillText(deg(s.temp), clamp(x, L0 + 2, W - 2), Y(s.temp) + dy); };
+  lab(hi, -9); if (Math.round(hi.temp) !== Math.round(lo.temp)) lab(lo, 10);
   ctx.restore();
 }
 function wxMarks(ctx, X, L0, W) {
@@ -6053,8 +6070,16 @@ async function toggleWx() {
   wxApply();
 }
 // portion pluvieuse du tracé, en bleu sur la carte
+var wxPins = [];
 function wxMap() {
-  const on = wxShown(), feats = [];
+  const on = wxShown() && wxMode() === 'carte', feats = [];
+  wxPins.forEach(m => m.remove()); wxPins = [];
+  if (on) for (const m of meteo.marks) {
+    const q = pointAt(track, m.d), el = document.createElement('div'); el.className = 'wx-pin';
+    el.innerHTML = `<span>${m.ic}</span><small>${escH(m.val)}</small>`; el.title = hm(m.t);
+    el.onclick = e => { e.stopPropagation(); toast(`${m.ic} ${m.val} · ${tr('vers')} ${hm(m.t)}`, 2500); };
+    wxPins.push(new maplibregl.Marker({ element: el, anchor: 'bottom' }).setLngLat([q.lon, q.lat]).addTo(map));
+  }
   if (on) for (const [d0, d1] of meteo.rain) { const c = []; for (let d = d0; d <= d1; d += Math.max(10, (d1 - d0) / 80)) { const q = pointAt(track, d); c.push([q.lon, q.lat]); } if (c.length > 1) feats.push({ type: 'Feature', properties: {}, geometry: { type: 'LineString', coordinates: c } }); }
   const data = { type: 'FeatureCollection', features: feats };
   try {
@@ -6063,13 +6088,38 @@ function wxMap() {
   } catch { /* carte pas prête */ }
 }
 function wxApply() {
-  const on = wxShown(); wxMap();
-  document.body.classList.toggle('wx-on', on);
+  const on = wxShown(); wxMap(); wxHours();
+  document.body.classList.toggle('wx-on', wxOnProf());
   $('btnWx').classList.toggle('on', on); $('npWx').classList.toggle('on', on);
   drawProfile(); if (!$('navMore').hidden) drawProfileOn($('navProfile'));
 }
 $('btnWx').onclick = toggleWx;
 $('npWx').onclick = toggleWx;
+// vignettes heure par heure (mode 'heures'), sous le profil et dans la progression détaillée
+function wxHours() {
+  const on = wxShown() && wxMode() === 'heures';
+  for (const id of ['wxHours', 'npHours']) {
+    const box = $(id); box.hidden = !on; if (!on) { box.innerHTML = ''; continue; }
+    box.innerHTML = meteo.samples.map((s, i) => `<button class="wh" data-i="${i}">${hm(s.t)}<b>${!s.day && s.code <= 2 ? '🌙' : wxIcon(s.code)}</b><b>${Math.round(IMP ? s.temp * 9 / 5 + 32 : s.temp)}°</b><i style="width:${Math.max(4, Math.round(s.prob * .4))}px;opacity:${s.wet ? 1 : .35}"></i>${s.prob} %</button>`).join('');
+  }
+  wxHoursMark();
+}
+// vignette du moment montré sur le profil (doigt) ou de la position actuelle
+function wxHoursMark() {
+  if (!wxShown() || wxMode() !== 'heures') return;
+  const d = scrubD != null ? scrubD : (doneInfo() || {}).along || 0;
+  const S = meteo.samples, k = S.reduce((b, s, i) => Math.abs(s.d - d) < Math.abs(S[b].d - d) ? i : b, 0);
+  for (const id of ['wxHours', 'npHours']) $(id).querySelectorAll('.wh').forEach((el, i) => {
+    const on = i === k; if (on && !el.classList.contains('on') && scrubD != null) el.scrollIntoView({ block: 'nearest', inline: 'center', behavior: 'smooth' });
+    el.classList.toggle('on', on);
+  });
+}
+for (const id of ['wxHours', 'npHours']) $(id).addEventListener('click', e => {
+  const b = e.target.closest('.wh'); if (!b || !wxShown()) return;
+  scrubToD(meteo.samples[+b.dataset.i].d); scrubEnd(4000);
+});
+$('wxMode').value = wxMode();
+$('wxMode').onchange = e => { store.set('wxMode', e.target.value); wxApply(); };
 
 // ---------- prévenir avant la nuit (réglage, désactivé par défaut) ----------
 $('alertNight').checked = store.get('alertNight') === '1';
@@ -6164,18 +6214,22 @@ var scrubD = null, scrubMk = null, scrubT = null;
 function scrubAt(clientX) {
   if (!track || !track.hasEle) return;
   const r = cv.getBoundingClientRect(), L0 = 38, w = r.width - L0 - 4;
-  scrubD = clamp((clientX - r.left - L0) / w, 0, 1) * track.total;
+  scrubToD(clamp((clientX - r.left - L0) / w, 0, 1) * track.total);
+}
+function scrubToD(d) {
+  if (!track) return;
+  scrubD = d;
   const q = pointAt(track, scrubD);
   if (!scrubMk) { const el = document.createElement('div'); el.className = 'scrub-dot'; scrubMk = new maplibregl.Marker({ element: el }); }
   scrubMk.setLngLat([q.lon, q.lat]).addTo(map);
   // point hors de l'écran : la carte le suit
   const pt = map.project([q.lon, q.lat]), mc = map.getContainer(), sheetTop = isSide() ? mc.clientHeight : $('sheet').getBoundingClientRect().top;
   if (pt.x < 20 || pt.y < 70 || pt.x > mc.clientWidth - 20 || pt.y > sheetTop - 20) map.easeTo({ center: [q.lon, q.lat], duration: 300 });
-  clearTimeout(scrubT); drawProfile();
+  clearTimeout(scrubT); drawProfile(); wxHoursMark();
 }
 function scrubEnd(delay = 2500) {
   clearTimeout(scrubT);
-  scrubT = setTimeout(() => { scrubD = null; if (scrubMk) scrubMk.remove(); drawProfile(); }, delay);
+  scrubT = setTimeout(() => { scrubD = null; if (scrubMk) scrubMk.remove(); drawProfile(); wxHoursMark(); }, delay);
 }
 function scrubDraw(ctx, X, Y, T, h, L0, W) {
   const q = pointAt(track, scrubD), e = track.ele[q.i], x = X(scrubD);
