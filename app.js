@@ -5944,11 +5944,11 @@ function trChipsUpdate() {
   const si = show && store.get('alertNight') === '1' ? sunInfo() : null, el = $('sunChip');
   const warn = !!si && Date.now() < si.set && si.margin < 15;
   $('trChips').hidden = !warn;
-  if (!show) { document.body.classList.remove('wx-on'); return; }
+  if (!show) { document.body.classList.remove('wx-on'); wxMap(); return; }
   if (warn) el.innerHTML = si.margin >= 0
     ? `🌙 <span>${tr('Coucher du soleil')}</span> ${hm(si.set)} · <span>${tr('arrivée vers')}</span> ${hm(si.arr)}`
     : `🌙 <span>${tr('Arrivée vers')}</span> ${hm(si.arr)}, <span>${tr('après le coucher du soleil')}</span> (${hm(si.set)})`;
-  $('btnWx').classList.toggle('on', wxShown()); document.body.classList.toggle('wx-on', wxShown());
+  $('btnWx').classList.toggle('on', wxShown()); document.body.classList.toggle('wx-on', wxShown()); wxMap();
 }
 setInterval(() => { if (track && !nav) trChipsUpdate(); }, 60000);
 
@@ -5999,13 +5999,18 @@ function wxBuild(pts, js, a) {
     if (wet(s) && r0 == null) r0 = i;
     if (r0 != null && (!wet(s) || i === S.length - 1)) { const i1 = wet(s) ? i : i - 1; rain.push([Math.max(a, S[r0].d - step / 2), Math.min(track.total, S[i1].d + step / 2)]); r0 = null; }
   });
-  meteo = { key: wxKey(), at: Date.now(), rain,
+  // bande « ciel » : une couleur par portion (soleil, nuages, pluie, neige, orage), entre deux points de prévision
+  const skyOf = s => wet(s) ? (wxCat(s.code) === 4 ? 'snow' : wxCat(s.code) === 5 ? 'storm' : 'rain') : wxCat(s.code) === 0 ? (s.day ? 'sun' : 'night') : 'cloud';
+  const sky = S.map((s, i) => [i ? (S[i - 1].d + s.d) / 2 : s.d, i < S.length - 1 ? (s.d + S[i + 1].d) / 2 : s.d, skyOf(s)]);
+  meteo = { key: wxKey(), at: Date.now(), rain, sky,
     marks: marks.map(s => ({ d: s.d, t: s.t, ic: windy(s) && !wet(s) ? '💨' : !s.day && s.code <= 2 ? '🌙' : wxIcon(s.code),
       val: wet(s) ? s.prob + ' %' : windy(s) ? Math.round(s.wind * (IMP ? 0.621 : 1)) + (IMP ? ' mph' : ' km/h') : Math.round(IMP ? s.temp * 9 / 5 + 32 : s.temp) + '°' })) };
 }
+const SKY = { sun: '#f2c94c', night: '#5c6b86', cloud: '#aab3bc', rain: '#2f80ed', snow: '#9fd3ff', storm: '#7b5cd6' };
 function wxBands(ctx, X, top, h) {
-  ctx.save(); ctx.fillStyle = 'rgba(47,128,237,.14)'; ctx.strokeStyle = 'rgba(47,128,237,.45)'; ctx.setLineDash([3, 3]); ctx.lineWidth = 1;
-  for (const [d0, d1] of meteo.rain) { const x0 = X(d0), x1 = X(d1); ctx.fillRect(x0, top, x1 - x0, h); ctx.strokeRect(x0 + .5, top + .5, x1 - x0 - 1, h - 1); }
+  // fine bande colorée sous le profil : jaune soleil, gris nuages, bleu pluie
+  ctx.save();
+  for (const [d0, d1, k] of meteo.sky || []) { ctx.fillStyle = SKY[k]; ctx.fillRect(X(d0), top + h + 1, Math.max(1, X(d1) - X(d0)), 5); }
   ctx.restore();
 }
 function wxMarks(ctx, X, L0, W) {
@@ -6032,8 +6037,18 @@ async function toggleWx() {
   }
   wxApply();
 }
+// portion pluvieuse du tracé, en bleu sur la carte
+function wxMap() {
+  const on = wxShown(), feats = [];
+  if (on) for (const [d0, d1] of meteo.rain) { const c = []; for (let d = d0; d <= d1; d += Math.max(10, (d1 - d0) / 80)) { const q = pointAt(track, d); c.push([q.lon, q.lat]); } if (c.length > 1) feats.push({ type: 'Feature', properties: {}, geometry: { type: 'LineString', coordinates: c } }); }
+  const data = { type: 'FeatureCollection', features: feats };
+  try {
+    if (map.getSource('wxrain')) map.getSource('wxrain').setData(data);
+    else if (feats.length) { map.addSource('wxrain', { type: 'geojson', data }); map.addLayer({ id: 'wxrain', type: 'line', source: 'wxrain', layout: { 'line-cap': 'round', 'line-join': 'round' }, paint: { 'line-color': '#2f80ed', 'line-width': ['interpolate', ['linear'], ['zoom'], 10, 5, 16, 11], 'line-opacity': .75 } }); }
+  } catch { /* carte pas prête */ }
+}
 function wxApply() {
-  const on = wxShown();
+  const on = wxShown(); wxMap();
   document.body.classList.toggle('wx-on', on);
   $('btnWx').classList.toggle('on', on); $('npWx').classList.toggle('on', on);
   drawProfile(); if (!$('navMore').hidden) drawProfileOn($('navProfile'));
