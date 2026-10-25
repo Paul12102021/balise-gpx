@@ -5,7 +5,7 @@
 
 // La page et le code doivent être de la même version. Sinon (page gardée en cache
 // par le téléphone ou par GitHub), on recharge une page fraîche, au plus 3 fois.
-const APP_VERSION = 209;
+const APP_VERSION = 210;
 try {
   const meta = document.querySelector('meta[name="balise-version"]');
   const pageV = meta ? +meta.content : 0;
@@ -6038,7 +6038,7 @@ function bearingAt(d) {
 }
 function wxWind() {
   const S = (meteo && meteo.samples || []).filter(s => s.wdir != null);
-  if (!S.length || Math.max(...S.map(s => s.wind)) < WIND_MIN) return null;
+  if (!S.length) return null;
   const pts = S.map(s => { const diff = Math.abs(((s.wdir - bearingAt(s.d)) + 540) % 360 - 180);
     return { d: s.d, wind: s.wind, wdir: s.wdir, k: s.wind < WIND_MIN ? 'calm' : diff < 60 ? 'face' : diff > 120 ? 'back' : 'side' }; });
   // portions vent de face (entre deux points de prévision)
@@ -6114,7 +6114,7 @@ function wxMap() {
     el.onclick = e => { e.stopPropagation(); toast(`💨 ${Math.round(q.wind * (IMP ? 0.621 : 1))} ${IMP ? 'mph' : 'km/h'} · ${tr({ face: 'vent de face', side: 'vent de travers', back: 'vent dans le dos', calm: 'vent faible' }[q.k])}`, 2500); };
     wxPins.push(new maplibregl.Marker({ element: el }).setLngLat([p.lon, p.lat]).addTo(map));
   });
-  $('windLeg').hidden = !wi || nav;
+  $('windLeg').hidden = !wi || nav || !wi.pts.some(q => q.k !== 'calm'); // légende seulement s'il y a du vent notable
 }
 function wxApply() {
   const on = wxShown(); wxMap(); wxHours(); depUI();
@@ -6131,10 +6131,14 @@ function wxHours() {
     const box = $(id); box.hidden = !on; box.innerHTML = ''; if (!on) continue;
     // chaque vignette sous le point du profil où l'on passera, autant qu'il en tient sans se chevaucher
     const W = box.clientWidth || (id === 'wxHours' ? cv : $('navProfile')).clientWidth; if (!W) continue;
-    const L0 = 38, w = W - L0 - 4, CW = 50, X = d => L0 + d / track.total * w, S = meteo.samples, keep = [];
-    S.forEach((sm, i) => { const x = X(sm.d); if (!keep.length || x - X(S[keep[keep.length - 1]].d) >= CW + 4) keep.push(i); else if (i === S.length - 1 && keep.length > 1) keep[keep.length - 1] = i; });
-    box.innerHTML = keep.map(i => { const sm = S[i], left = clamp(X(sm.d) - CW / 2, 0, W - CW);
-      return `<button class="wh" data-i="${i}" style="left:${left}px"><b>${!sm.day && sm.code <= 2 ? '🌙' : wxIcon(sm.code)} ${Math.round(IMP ? sm.temp * 9 / 5 + 32 : sm.temp)}°</b><i style="width:${Math.max(4, Math.round(sm.prob * .36))}px;opacity:${sm.wet ? 1 : .35}"></i><em>${sm.prob} %</em><span>${hm(sm.t)}</span></button>`; }).join('');
+    const L0 = 38, w = W - L0 - 4, CW = 50, GAP = 4, S = meteo.samples, keep = [];
+    const left = i => clamp(L0 + S[i].d / track.total * w - CW / 2, 0, W - CW);
+    // de gauche à droite sans chevauchement ; l'arrivée est toujours gardée (on retire ce qui la gêne)
+    S.forEach((sm, i) => { if (!keep.length || left(i) - left(keep[keep.length - 1]) >= CW + GAP) keep.push(i); });
+    const last = S.length - 1;
+    if (keep[keep.length - 1] !== last) { while (keep.length > 1 && left(last) - left(keep[keep.length - 1]) < CW + GAP) keep.pop(); keep.push(last); }
+    box.innerHTML = keep.map(i => { const sm = S[i];
+      return `<button class="wh" data-i="${i}" style="left:${left(i)}px"><b>${!sm.day && sm.code <= 2 ? '🌙' : wxIcon(sm.code)} ${Math.round(IMP ? sm.temp * 9 / 5 + 32 : sm.temp)}°</b><i style="width:${Math.max(4, Math.round(sm.prob * .36))}px;opacity:${sm.wet ? 1 : .35}"></i><em>${sm.prob} %</em><span>${hm(sm.t)}</span></button>`; }).join('');
   }
   wxHoursMark();
 }
