@@ -5,7 +5,7 @@
 
 // La page et le code doivent être de la même version. Sinon (page gardée en cache
 // par le téléphone ou par GitHub), on recharge une page fraîche, au plus 3 fois.
-const APP_VERSION = 212;
+const APP_VERSION = 213;
 try {
   const meta = document.querySelector('meta[name="balise-version"]');
   const pageV = meta ? +meta.content : 0;
@@ -4238,7 +4238,7 @@ function drawProfileOn(cv) {
     ctx.fillStyle = COL.me; ctx.beginPath(); ctx.arc(x, y, 5, 0, 7); ctx.fill();
     ctx.strokeStyle = '#fff'; ctx.lineWidth = 2; ctx.stroke();
   }
-  if (T) { wxTemps(ctx, X, 4 + T, h, L0, W); wxWindProf(ctx, X, 4 + T, h); wxMarks(ctx, X, L0, W, cv === $('profile') && !nav); }
+  if (T) { wxTemps(ctx, X, 4 + T, h, L0, W); wxWindProf(ctx, X, 4 + T, h); wxMarks(ctx, X, L0, W); }
   if (cv === $('profile') && scrubD != null) scrubDraw(ctx, X, Y, T, h, L0, W);
 }
 window.addEventListener('resize', drawProfile);
@@ -6138,7 +6138,7 @@ function wxHours() {
     const last = S.length - 1;
     if (keep[keep.length - 1] !== last) { while (keep.length > 1 && left(last) - left(keep[keep.length - 1]) < CW + GAP) keep.pop(); keep.push(last); }
     box.innerHTML = keep.map(i => { const sm = S[i];
-      return `<button class="wh" data-i="${i}" style="left:${left(i)}px"><b>${!sm.day && sm.code <= 2 ? '🌙' : wxIcon(sm.code)} ${Math.round(IMP ? sm.temp * 9 / 5 + 32 : sm.temp)}°</b><i style="width:${Math.max(4, Math.round(sm.prob * .36))}px;opacity:${sm.wet ? 1 : .35}"></i><em>${sm.prob} %</em><span${i === keep[0] && id === 'wxHours' && !nav ? ' class="dep"' : ''}>${i === keep[0] && id === 'wxHours' && !nav ? '🕗' : ''}${hm(sm.t)}</span></button>`; }).join('');
+      return `<button class="wh" data-i="${i}" style="left:${left(i)}px"><b>${!sm.day && sm.code <= 2 ? '🌙' : wxIcon(sm.code)} ${Math.round(IMP ? sm.temp * 9 / 5 + 32 : sm.temp)}°</b><i style="width:${Math.max(4, Math.round(sm.prob * .36))}px;opacity:${sm.wet ? 1 : .35}"></i><em>${sm.prob} %</em><span>${hm(sm.t)}</span></button>`; }).join('');
   }
   wxHoursMark();
 }
@@ -6155,7 +6155,6 @@ function wxHoursMark() {
   }
 }
 for (const id of ['wxHours', 'npHours']) $(id).addEventListener('click', e => {
-  if (e.target.closest('.dep')) { depOpen(); return; }
   const b = e.target.closest('.wh'); if (!b || !wxShown()) return;
   scrubToD(meteo.samples[+b.dataset.i].d); scrubEnd(4000);
 });
@@ -6166,16 +6165,11 @@ function depLabel() {
   const k = Math.round((new Date(t).setHours(0, 0, 0, 0) - today) / 864e5);
   return (k === 0 ? tr('aujourd\'hui') : k === 1 ? tr('demain') : d.toLocaleDateString(LOC, { weekday: 'long' })) + ' ' + hm(t);
 }
-// heure de départ = la première heure affichée (au-dessus du profil, ou 1re vignette) ; « i » en bas à gauche = légende
+// bouton horloge (à côté de la météo) = heure de départ ; « i » en bas à gauche du profil = légende
 function depUI() {
   const on = wxShown() && !nav, b = $('wxDepBtn');
   $('wxInfo').hidden = !on;
-  b.hidden = !on || wxMode() !== 'profil';
-  if (b.hidden) return;
-  const t = depAt();
-  $('wxDepTxt').textContent = (t && new Date(t).toDateString() !== new Date().toDateString() ? depDay(t) + ' ' : '') + hm(meteo.marks[0].t);
-  const W = cv.clientWidth, L0 = 38, x = clamp(L0 + meteo.marks[0].d / track.total * (W - L0 - 4), L0 + 14, W - 18);
-  b.style.left = Math.max(0, x - b.offsetWidth / 2) + 'px';
+  b.hidden = !on; b.classList.toggle('on', !!depAt()); // vert : départ choisi à l'avance
 }
 function depDay(t) {
   const today = new Date(); today.setHours(0, 0, 0, 0);
@@ -6211,6 +6205,7 @@ $('depOk').onclick = async () => {
   $('depSheet').hidden = true;
   wxDep = depPick && depPick > Date.now() + 60e3 ? { key: trKey(), t: depPick } : null;
   wxOn = false; await toggleWx(); trChipsUpdate(); updateStats();
+  if (wxShown()) toast('🕗 ' + tr('Départ') + ' ' + depLabel(), 2500);
 };
 $('wxDepBtn').onclick = depOpen;
 $('wxInfo').onclick = () => {
