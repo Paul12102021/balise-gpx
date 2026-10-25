@@ -135,6 +135,7 @@ const exact = {
   'Refuge gardé': 'Refugio guardado',
   'Cabane non gardée': 'Cabaña libre',
   'Eau, refuges, abris, sommets, points de vue, toilettes · France et pays voisins': 'Agua, refugios, abrigos, cumbres, miradores, aseos · Francia y países vecinos',
+  'Connecte d\'abord Strava pour envoyer tes sorties directement': 'Conecta primero Strava para enviar tus salidas directamente',
   'Hors ligne': 'Sin conexión', 'Sorties et traces': 'Salidas y tracks', 'Navigation': 'Navegación', 'Voix et vibrations': 'Voz y vibración', 'Affichage': 'Pantalla', 'Import manuel': 'Importación manual', 'Envoi automatique': 'Envío automático',
   'Je me déplace': 'Me desplazo', 'Pour les itinéraires et le temps estimé': 'Para las rutas y el tiempo estimado', 'À pied': 'A pie', 'À vélo': 'En bici',
   'Cartes hors ligne': 'Mapas sin conexión', 'Trace, département ou zone': 'Track, región o zona', 'Mes cartes': 'Mis mapas',

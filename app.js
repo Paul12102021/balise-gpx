@@ -5,7 +5,7 @@
 
 // La page et le code doivent être de la même version. Sinon (page gardée en cache
 // par le téléphone ou par GitHub), on recharge une page fraîche, au plus 3 fois.
-const APP_VERSION = 201;
+const APP_VERSION = 202;
 try {
   const meta = document.querySelector('meta[name="balise-version"]');
   const pageV = meta ? +meta.content : 0;
@@ -1281,7 +1281,9 @@ function stvButton(it, keepMsg) {
   b.onclick = async () => {
     if (it.strava) { window.open('https://www.strava.com/activities/' + it.strava, '_blank'); return; }
     // envoi direct seulement si Strava l'accepte (compte connecté et appli active), sinon import manuel
-    if (!stvOn() || stvBlocked() || it.stravaManual) { openStvManual(it); return; }
+    // pas connecté : on propose de connecter Strava (envoi direct) plutôt que l'import manuel
+    if (!stvOn()) { toast('Connecte d\'abord Strava pour envoyer tes sorties directement', 3500, { label: 'Import manuel', run: () => openStvManual(it) }); openStrava(); return; }
+    if (stvBlocked()) { openStvManual(it); return; }
     b.disabled = true; msg.hidden = true;
     try { await stvUpload(it, t => { b.textContent = t; }); toast('Sortie envoyée sur Strava', 3000); }
     catch (e) {
