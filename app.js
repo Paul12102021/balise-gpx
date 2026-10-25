@@ -5,7 +5,7 @@
 
 // La page et le code doivent être de la même version. Sinon (page gardée en cache
 // par le téléphone ou par GitHub), on recharge une page fraîche, au plus 3 fois.
-const APP_VERSION = 220;
+const APP_VERSION = 221;
 try {
   const meta = document.querySelector('meta[name="balise-version"]');
   const pageV = meta ? +meta.content : 0;
@@ -2210,6 +2210,7 @@ function setProfile(p, quiet) {
   // un retour à la trace (ou un trajet vers un lieu) déjà calculé est refait pour le nouveau mode
   if (!quiet && nav && track && me && (rejoin || track.route)) requestRejoin(true);
   updateStats();
+  if (typeof wxShown === 'function' && wxShown()) wxApply(); // couleurs du vent selon le mode
 }
 $('prof').onchange = e => setProfile(e.target.value);
 // ---------- taille du bandeau d'indications en navigation ----------
@@ -4710,9 +4711,7 @@ function polyTiles(polys, zmax) {
 // pour ajouter un pays : sa carte dans NAT, ses régions (code, nom, names, polys) dans regions/<pays>.json
 const COUNTRIES = [
   { id: 'fr', nat: 'ign', name: 'France', file: 'departements.json' },
-  // Allemagne (TopPlusOpen, BKG) : en pause, le serveur ne répond plus (23 oct.). Pour la remettre : cette ligne
-  // + le contour regions/de-outline.json sous la clé "de" dans regions/countries.json
-  // { id: 'de', nat: 'de', name: 'Allemagne', file: 'regions/de.json' }, // Länder
+  { id: 'de', nat: 'de', name: 'Allemagne', file: 'regions/de.json' }, // Länder (TopPlusOpen, BKG ; remis le 26 oct.)
   { id: 'es', nat: 'es', name: 'Espagne', file: 'regions/es.json' },
   { id: 'at', nat: 'at', name: 'Autriche', file: 'regions/at.json' },
   { id: 'be', nat: 'be', name: 'Belgique', file: 'regions/be.json' },
@@ -6035,8 +6034,12 @@ function wxBuild(pts, js, a) {
       val: wet(s) ? s.prob + ' %' : windy(s) ? Math.round(s.wind * (IMP ? 0.621 : 1)) + (IMP ? ' mph' : ' km/h') : Math.round(IMP ? s.temp * 9 / 5 + 32 : s.temp) + '°' })) };
 }
 // vent : sens de marche à chaque point de prévision → face / travers / dos (fort à partir de 20 km/h)
-const WIND_MIN = 20, WINDC = { face: '#e04848' };
-const windCol = v => v < 10 ? '#8a959e' : v < 20 ? '#3fae6a' : v < 30 ? '#e8c228' : v < 45 ? '#f08a24' : '#e04848'; // couleur = force
+// échelle du vent selon le mode (vitesses de la prévision, à 10 m) : gris, vert, jaune, orange, rouge
+// « vent de face » signalé dès le jaune : 20 km/h à vélo, 30 km/h à pied
+const WINDC = { face: '#e04848' }, WIND_COLS = ['#8a959e', '#3fae6a', '#e8c228', '#f08a24', '#e04848'];
+const windScale = () => profile === 'trekking' ? [10, 20, 30, 45] : [15, 30, 45, 60];
+const windMin = () => windScale()[1];
+const windCol = v => { const s = windScale(); let k = 0; while (k < s.length && v >= s[k]) k++; return WIND_COLS[k]; }; // couleur = force
 function bearingAt(d) {
   const a = pointAt(track, Math.max(0, d - 60)), b = pointAt(track, Math.min(track.total, d + 60)), r = Math.PI / 180;
   const y = Math.sin((b.lon - a.lon) * r) * Math.cos(b.lat * r), x = Math.cos(a.lat * r) * Math.sin(b.lat * r) - Math.sin(a.lat * r) * Math.cos(b.lat * r) * Math.cos((b.lon - a.lon) * r);
@@ -6046,7 +6049,7 @@ function wxWind() {
   const S = (meteo && meteo.samples || []).filter(s => s.wdir != null);
   if (!S.length) return null;
   const pts = S.map(s => { const diff = Math.abs(((s.wdir - bearingAt(s.d)) + 540) % 360 - 180);
-    return { d: s.d, wind: s.wind, wdir: s.wdir, strong: s.wind >= WIND_MIN, k: s.wind < 5 ? 'calm' : diff < 60 ? 'face' : diff > 120 ? 'back' : 'side' }; });
+    return { d: s.d, wind: s.wind, wdir: s.wdir, strong: s.wind >= windMin(), k: s.wind < 5 ? 'calm' : diff < 60 ? 'face' : diff > 120 ? 'back' : 'side' }; });
   // portions vent de face (entre deux points de prévision)
   const face = []; pts.forEach((q, i) => { if (q.k !== 'face' || !q.strong) return; const d0 = i ? (pts[i - 1].d + q.d) / 2 : q.d, d1 = i < pts.length - 1 ? (q.d + pts[i + 1].d) / 2 : q.d;
     const last = face[face.length - 1]; if (last && d0 - last[1] < 1) { last[1] = d1; last[2] = Math.max(last[2], q.wind); } else face.push([d0, d1, q.wind]); });
@@ -6180,6 +6183,11 @@ $('depOk').onclick = async () => {
 };
 $('wxDepBtn').onclick = depOpen;
 $('wxInfo').onclick = () => {
+  // échelle du vent du mode choisi (à pied / à vélo)
+  const sc = windScale(), lab = [tr('Moins de') + ' ' + sc[0] + ' km/h'].concat(sc.slice(1).map((v, i) => sc[i] + ' ' + tr('à') + ' ' + v + ' km/h'), [tr('Plus de') + ' ' + sc[3] + ' km/h']);
+  $('legWind').innerHTML = lab.map((l, i) => `<span><i class="ar" style="background:${WIND_COLS[i]}"></i>${l}</span>`).join('');
+  $('legWindH').textContent = tr('Vent sur la carte') + ' · ' + tr(profile === 'trekking' ? 'à vélo' : 'à pied');
+  $('legFace').textContent = tr('Vent de face') + ' (≥ ' + sc[1] + ' km/h)';
   $('wxLegSheet').hidden = false;
 };
 $('wxLegClose').onclick = () => { $('wxLegSheet').hidden = true; };
