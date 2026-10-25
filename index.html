@@ -9,13 +9,13 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<meta name="balise-version" content="207">
+<meta name="balise-version" content="208">
 <title>Pisteo</title>
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" href="icon.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
 <link rel="stylesheet" href="vendor/maplibre-gl.css">
-<link rel="stylesheet" href="app.css?v=207">
+<link rel="stylesheet" href="app.css?v=208">
 </head>
 <body>
 <div id="map" aria-label="Carte"></div>
@@ -151,6 +151,7 @@
       <svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></svg>
     </button>
   </div>
+  <button id="wxDepBtn" class="wx-dep" hidden>🕗 <span>Départ :</span> <b id="wxDepTxt">maintenant</b> <small>▾</small></button>
   <div id="trChips" class="tr-chips" hidden>
     <span id="sunChip" class="chip sun-chip"></span>
   </div>
@@ -258,6 +259,20 @@
   </div>
 </section>
 
+<div id="windLeg" class="wind-leg" hidden><span><i style="background:#e04848"></i>Vent de face</span><span><i style="background:#e2a33b"></i>Travers</span><span><i style="background:#2e9d5b"></i>Dos</span></div>
+<div id="depSheet" class="lib" hidden>
+  <div class="lib-panel" role="dialog" aria-label="Heure de départ">
+    <div class="lib-head">
+      <b>Heure de départ</b>
+      <button id="depClose" class="closebtn" aria-label="Fermer"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></svg>Fermer</button>
+    </div>
+    <div id="depOpts" class="dep-opts"></div>
+    <div class="dep-row"><label for="depDay">Jour</label><select id="depDay"></select></div>
+    <div class="dep-row"><label for="depTime">Heure</label><input type="time" id="depTime" value="08:00"></div>
+    <p class="dep-note">La météo, l'heure d'arrivée et l'alerte nuit sont calculées à partir de ce départ. Prévisions jusqu'à 3 jours.</p>
+    <button id="depOk" class="btn go">Voir la météo</button>
+  </div>
+</div>
 <div id="lib" class="lib" hidden>
   <div class="lib-panel" role="dialog" aria-label="Mes traces">
     <div class="lib-head">
@@ -726,8 +741,8 @@
 <div id="toast" class="toast" hidden></div>
 
 <script src="vendor/maplibre-gl.js"></script>
-<script src="i18n/en.js?v=207"></script>
-<script src="i18n/es.js?v=207"></script>
-<script src="app.js?v=207"></script>
+<script src="i18n/en.js?v=208"></script>
+<script src="i18n/es.js?v=208"></script>
+<script src="app.js?v=208"></script>
 </body>
 </html>
