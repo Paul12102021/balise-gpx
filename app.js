@@ -5,7 +5,7 @@
 
 // La page et le code doivent être de la même version. Sinon (page gardée en cache
 // par le téléphone ou par GitHub), on recharge une page fraîche, au plus 3 fois.
-const APP_VERSION = 208;
+const APP_VERSION = 209;
 try {
   const meta = document.querySelector('meta[name="balise-version"]');
   const pageV = meta ? +meta.content : 0;
@@ -5976,8 +5976,8 @@ var wxOn = false, meteo = null, wxDep = null; // meteo = { key, at, marks: [{ d,
 function trKey() { return track ? track.name + '|' + Math.round(track.total) : ''; }
 function wxKey() { return track ? trKey() + '|' + (depAt() || 0) : ''; }
 function wxShown() { return !!(wxOn && meteo && track && meteo.key === wxKey()); }
-// réglage : où afficher la météo — 'profil' (bande, étiquettes, températures), 'heures' (vignettes sous le profil), 'carte' (pastilles sur le tracé)
-function wxMode() { const m = store.get('wxMode'); return m === 'heures' || m === 'carte' ? m : 'profil'; }
+// réglage : où afficher la météo — 'profil' (bande, étiquettes, températures) ou 'heures' (vignettes sous le profil) ; sur la carte : le vent
+function wxMode() { return store.get('wxMode') === 'heures' ? 'heures' : 'profil'; }
 function wxOnProf() { return wxShown() && wxMode() === 'profil'; }
 const wxCat = c => c <= 1 ? 0 : c <= 3 ? 1 : c <= 48 ? 2 : (c <= 67 || (c >= 80 && c <= 82)) ? 3 : c <= 86 ? 4 : 5;
 const wxIcon = c => c <= 1 ? '☀️' : c === 2 ? '⛅' : c === 3 ? '☁️' : c <= 48 ? '🌫️' : c <= 57 ? '🌦️' : (c <= 67 || (c >= 80 && c <= 82)) ? '🌧️' : c <= 86 ? '🌨️' : '⛈️';
@@ -6103,30 +6103,18 @@ async function toggleWx() {
 }
 // portion pluvieuse du tracé, en bleu sur la carte
 var wxPins = [];
+// sur la carte : flèches de vent le long du tracé (quand il souffle)
 function wxMap() {
-  const on = wxShown() && wxMode() === 'carte', feats = [];
   (wxPins || []).forEach(m => m.remove()); wxPins = [];
-  const wi = wxShown() ? wxWind() : null, pinD = on ? meteo.marks.map(m => m.d) : [];
+  const wi = wxShown() ? wxWind() : null;
   if (wi) wi.pts.forEach((q, i) => {
-    if (!i || i === wi.pts.length - 1 || pinD.some(d => Math.abs(d - q.d) < track.total * .07)) return; // pas sur le départ, l'arrivée ni les pastilles
+    if (!i || i === wi.pts.length - 1) return; // pas sur le départ ni l'arrivée
     const p = pointAt(track, q.d), el = document.createElement('div'); el.className = 'wind-arrow'; el.style.background = WINDC[q.k];
     el.innerHTML = `<svg viewBox="0 0 24 24" style="transform:rotate(${q.wdir + 180}deg)"><path d="M12 20V4M6 10l6-6 6 6"/></svg>`;
     el.onclick = e => { e.stopPropagation(); toast(`💨 ${Math.round(q.wind * (IMP ? 0.621 : 1))} ${IMP ? 'mph' : 'km/h'} · ${tr({ face: 'vent de face', side: 'vent de travers', back: 'vent dans le dos', calm: 'vent faible' }[q.k])}`, 2500); };
     wxPins.push(new maplibregl.Marker({ element: el }).setLngLat([p.lon, p.lat]).addTo(map));
   });
   $('windLeg').hidden = !wi || nav;
-  if (on) for (const m of meteo.marks) {
-    const q = pointAt(track, m.d), el = document.createElement('div'); el.className = 'wx-pin';
-    el.innerHTML = `<span>${m.ic}</span><small>${escH(m.val)}</small>`; el.title = hm(m.t);
-    el.onclick = e => { e.stopPropagation(); toast(`${m.ic} ${m.val} · ${tr('vers')} ${hm(m.t)}`, 2500); };
-    wxPins.push(new maplibregl.Marker({ element: el, anchor: 'bottom' }).setLngLat([q.lon, q.lat]).addTo(map));
-  }
-  if (on) for (const [d0, d1] of meteo.rain) { const c = []; for (let d = d0; d <= d1; d += Math.max(10, (d1 - d0) / 80)) { const q = pointAt(track, d); c.push([q.lon, q.lat]); } if (c.length > 1) feats.push({ type: 'Feature', properties: {}, geometry: { type: 'LineString', coordinates: c } }); }
-  const data = { type: 'FeatureCollection', features: feats };
-  try {
-    if (map.getSource('wxrain')) map.getSource('wxrain').setData(data);
-    else if (feats.length) { map.addSource('wxrain', { type: 'geojson', data }); map.addLayer({ id: 'wxrain', type: 'line', source: 'wxrain', layout: { 'line-cap': 'round', 'line-join': 'round' }, paint: { 'line-color': '#2f80ed', 'line-width': ['interpolate', ['linear'], ['zoom'], 10, 5, 16, 11], 'line-opacity': .75 } }); }
-  } catch { /* carte pas prête */ }
 }
 function wxApply() {
   const on = wxShown(); wxMap(); wxHours(); depUI();

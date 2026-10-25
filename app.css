@@ -746,9 +746,6 @@ body.side.wx-on #profile { height: 200px; }
 .wx-hours .wh em { display: block; font-style: normal; }
 .wx-hours .wh span { display: block; font-weight: 700; color: var(--ink); margin-top: 1px; }
 .wx-hours .wh.on { outline: 2px solid var(--go); outline-offset: -2px; }
-.wx-pin { display: flex; flex-direction: column; align-items: center; cursor: pointer; }
-.wx-pin span { width: 34px; height: 34px; border-radius: 50%; background: var(--panel); display: grid; place-items: center; font-size: 18px; box-shadow: 0 2px 8px rgba(0,0,0,.35); border: 2px solid #fff; }
-.wx-pin small { margin-top: 2px; font: 700 11px system-ui, sans-serif; background: var(--panel); color: var(--ink); padding: 0 5px; border-radius: 6px; box-shadow: 0 1px 4px rgba(0,0,0,.25); }
 
 /* vent sur le tracé, heure de départ */
 .wind-arrow { width: 26px; height: 26px; border-radius: 50%; display: grid; place-items: center; box-shadow: 0 1px 5px rgba(0,0,0,.35); border: 2px solid #fff; cursor: pointer; }
