@@ -6002,7 +6002,7 @@ function wxBuild(pts, js, a) {
   // bande « ciel » : une couleur par portion (soleil, nuages, pluie, neige, orage), entre deux points de prévision
   const skyOf = s => wet(s) ? (wxCat(s.code) === 4 ? 'snow' : wxCat(s.code) === 5 ? 'storm' : 'rain') : wxCat(s.code) === 0 ? (s.day ? 'sun' : 'night') : 'cloud';
   const sky = S.map((s, i) => [i ? (S[i - 1].d + s.d) / 2 : s.d, i < S.length - 1 ? (s.d + S[i + 1].d) / 2 : s.d, skyOf(s)]);
-  meteo = { key: wxKey(), at: Date.now(), rain, sky,
+  meteo = { key: wxKey(), at: Date.now(), rain, sky, samples: S.map(s => ({ d: s.d, temp: s.temp, prob: s.prob, code: s.code, day: s.day, wet: wet(s) })),
     marks: marks.map(s => ({ d: s.d, t: s.t, ic: windy(s) && !wet(s) ? '💨' : !s.day && s.code <= 2 ? '🌙' : wxIcon(s.code),
       val: wet(s) ? s.prob + ' %' : windy(s) ? Math.round(s.wind * (IMP ? 0.621 : 1)) + (IMP ? ' mph' : ' km/h') : Math.round(IMP ? s.temp * 9 / 5 + 32 : s.temp) + '°' })) };
 }
@@ -6169,7 +6169,13 @@ function scrubDraw(ctx, X, Y, T, h, L0, W) {
   ctx.beginPath(); ctx.moveTo(x, 4 + T); ctx.lineTo(x, 4 + T + h); ctx.stroke(); ctx.setLineDash([]); ctx.globalAlpha = 1;
   if (e != null) { ctx.fillStyle = COL.track; ctx.beginPath(); ctx.arc(x, Y(e), 5, 0, 7); ctx.fill(); ctx.strokeStyle = '#fff'; ctx.lineWidth = 2; ctx.stroke(); }
   const up = track.totalUp - infoAt(scrubD).upLeft;
-  const txt = `${fmtDist(scrubD)}${e != null ? ' · ' + fmtM(e) : ''}${track.hasEle && up > 0 ? ' · D+ ' + fmtM(up) : ''} · ≈${hm(etaAlong(scrubD))}`;
+  // météo affichée : celle prévue à ce point, à l'heure de passage (le D+ laisse alors la place)
+  let wxt = '';
+  if (wxShown() && meteo.samples && meteo.samples.length) {
+    const sm = meteo.samples.reduce((b, x) => Math.abs(x.d - scrubD) < Math.abs(b.d - scrubD) ? x : b);
+    wxt = ` · ${!sm.day && sm.code <= 2 ? '🌙' : wxIcon(sm.code)} ${Math.round(IMP ? sm.temp * 9 / 5 + 32 : sm.temp)}°${sm.prob >= 20 ? ' · ' + tr('pluie') + ' ' + sm.prob + ' %' : ''}`;
+  }
+  const txt = `${fmtDist(scrubD)}${e != null ? ' · ' + fmtM(e) : ''}${!wxt && track.hasEle && up > 0 ? ' · D+ ' + fmtM(up) : ''} · ≈${hm(etaAlong(scrubD))}${wxt}`;
   ctx.font = '600 11px system-ui, sans-serif';
   const tw = ctx.measureText(txt).width + 12, bx = clamp(x - tw / 2, L0, W - tw), by = 4 + T;
   ctx.fillStyle = cssVar('--ink'); ctx.globalAlpha = .88; ctx.beginPath();
