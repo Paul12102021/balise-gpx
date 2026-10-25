@@ -5,7 +5,7 @@
 
 // La page et le code doivent être de la même version. Sinon (page gardée en cache
 // par le téléphone ou par GitHub), on recharge une page fraîche, au plus 3 fois.
-const APP_VERSION = 219;
+const APP_VERSION = 220;
 try {
   const meta = document.querySelector('meta[name="balise-version"]');
   const pageV = meta ? +meta.content : 0;
@@ -680,7 +680,10 @@ $('btnReverse').onclick = () => {
   const rev = track.name.endsWith(' (sens inverse)');
   const name = rev ? track.name.replace(/ \(sens inverse\)$/, '') : track.name + ' (sens inverse)';
   const text = loopGPX(track.pts.slice().reverse(), name);
+  const hadWx = wxShown(), dep = depAt();
   loadText(text, false); store.set('gpx', text.length < 4.5e6 ? text : '');
+  // météo affichée : on la garde, recalculée dans le nouveau sens (avec la même heure de départ)
+  if (hadWx) { wxDep = dep ? { key: trKey(), t: dep } : null; wxOn = false; toggleWx(); }
   toast(rev ? 'Trace remise dans son sens d\'origine' : 'Trace inversée : départ et arrivée échangés', 3000);
 };
 function loadText(text, save = true) {
