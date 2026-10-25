@@ -9,13 +9,13 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<meta name="balise-version" content="210">
+<meta name="balise-version" content="211">
 <title>Pisteo</title>
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" href="icon.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
 <link rel="stylesheet" href="vendor/maplibre-gl.css">
-<link rel="stylesheet" href="app.css?v=210">
+<link rel="stylesheet" href="app.css?v=211">
 </head>
 <body>
 <div id="map" aria-label="Carte"></div>
@@ -151,11 +151,14 @@
       <svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></svg>
     </button>
   </div>
-  <button id="wxDepBtn" class="wx-dep" hidden>🕗 <span>Départ :</span> <b id="wxDepTxt">maintenant</b> <small>▾</small></button>
   <div id="trChips" class="tr-chips" hidden>
     <span id="sunChip" class="chip sun-chip"></span>
   </div>
-  <canvas id="profile" aria-label="Profil altimétrique"></canvas>
+  <div class="prof-wrap">
+    <canvas id="profile" aria-label="Profil altimétrique"></canvas>
+    <button id="wxDepBtn" class="wx-dep" hidden aria-label="Heure de départ">🕗 <b id="wxDepTxt"></b> ▾</button>
+    <button id="wxInfo" class="wx-info" hidden aria-label="Légende météo">i</button>
+  </div>
   <div id="wxHours" class="wx-hours" hidden></div>
   <div id="actBar" class="actbar" hidden>
     <div class="ab-text"><b id="actLabel">Enregistrement</b><span id="actStats"></span></div>
@@ -259,7 +262,27 @@
   </div>
 </section>
 
-<div id="windLeg" class="wind-leg" hidden><span><i style="background:#e04848"></i>Vent de face</span><span><i style="background:#e2a33b"></i>Travers</span><span><i style="background:#2e9d5b"></i>Dos</span></div>
+<div id="wxLegSheet" class="lib" hidden>
+  <div class="lib-panel" role="dialog" aria-label="Légende météo">
+    <div class="lib-head">
+      <b>Légende météo</b>
+      <button id="wxLegClose" class="closebtn" aria-label="Fermer"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></svg>Fermer</button>
+    </div>
+    <div class="leg-sec" data-mode="profil"><h4>Bande sous le profil</h4><div class="leg-g">
+      <span><i class="sw" style="background:#f2c94c"></i>Soleil</span><span><i class="sw" style="background:#aab3bc"></i>Nuages</span>
+      <span><i class="sw" style="background:#2f80ed"></i>Pluie</span><span><i class="sw" style="background:#5c6b86"></i>Nuit claire</span>
+      <span><i class="sw" style="background:#9fd3ff"></i>Neige</span><span><i class="sw" style="background:#7b5cd6"></i>Orage</span></div></div>
+    <div class="leg-sec" data-mode="profil"><h4>Sur le profil</h4><div class="leg-g">
+      <span><i class="sw dash"></i>Température</span><span><i class="sw thin" style="background:#e04848"></i>Vent de face</span></div></div>
+    <div class="leg-sec" data-mode="heures"><h4>Vignettes</h4><div class="leg-g">
+      <span><i class="sw" style="background:#2f80ed"></i>Risque de pluie</span><span><b>12:30</b>&nbsp;Heure de passage</span></div></div>
+    <div class="leg-sec"><h4>Vent sur la carte</h4><div class="leg-g">
+      <span><i class="ar" style="background:#8a959e"></i>Moins de 10 km/h</span><span><i class="ar" style="background:#3fae6a"></i>10 à 20 km/h</span>
+      <span><i class="ar" style="background:#e8c228"></i>20 à 30 km/h</span><span><i class="ar" style="background:#f08a24"></i>30 à 45 km/h</span>
+      <span><i class="ar" style="background:#e04848"></i>Plus de 45 km/h</span></div></div>
+    <p class="leg-note">La flèche montre où va le vent ; touche-la pour savoir s'il est de face ou dans le dos. Pour préparer une sortie à l'avance, touche la première heure (🕗) et choisis ton heure de départ. Prévisions Open-Meteo à l'heure où tu passeras à chaque endroit.</p>
+  </div>
+</div>
 <div id="depSheet" class="lib" hidden>
   <div class="lib-panel" role="dialog" aria-label="Heure de départ">
     <div class="lib-head">
@@ -741,8 +764,8 @@
 <div id="toast" class="toast" hidden></div>
 
 <script src="vendor/maplibre-gl.js"></script>
-<script src="i18n/en.js?v=210"></script>
-<script src="i18n/es.js?v=210"></script>
-<script src="app.js?v=210"></script>
+<script src="i18n/en.js?v=211"></script>
+<script src="i18n/es.js?v=211"></script>
+<script src="app.js?v=211"></script>
 </body>
 </html>

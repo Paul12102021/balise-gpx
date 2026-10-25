@@ -5,7 +5,7 @@
 
 // La page et le code doivent être de la même version. Sinon (page gardée en cache
 // par le téléphone ou par GitHub), on recharge une page fraîche, au plus 3 fois.
-const APP_VERSION = 210;
+const APP_VERSION = 211;
 try {
   const meta = document.querySelector('meta[name="balise-version"]');
   const pageV = meta ? +meta.content : 0;
@@ -4238,7 +4238,7 @@ function drawProfileOn(cv) {
     ctx.fillStyle = COL.me; ctx.beginPath(); ctx.arc(x, y, 5, 0, 7); ctx.fill();
     ctx.strokeStyle = '#fff'; ctx.lineWidth = 2; ctx.stroke();
   }
-  if (T) { wxTemps(ctx, X, 4 + T, h, L0, W); wxWindProf(ctx, X, 4 + T, h); wxMarks(ctx, X, L0, W); }
+  if (T) { wxTemps(ctx, X, 4 + T, h, L0, W); wxWindProf(ctx, X, 4 + T, h); wxMarks(ctx, X, L0, W, cv === $('profile') && !nav); }
   if (cv === $('profile') && scrubD != null) scrubDraw(ctx, X, Y, T, h, L0, W);
 }
 window.addEventListener('resize', drawProfile);
@@ -6030,7 +6030,8 @@ function wxBuild(pts, js, a) {
       val: wet(s) ? s.prob + ' %' : windy(s) ? Math.round(s.wind * (IMP ? 0.621 : 1)) + (IMP ? ' mph' : ' km/h') : Math.round(IMP ? s.temp * 9 / 5 + 32 : s.temp) + '°' })) };
 }
 // vent : sens de marche à chaque point de prévision → face / travers / dos (fort à partir de 20 km/h)
-const WIND_MIN = 20, WINDC = { face: '#e04848', side: '#e2a33b', back: '#2e9d5b', calm: '#8a959e' };
+const WIND_MIN = 20, WINDC = { face: '#e04848' };
+const windCol = v => v < 10 ? '#8a959e' : v < 20 ? '#3fae6a' : v < 30 ? '#e8c228' : v < 45 ? '#f08a24' : '#e04848'; // couleur = force
 function bearingAt(d) {
   const a = pointAt(track, Math.max(0, d - 60)), b = pointAt(track, Math.min(track.total, d + 60)), r = Math.PI / 180;
   const y = Math.sin((b.lon - a.lon) * r) * Math.cos(b.lat * r), x = Math.cos(a.lat * r) * Math.sin(b.lat * r) - Math.sin(a.lat * r) * Math.cos(b.lat * r) * Math.cos((b.lon - a.lon) * r);
@@ -6040,9 +6041,9 @@ function wxWind() {
   const S = (meteo && meteo.samples || []).filter(s => s.wdir != null);
   if (!S.length) return null;
   const pts = S.map(s => { const diff = Math.abs(((s.wdir - bearingAt(s.d)) + 540) % 360 - 180);
-    return { d: s.d, wind: s.wind, wdir: s.wdir, k: s.wind < WIND_MIN ? 'calm' : diff < 60 ? 'face' : diff > 120 ? 'back' : 'side' }; });
+    return { d: s.d, wind: s.wind, wdir: s.wdir, strong: s.wind >= WIND_MIN, k: s.wind < 5 ? 'calm' : diff < 60 ? 'face' : diff > 120 ? 'back' : 'side' }; });
   // portions vent de face (entre deux points de prévision)
-  const face = []; pts.forEach((q, i) => { if (q.k !== 'face') return; const d0 = i ? (pts[i - 1].d + q.d) / 2 : q.d, d1 = i < pts.length - 1 ? (q.d + pts[i + 1].d) / 2 : q.d;
+  const face = []; pts.forEach((q, i) => { if (q.k !== 'face' || !q.strong) return; const d0 = i ? (pts[i - 1].d + q.d) / 2 : q.d, d1 = i < pts.length - 1 ? (q.d + pts[i + 1].d) / 2 : q.d;
     const last = face[face.length - 1]; if (last && d0 - last[1] < 1) { last[1] = d1; last[2] = Math.max(last[2], q.wind); } else face.push([d0, d1, q.wind]); });
   return { pts, face };
 }
@@ -6077,13 +6078,13 @@ function wxWindProf(ctx, X, top, h) {
   ctx.fillText(txt, clamp(X((big[0] + big[1]) / 2), X(0) + tw / 2, X(track.total) - tw / 2), top + h - 5);
   ctx.restore();
 }
-function wxMarks(ctx, X, L0, W) {
+function wxMarks(ctx, X, L0, W, noFirstTime) {
   ctx.save(); ctx.textAlign = 'center'; ctx.textBaseline = 'alphabetic';
   for (const m of meteo.marks) {
     const x = clamp(X(m.d), L0 + 14, W - 18);
     ctx.font = '16px system-ui, sans-serif'; ctx.fillText(m.ic, x, 17);
     ctx.font = '700 11px system-ui, sans-serif'; ctx.fillStyle = cssVar('--ink'); ctx.fillText(m.val, x, 30);
-    ctx.font = '10px system-ui, sans-serif'; ctx.fillStyle = cssVar('--muted'); ctx.fillText(hm(m.t), x, 42);
+    ctx.font = '10px system-ui, sans-serif'; ctx.fillStyle = cssVar('--muted'); if (!(noFirstTime && m === meteo.marks[0])) ctx.fillText(hm(m.t), x, 42);
   }
   ctx.restore();
 }
@@ -6109,12 +6110,11 @@ function wxMap() {
   const wi = wxShown() ? wxWind() : null;
   if (wi) wi.pts.forEach((q, i) => {
     if (!i || i === wi.pts.length - 1) return; // pas sur le départ ni l'arrivée
-    const p = pointAt(track, q.d), el = document.createElement('div'); el.className = 'wind-arrow'; el.style.background = WINDC[q.k];
+    const p = pointAt(track, q.d), el = document.createElement('div'); el.className = 'wind-arrow'; el.style.background = windCol(q.wind);
     el.innerHTML = `<svg viewBox="0 0 24 24" style="transform:rotate(${q.wdir + 180}deg)"><path d="M12 20V4M6 10l6-6 6 6"/></svg>`;
     el.onclick = e => { e.stopPropagation(); toast(`💨 ${Math.round(q.wind * (IMP ? 0.621 : 1))} ${IMP ? 'mph' : 'km/h'} · ${tr({ face: 'vent de face', side: 'vent de travers', back: 'vent dans le dos', calm: 'vent faible' }[q.k])}`, 2500); };
     wxPins.push(new maplibregl.Marker({ element: el }).setLngLat([p.lon, p.lat]).addTo(map));
   });
-  $('windLeg').hidden = !wi || nav || !wi.pts.some(q => q.k !== 'calm'); // légende seulement s'il y a du vent notable
 }
 function wxApply() {
   const on = wxShown(); wxMap(); wxHours(); depUI();
@@ -6138,7 +6138,7 @@ function wxHours() {
     const last = S.length - 1;
     if (keep[keep.length - 1] !== last) { while (keep.length > 1 && left(last) - left(keep[keep.length - 1]) < CW + GAP) keep.pop(); keep.push(last); }
     box.innerHTML = keep.map(i => { const sm = S[i];
-      return `<button class="wh" data-i="${i}" style="left:${left(i)}px"><b>${!sm.day && sm.code <= 2 ? '🌙' : wxIcon(sm.code)} ${Math.round(IMP ? sm.temp * 9 / 5 + 32 : sm.temp)}°</b><i style="width:${Math.max(4, Math.round(sm.prob * .36))}px;opacity:${sm.wet ? 1 : .35}"></i><em>${sm.prob} %</em><span>${hm(sm.t)}</span></button>`; }).join('');
+      return `<button class="wh" data-i="${i}" style="left:${left(i)}px"><b>${!sm.day && sm.code <= 2 ? '🌙' : wxIcon(sm.code)} ${Math.round(IMP ? sm.temp * 9 / 5 + 32 : sm.temp)}°</b><i style="width:${Math.max(4, Math.round(sm.prob * .36))}px;opacity:${sm.wet ? 1 : .35}"></i><em>${sm.prob} %</em><span${i === keep[0] && id === 'wxHours' && !nav ? ' class="dep"' : ''}>${i === keep[0] && id === 'wxHours' && !nav ? '🕗' : ''}${hm(sm.t)}</span></button>`; }).join('');
   }
   wxHoursMark();
 }
@@ -6155,6 +6155,7 @@ function wxHoursMark() {
   }
 }
 for (const id of ['wxHours', 'npHours']) $(id).addEventListener('click', e => {
+  if (e.target.closest('.dep')) { depOpen(); return; }
   const b = e.target.closest('.wh'); if (!b || !wxShown()) return;
   scrubToD(meteo.samples[+b.dataset.i].d); scrubEnd(4000);
 });
@@ -6165,7 +6166,22 @@ function depLabel() {
   const k = Math.round((new Date(t).setHours(0, 0, 0, 0) - today) / 864e5);
   return (k === 0 ? tr('aujourd\'hui') : k === 1 ? tr('demain') : d.toLocaleDateString(LOC, { weekday: 'long' })) + ' ' + hm(t);
 }
-function depUI() { const b = $('wxDepBtn'); b.hidden = !wxShown() || nav; if (!b.hidden) $('wxDepTxt').textContent = depLabel(); }
+// heure de départ = la première heure affichée (au-dessus du profil, ou 1re vignette) ; « i » en bas à gauche = légende
+function depUI() {
+  const on = wxShown() && !nav, b = $('wxDepBtn');
+  $('wxInfo').hidden = !on;
+  b.hidden = !on || wxMode() !== 'profil';
+  if (b.hidden) return;
+  const t = depAt();
+  $('wxDepTxt').textContent = (t && new Date(t).toDateString() !== new Date().toDateString() ? depDay(t) + ' ' : '') + hm(meteo.marks[0].t);
+  const W = cv.clientWidth, L0 = 38, x = clamp(L0 + meteo.marks[0].d / track.total * (W - L0 - 4), L0 + 14, W - 18);
+  b.style.left = Math.max(0, x - b.offsetWidth / 2) + 'px';
+}
+function depDay(t) {
+  const today = new Date(); today.setHours(0, 0, 0, 0);
+  const k = Math.round((new Date(t).setHours(0, 0, 0, 0) - today) / 864e5);
+  return k === 1 ? tr('demain') : new Date(t).toLocaleDateString(LOC, { weekday: 'short' });
+}
 let depPick = null;
 function depOpen() {
   const now = new Date(), opts = [['now', tr('Maintenant')], [Date.now() + 3600e3, tr('Dans 1 h')]];
@@ -6197,6 +6213,13 @@ $('depOk').onclick = async () => {
   wxOn = false; await toggleWx(); trChipsUpdate(); updateStats();
 };
 $('wxDepBtn').onclick = depOpen;
+$('wxInfo').onclick = () => {
+  const m = wxMode(); document.querySelectorAll('#wxLegSheet .leg-sec').forEach(e => { e.hidden = !!e.dataset.mode && e.dataset.mode !== m; });
+  $('wxLegSheet').hidden = false;
+};
+$('wxLegClose').onclick = () => { $('wxLegSheet').hidden = true; };
+$('wxLegSheet').onclick = e => { if (e.target === $('wxLegSheet')) $('wxLegSheet').hidden = true; };
+window.addEventListener('resize', () => { if (wxShown()) depUI(); });
 $('wxMode').value = wxMode();
 $('wxMode').onchange = e => { store.set('wxMode', e.target.value); wxApply(); };
 

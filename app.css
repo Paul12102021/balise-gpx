@@ -750,12 +750,20 @@ body.side.wx-on #profile { height: 200px; }
 /* vent sur le tracé, heure de départ */
 .wind-arrow { width: 26px; height: 26px; border-radius: 50%; display: grid; place-items: center; box-shadow: 0 1px 5px rgba(0,0,0,.35); border: 2px solid #fff; cursor: pointer; }
 .wind-arrow svg { width: 16px; height: 16px; fill: none; stroke: #fff; stroke-width: 2.6; stroke-linecap: round; stroke-linejoin: round; }
-.wind-leg { position: fixed; left: 12px; top: calc(var(--sa-t, 0px) + 64px); z-index: 6; background: var(--panel); color: var(--ink); border-radius: 12px; padding: 5px 10px; font: 600 12px system-ui, sans-serif; box-shadow: 0 2px 8px rgba(0,0,0,.25); display: flex; gap: 10px; pointer-events: none; }
-.wind-leg[hidden] { display: none; }
-.wind-leg i { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 4px; vertical-align: -1px; }
-.wx-dep { display: inline-flex; align-items: center; gap: 5px; font: 600 13px system-ui, sans-serif; background: var(--field); color: var(--ink); border-radius: 999px; padding: 5px 12px; border: 0; margin: 0 0 4px; cursor: pointer; }
-.wx-dep[hidden] { display: none; }
-.wx-dep span, .wx-dep small { color: var(--muted); font-weight: 500; }
+.prof-wrap { position: relative; }
+.wx-dep { position: absolute; top: 31px; z-index: 2; border: 0; background: var(--field); color: var(--ink); border-radius: 8px; padding: 1px 6px; font: 700 10.5px system-ui, sans-serif; box-shadow: 0 0 0 1px var(--line); cursor: pointer; white-space: nowrap; }
+.wx-dep[hidden], .wx-info[hidden] { display: none; }
+.wx-info { position: absolute; left: 2px; bottom: 0; z-index: 2; width: 22px; height: 22px; border-radius: 50%; border: 0; background: var(--field); color: var(--muted); font: italic 700 13px Georgia, serif; display: grid; place-items: center; cursor: pointer; padding: 0; }
+.wx-hours .wh span.dep { white-space: nowrap; font-size: 9.5px; letter-spacing: -.2px; margin: 1px -1px 0; border-radius: 6px; background: var(--panel); box-shadow: 0 0 0 1px var(--line); }
+.leg-sec h4 { margin: 0 0 6px; font-size: 12px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); }
+.leg-sec[hidden] { display: none; }
+.leg-g { display: grid; grid-template-columns: 1fr 1fr; gap: 6px 12px; font-size: 14px; }
+.leg-g span { display: flex; align-items: center; gap: 8px; }
+.leg-g .sw { width: 22px; height: 6px; border-radius: 3px; flex: none; }
+.leg-g .sw.thin { height: 3px; }
+.leg-g .sw.dash { height: 3px; background: repeating-linear-gradient(90deg, #e04848 0 5px, transparent 5px 8px); }
+.leg-g .ar { width: 18px; height: 18px; border-radius: 50%; border: 2px solid #fff; box-shadow: 0 1px 3px rgba(0,0,0,.3); flex: none; }
+.leg-note { color: var(--muted); font-size: 12.5px; margin: 0; }
 .dep-opts { display: flex; flex-wrap: wrap; gap: 8px; }
 .dep-opts button { border: 0; background: var(--field); color: var(--ink); border-radius: 999px; padding: 8px 14px; font: 600 14px system-ui, sans-serif; cursor: pointer; }
 .dep-opts button.on { background: var(--go); color: #fff; }
