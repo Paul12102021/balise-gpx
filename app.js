@@ -5,7 +5,7 @@
 
 // La page et le code doivent être de la même version. Sinon (page gardée en cache
 // par le téléphone ou par GitHub), on recharge une page fraîche, au plus 3 fois.
-const APP_VERSION = 199;
+const APP_VERSION = 200;
 try {
   const meta = document.querySelector('meta[name="balise-version"]');
   const pageV = meta ? +meta.content : 0;
@@ -398,6 +398,24 @@ const map = new maplibregl.Map({
   ...startView(), maxPitch: 70, attributionControl: false, fadeDuration: 0
 });
 map.addControl(new maplibregl.AttributionControl({ compact: true }), 'bottom-left');
+
+// Grand écran (PC, tablette à l'horizontale) : le panneau passe à gauche, la carte reste visible à droite.
+// Seulement en aperçu : navigation, tracé point par point, choix d'une zone… gardent l'écran entier.
+const WIDE = matchMedia('(min-width: 1000px) and (min-height: 560px)');
+const isSide = () => document.body.classList.contains('side');
+const sheetPad = () => isSide() ? 0 : $('sheet').offsetHeight;
+function sideUpdate() {
+  const b = document.body.classList;
+  const on = WIDE.matches && !['nav', 'plan', 'zone', 'rtmode', 'choosing'].some(c => b.contains(c));
+  if (on === b.contains('side')) return;
+  b.toggle('side', on);
+  if (!on) document.documentElement.style.setProperty('--sheet-h', $('sheet').offsetHeight + 'px');
+  map.resize();
+  setTimeout(() => { try { drawProfile(); } catch { /* pas encore prêt au démarrage */ } }, 0);
+}
+WIDE.addEventListener('change', sideUpdate);
+new MutationObserver(sideUpdate).observe(document.body, { attributes: true, attributeFilter: ['class'] });
+sideUpdate();
 map.on('moveend', () => { const c = map.getCenter(); store.set('view', JSON.stringify({ lat: +c.lat.toFixed(5), lon: +c.lng.toFixed(5), z: +map.getZoom().toFixed(1) })); });
 map.touchZoomRotate.enableRotation();
 // fond officiel : on suit le pays au centre de la carte (IGN en France, IGN España en Espagne…)
@@ -573,8 +591,8 @@ function boundsOf(ptsList) {
 function stopFollowOv() { try { if (!nav && followOv) { followOv = false; $('btnCenter').classList.remove('on'); } } catch { /* pas encore initialisé */ } }
 function fitTo(ptsList) {
   stopFollowOv();
-  const sheetH = document.body.classList.contains('nav') ? 110 : $('sheet').offsetHeight;
-  const topH = document.body.classList.contains('nav') ? $('navTop').offsetHeight : 64;
+  const sheetH = document.body.classList.contains('nav') ? 110 : sheetPad();
+  const topH = document.body.classList.contains('nav') ? $('navTop').offsetHeight : isSide() ? 0 : 64;
   map.fitBounds(boundsOf(ptsList), { padding: { top: topH + 30, bottom: sheetH + 30, left: 40, right: 76 }, bearing: 0, pitch: 0, duration: 700, maxZoom: 16 });
 }
 
@@ -2795,7 +2813,7 @@ function showLoop(pts) {
   $('lbKeep').textContent = 'Garder'; $('lbKeep').disabled = false;
   $('loopBar').hidden = false;
   // toute la boucle visible au-dessus du panneau et de la barre de proposition
-  setTimeout(() => { try { map.fitBounds(boundsOf([pts]), { padding: { top: 80, bottom: $('sheet').offsetHeight + $('loopBar').offsetHeight + 30, left: 30, right: 70 }, bearing: 0, pitch: 0, duration: 600 }); } catch {} }, 350);
+  setTimeout(() => { try { map.fitBounds(boundsOf([pts]), { padding: { top: 80, bottom: sheetPad() + $('loopBar').offsetHeight + 30, left: 30, right: 70 }, bearing: 0, pitch: 0, duration: 600 }); } catch {} }, 350);
 }
 $('lbAgain').onclick = () => { $('loopBar').hidden = true; makeLoop(); };
 $('lbEdit').onclick = () => { $('loopBar').hidden = true; openLoop(); };
@@ -3526,7 +3544,7 @@ function rtShow(it, pts, partial, update) {
   if (!update) { $('rtbKeep').textContent = 'Garder'; $('rtbKeep').disabled = false; }
   $('rtBar').hidden = false;
   if (update) return;
-  setTimeout(() => { try { map.fitBounds(boundsOf([pts]), { padding: { top: 80, bottom: $('sheet').offsetHeight + $('rtBar').offsetHeight + 30, left: 30, right: 70 }, bearing: 0, pitch: 0, duration: 600 }); } catch {} }, 350);
+  setTimeout(() => { try { map.fitBounds(boundsOf([pts]), { padding: { top: 80, bottom: sheetPad() + $('rtBar').offsetHeight + 30, left: 30, right: 70 }, bearing: 0, pitch: 0, duration: 600 }); } catch {} }, 350);
 }
 $('destRoutes').onclick = rtShowOnMap;
 $('rtClose').onclick = () => { rtHideMap(); closeRoutes(); };
@@ -5087,7 +5105,7 @@ async function renderPacks() {
       stopFollowOv();
       if (!$('showPacks').checked) { $('showPacks').checked = true; store.set('showPacks', '1'); drawPacks(); }
       const [w, s, e, n] = p.bbox;
-      setTimeout(() => map.fitBounds([[w, s], [e, n]], { padding: { top: 90, bottom: $('sheet').offsetHeight + 20, left: 30, right: 76 }, bearing: 0, pitch: 0, duration: 700 }), 60);
+      setTimeout(() => map.fitBounds([[w, s], [e, n]], { padding: { top: 90, bottom: sheetPad() + 20, left: 30, right: 76 }, bearing: 0, pitch: 0, duration: 700 }), 60);
     };
     const del = document.createElement('button'); del.className = 'lib-del'; del.setAttribute('aria-label', 'Supprimer ' + p.name);
     del.innerHTML = '<svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></svg>';
@@ -5580,6 +5598,7 @@ function moreMotion() {
 }
 function toggleMore(open, instant) {
   const want = open === undefined ? $('more').hidden : !!open;
+  if (isSide()) { applyMore(want); return; } // grand écran : le panneau a toute la hauteur, pas d'animation
   want ? moreMotion().open(instant) : moreMotion().close(instant);
 }
 $('btnMore').onclick = () => toggleMore(); $('grip').onclick = () => toggleMore();
@@ -5849,7 +5868,7 @@ async function importAll(d) {
   }
 })();
 stvUI();
-const VERSION = APP_VERSION + ' · 19 oct. 2026';
+const VERSION = APP_VERSION + ' · 25 oct. 2026';
 $('note').textContent = (window.isSecureContext ? '' : 'Attention : le GPS ne fonctionne qu\'en HTTPS. ') + 'Version ' + VERSION;
 // Mises à jour : on vérifie à chaque ouverture et on recharge dès qu'une nouvelle version est prête
 // (jamais pendant une navigation ou un enregistrement : on attend la fin)
@@ -6117,7 +6136,7 @@ function scrubAt(clientX) {
   if (!scrubMk) { const el = document.createElement('div'); el.className = 'scrub-dot'; scrubMk = new maplibregl.Marker({ element: el }); }
   scrubMk.setLngLat([q.lon, q.lat]).addTo(map);
   // point hors de l'écran : la carte le suit
-  const pt = map.project([q.lon, q.lat]), mc = map.getContainer(), sheetTop = $('sheet').getBoundingClientRect().top;
+  const pt = map.project([q.lon, q.lat]), mc = map.getContainer(), sheetTop = isSide() ? mc.clientHeight : $('sheet').getBoundingClientRect().top;
   if (pt.x < 20 || pt.y < 70 || pt.x > mc.clientWidth - 20 || pt.y > sheetTop - 20) map.easeTo({ center: [q.lon, q.lat], duration: 300 });
   clearTimeout(scrubT); drawProfile();
 }

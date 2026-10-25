@@ -709,3 +709,21 @@ body.wx-on #navProfile { height: 150px; }
 #btnSaveTr svg { width: 16px; height: 16px; margin: 0; }
 .trackname { font-size: 15px; cursor: pointer; }
 .trackname.full { white-space: normal; overflow: visible; }
+
+/* ---------- Grand écran (PC, tablette à l'horizontale) : panneau à gauche, carte à droite ---------- */
+/* La classe « side » est posée par app.js (fenêtre ≥ 1000 × 560 px, en aperçu seulement). */
+body.side { --side-w: 400px; --ctrl-bottom: 8px; }
+body.side #map { left: var(--side-w); }
+body.side .hud { display: none; }
+body.side .sheet { top: 0; right: auto; width: var(--side-w); max-height: none; border-radius: 0; border-top: 0;
+  border-right: 1px solid var(--line); box-shadow: 4px 0 18px rgba(0,0,0,.10); padding-top: calc(var(--sa-t) + 14px); transform: none !important; }
+body.side .grip { display: none; }
+body.side .fab-col { top: auto !important; bottom: 24px !important; opacity: 1 !important; pointer-events: auto !important; }
+body.side .loop-bar { left: calc(var(--side-w) + 12px); right: auto; width: 460px; max-width: calc(100% - var(--side-w) - 90px); bottom: 12px; }
+body.side .toast { left: calc(50% + var(--side-w) / 2); }
+body.side .lib { right: auto; width: var(--side-w); background: none; align-items: stretch; }
+body.side .lib-panel, body.side .lib-panel.tall { max-height: none; height: 100%; border-radius: 0; border-top: 0;
+  border-right: 1px solid var(--line); box-shadow: 4px 0 18px rgba(0,0,0,.18); padding-top: calc(var(--sa-t) + 16px); transform: none !important; }
+body.side .lib-panel::before { display: none; }
+body.side #profile { height: 170px; }
+body.side.wx-on #profile { height: 200px; }
