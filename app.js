@@ -5,7 +5,7 @@
 
 // La page et le code doivent être de la même version. Sinon (page gardée en cache
 // par le téléphone ou par GitHub), on recharge une page fraîche, au plus 3 fois.
-const APP_VERSION = 236;
+const APP_VERSION = 237;
 try {
   const meta = document.querySelector('meta[name="balise-version"]');
   const pageV = meta ? +meta.content : 0;
@@ -1186,6 +1186,11 @@ function showSoDetail(it) {
   requestAnimationFrame(() => { previewRedraw && previewRedraw(); if (hasE) drawRecProfile($('sdProfile'), pts); });
   $('sdFollow').onclick = () => { closeSorties(); loadText(it.text, false); store.set('gpx', it.text.length < 4.5e6 ? it.text : ''); setTimeout(() => startNav(), 300); };
   $('sdExport').onclick = () => shareGPX(it.text, it.title || it.name);
+  // partager le parcours de la sortie (lien, QR code, montre) : le tracé seul, sans les heures
+  $('sdShare').onclick = () => {
+    if (pts.length < 2) { toast('Sortie trop courte pour être partagée.', 3000); return; }
+    openSend({ name: recTitle(it), pts: pts.map(p => ({ lat: p.lat, lon: p.lon, ele: p.ele })), sub: move ? tr('fait en ') + fmtDur(move / 1000) : '' });
+  };
   stvButton(it);
   $('sdRename').onclick = async () => {
     const t = prompt(tr('Nom de la sortie'), it.title || '');
@@ -4793,7 +4798,7 @@ function wtNotesUI() {
 function wtSay(m) { $('wtMsg').textContent = m || ''; $('wtMsg').hidden = !m; }
 function openSend(src) {
   wtSrc = src; const p = makePath(src.pts, '');
-  $('wtName').textContent = `${src.name || 'Parcours'} · ${fmtDist(p.total)}${p.hasEle ? ' · D+ ' + fmtM(p.totalUp) : ''}`; wtSay('');
+  $('wtName').textContent = `${src.name || 'Parcours'} · ${fmtDist(p.total)}${p.hasEle ? ' · D+ ' + fmtM(p.totalUp) : ''}${src.sub ? ' · ' + src.sub : ''}`; wtSay('');
   $('wtQrBox').hidden = true; wtNotesUI();
   $('watch').hidden = false;
 }
@@ -4929,7 +4934,7 @@ function copyText(t) {
 $('wtLink').onclick = async () => {
   if (!wtSrc) return;
   const p = makePath(wtSrc.pts, ''), url = await routeLink(wtSrc.name, wtSrc.pts, wtNotes());
-  const info = `${wtSrc.name || 'Parcours'} · ${fmtDist(p.total)}${p.hasEle ? ' · D+ ' + fmtM(p.totalUp) : ''}`;
+  const info = `${wtSrc.name || 'Parcours'} · ${fmtDist(p.total)}${p.hasEle ? ' · D+ ' + fmtM(p.totalUp) : ''}${wtSrc.sub ? ' · ' + wtSrc.sub : ''}`;
   const text = tr(`${info} — ouvre-le dans Pisteo :`) + ' ' + url;
   if (AND && AND.shareText) { try { AND.shareText(text, info); return; } catch {} }
   if (!AND && navigator.share) { try { await navigator.share({ title: info, text: tr(`${info} — ouvre-le dans Pisteo :`), url }); return; } catch (e) { if (e.name === 'AbortError') return; } }
