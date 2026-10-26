@@ -5,7 +5,7 @@
 
 // La page et le code doivent être de la même version. Sinon (page gardée en cache
 // par le téléphone ou par GitHub), on recharge une page fraîche, au plus 3 fois.
-const APP_VERSION = 234;
+const APP_VERSION = 235;
 try {
   const meta = document.querySelector('meta[name="balise-version"]');
   const pageV = meta ? +meta.content : 0;
@@ -692,6 +692,112 @@ $('ndOk').onclick = () => ndClose(true);
 $('ndClose').onclick = () => ndClose(false);
 $('noteDlg').onclick = e => { if (e.target === $('noteDlg')) ndClose(false); };
 $('ndText').addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); ndClose(true); } });
+// ---------- signaler un problème de terrain à OpenStreetMap (note publique, sans compte) ----------
+// Des bénévoles d'OpenStreetMap lisent ces notes et corrigent la carte, qui sert à Pisteo et à beaucoup d'autres applis.
+// Sans réseau, le signalement attend et part dès que le téléphone en retrouve.
+const OSM_API = 'https://api.openstreetmap.org/api/0.6';
+const REP_KINDS = {
+  ferme: '🚧 Chemin fermé ou impraticable', obstacle: '🌲 Obstacle (arbre tombé, éboulement…)', balisage: '🪧 Balisage manquant ou effacé',
+  absent: '➕ Chemin absent de la carte', autre: '✏️ Autre problème'
+};
+const REP_DAY_MAX = 5;
+let repPt = null, repKind = 'ferme', repAfter = null;
+function openUrl(u) {
+  if (AND && AND.openExternal) { try { AND.openExternal(u, true); } catch { try { AND.openExternal(u); } catch {} } return; }
+  window.open(u, '_blank', 'noopener');
+}
+function openReport(pt, after) {
+  if (!pt) { toast('Position GPS introuvable. Va à découvert et réessaie.', 4000); return; }
+  repPt = { lat: pt.lat, lon: pt.lon }; repAfter = after || null; repKind = 'ferme'; $('repText').value = ''; repKindsUI(); $('repMsg').hidden = true;
+  $('repDlg').hidden = false;
+}
+function repKindsUI() {
+  const box = $('repKinds'); box.innerHTML = '';
+  for (const k in REP_KINDS) {
+    const b = document.createElement('button'); b.className = 'chip' + (k === repKind ? '' : ' nd-off'); b.textContent = tr(REP_KINDS[k]);
+    b.onclick = () => { repKind = k; repKindsUI(); }; box.appendChild(b);
+  }
+  $('repText').placeholder = tr(repKind === 'absent' || repKind === 'autre' ? 'Décris le problème (obligatoire)' : 'Précisions (facultatif) : depuis quand, sur quelle longueur…');
+}
+function repClose() { $('repDlg').hidden = true; const a = repAfter; repAfter = null; if (a) a(); }
+const repQueue = () => { try { return JSON.parse(store.get('osmQueue') || '[]'); } catch { return []; } };
+const repSent = () => { try { return JSON.parse(store.get('osmSent') || '[]').filter(t => Date.now() - t < 864e5); } catch { return []; } };
+$('repOk').onclick = async () => {
+  if (!repPt) return;
+  const det = $('repText').value.trim().slice(0, 500);
+  const say = m => { $('repMsg').textContent = tr(m); $('repMsg').hidden = false; };
+  if ((repKind === 'absent' || repKind === 'autre') && det.length < 8) { say('Décris le problème en quelques mots : les bénévoles doivent comprendre quoi corriger.'); return; }
+  if (repSent().length + repQueue().length >= REP_DAY_MAX) { say(`${REP_DAY_MAX} signalements par jour au plus, pour éviter les envois en double.`); return; }
+  const label = REP_KINDS[repKind].replace(/^\S+\s/, ''), text = `${tr(label)}${det ? ' : ' + det : ''}\n\n#Pisteo`;
+  const q = repQueue(); q.push({ lat: +repPt.lat.toFixed(6), lon: +repPt.lon.toFixed(6), text, t: Date.now() }); store.set('osmQueue', JSON.stringify(q));
+  repClose();
+  const n = await repFlush();
+  toast(n ? 'Merci ! Signalement envoyé à OpenStreetMap' : 'Pas de réseau : le signalement partira dès que possible', 4000);
+};
+$('repCancel').onclick = repClose;
+$('repDlg').onclick = e => { if (e.target === $('repDlg')) repClose(); };
+let repBusy = false;
+async function repFlush() {
+  if (repBusy || navigator.onLine === false) return 0;
+  repBusy = true; let sent = 0;
+  try {
+    for (const it of repQueue()) {
+      let r;
+      try { r = await fetch(`${OSM_API}/notes.json`, { method: 'POST', body: new URLSearchParams({ lat: it.lat, lon: it.lon, text: it.text }) }); }
+      catch { break; } // pas de réseau : on réessaiera
+      if (r.status === 429 || r.status >= 500) break; // serveur occupé : plus tard
+      store.set('osmQueue', JSON.stringify(repQueue().filter(x => x.t !== it.t)));
+      if (r.ok) {
+        sent++; store.set('osmSent', JSON.stringify(repSent().concat(Date.now())));
+        try { const f = await r.json(); if (f && f.properties) { osmNotes.push(osmNote(f)); osmDraw(); } } catch {}
+      }
+    }
+  } finally { repBusy = false; }
+  return sent;
+}
+window.addEventListener('online', () => setTimeout(repFlush, 3000));
+setTimeout(repFlush, 8000);
+$('ndReport').onclick = () => { const pt = ndPt, after = $('noteDlg').dataset.after; $('noteDlg').hidden = true; ndPt = null;
+  openReport(pt, after === 'send' ? () => { if (track) openSend({ name: track.name, pts: track.pts, cur: true }); } : null); };
+$('npReport').onclick = () => openReport(me);
+
+// notes OpenStreetMap encore ouvertes le long de la trace : un problème déjà signalé par d'autres
+let osmNotes = [], osmMks = [], osmFor = null;
+const osmNote = f => {
+  const c = (f.properties.comments || [])[0] || {};
+  return { id: f.properties.id, lat: f.geometry.coordinates[1], lon: f.geometry.coordinates[0], text: String(c.text || '').replace(/\s+/g, ' ').trim(), date: c.date || f.properties.date_created || '' };
+};
+function osmDraw() {
+  osmMks.forEach(m => m.remove()); osmMks = [];
+  if (!track) return;
+  for (const n of osmNotes) {
+    const e = document.createElement('button'); e.className = 'mk-osm'; e.textContent = '!';
+    e.setAttribute('aria-label', tr('Problème signalé sur OpenStreetMap'));
+    e.onclick = ev => {
+      ev.stopPropagation();
+      const d = Date.parse(n.date.replace(' UTC', 'Z').replace(' ', 'T'));
+      toast(`${tr('Signalé sur OpenStreetMap')}${isNaN(d) ? '' : ' (' + fmtDate(d) + ')'} : ${n.text.slice(0, 140) || '…'}`, 7000, { label: 'Voir', run: () => openUrl(`https://www.openstreetmap.org/note/${n.id}`) });
+    };
+    osmMks.push(new maplibregl.Marker({ element: e }).setLngLat([n.lon, n.lat]).addTo(map));
+  }
+}
+async function osmLoad() {
+  const t = track; osmNotes = []; osmDraw();
+  if (!t || navigator.onLine === false) return;
+  let w = 180, s = 90, e = -180, n = -90;
+  for (const p of t.pts) { if (p.lon < w) w = p.lon; if (p.lon > e) e = p.lon; if (p.lat < s) s = p.lat; if (p.lat > n) n = p.lat; }
+  const pad = 0.003; w -= pad; e += pad; s -= pad; n += pad;
+  if ((e - w) * (n - s) > 4) return; // très grand parcours : on ne charge pas tout
+  osmFor = t;
+  try {
+    const r = await fetch(`${OSM_API}/notes.json?bbox=${[w, s, e, n].map(v => v.toFixed(4)).join(',')}&limit=300&closed=0`);
+    if (!r.ok || track !== t) return;
+    const j = await r.json();
+    osmNotes = (j.features || []).map(osmNote).filter(x => { const pr = project(t, x, true); return pr && pr.dist < 80; });
+    if (track === t) osmDraw();
+  } catch { /* pas de réseau ou service indisponible : rien à afficher */ }
+}
+
 
 function boundsOf(ptsList) {
   const b = new maplibregl.LngLatBounds();
@@ -724,7 +830,7 @@ async function showTrack(t, fit = true) {
   await ready;
   if (track !== mine) return; // une autre trace a été ouverte entre-temps
   setSrc('track', lineFeature(track.pts)); setDone(doneInfo().along / (track.total || 1), true); litUI();
-  startMk.setLngLat([t.pts[0].lon, t.pts[0].lat]).addTo(map); drawNotes();
+  startMk.setLngLat([t.pts[0].lon, t.pts[0].lat]).addTo(map); drawNotes(); osmLoad();
   const last = t.pts[t.pts.length - 1];
   endMk.setLngLat([last.lon, last.lat]).addTo(map);
   if (fit) { map.setPadding({ top: 0, bottom: 0, left: 0, right: 0 }); fitTo([track.pts]); }
@@ -744,7 +850,7 @@ function closeTrack(quiet) {
   // parcours balisés : on quitte leur affichage avec la trace (sauf si leur panneau est ouvert)
   if (rtMapOn && $('routes').hidden) rtHideMap();
   setSrc('track', EMPTY); setSrc('turn', EMPTY); litUI();
-  startMk.remove(); endMk.remove(); drawNotes(); trackDescUI();
+  startMk.remove(); endMk.remove(); drawNotes(); trackDescUI(); osmNotes = []; osmDraw();
   store.set('gpx', '');
   $('trackName').textContent = 'Aucune trace chargée'; $('btnClose').hidden = true; $('btnReverse').hidden = true; $('btnWatch').hidden = true; $('btnSaveTr').hidden = true; $('btnNew').hidden = true; $('btnNew').parentElement.classList.remove('has-new');
   drawProfile(); updateStats(); updateOfflineInfo();

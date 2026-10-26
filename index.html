@@ -9,13 +9,13 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<meta name="balise-version" content="234">
+<meta name="balise-version" content="235">
 <title>Pisteo</title>
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" href="icon.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
 <link rel="stylesheet" href="vendor/maplibre-gl.css">
-<link rel="stylesheet" href="app.css?v=234">
+<link rel="stylesheet" href="app.css?v=235">
 </head>
 <body>
 <div id="map" aria-label="Carte"></div>
@@ -97,6 +97,7 @@
       <span id="npProfInfo"></span>
       <button id="npWx" class="linkbtn">Météo</button>
       <button id="npProfOnly" class="linkbtn">Profil seul</button>
+      <button id="npReport" class="linkbtn">Signaler</button>
     </div>
     <div class="np-acts">
       <button id="npHome" class="btn np-home" hidden><svg viewBox="0 0 24 24"><path d="M9 14 4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11"/></svg><span>Ramène-moi au départ</span><small id="npHomeD"></small></button>
@@ -406,6 +407,21 @@
     <div id="ndKinds" class="nd-kinds"></div>
     <input id="ndText" class="search" type="text" maxlength="120" placeholder="Un mot pour les autres (facultatif)" autocomplete="off" enterkeyhint="done">
     <button id="ndOk" class="btn go">Ajouter le point</button>
+    <button id="ndReport" class="linkbtn nd-rep">Problème sur le chemin ? Le signaler à OpenStreetMap</button>
+  </div>
+</div>
+
+<div id="repDlg" class="lib" hidden>
+  <div class="lib-panel" role="dialog" aria-label="Signaler un problème">
+    <div class="lib-head">
+      <b>Signaler un problème</b>
+      <button id="repCancel" class="closebtn" aria-label="Fermer"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></svg>Fermer</button>
+    </div>
+    <div id="repKinds" class="nd-kinds"></div>
+    <textarea id="repText" class="rep-text" rows="3" maxlength="500"></textarea>
+    <p class="note">Ton signalement devient une note publique sur OpenStreetMap, à cet endroit, sans ton nom. Des bénévoles s'en servent pour corriger la carte. N'y mets pas d'informations personnelles.</p>
+    <p id="repMsg" class="fin-msg" role="status" hidden></p>
+    <button id="repOk" class="btn go">Envoyer à OpenStreetMap</button>
   </div>
 </div>
 
@@ -788,8 +804,8 @@
 
 <script src="vendor/maplibre-gl.js"></script>
 <script src="vendor/qrcode.js"></script>
-<script src="i18n/en.js?v=234"></script>
-<script src="i18n/es.js?v=234"></script>
-<script src="app.js?v=234"></script>
+<script src="i18n/en.js?v=235"></script>
+<script src="i18n/es.js?v=235"></script>
+<script src="app.js?v=235"></script>
 </body>
 </html>
