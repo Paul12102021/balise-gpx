@@ -88,6 +88,7 @@ footer { margin-top: 40px; color: var(--muted); font-size: 14px; }
     <tr><td>Cloudflare</td><td>Hébergement de l'appli (pisteo.app)</td><td>Les fichiers demandés</td></tr>
     <tr><td>Open-Meteo</td><td>Météo le long du parcours, seulement si tu touches « Météo »</td><td>Une dizaine de points du parcours, sans heure ni identifiant</td></tr>
     <tr><td>Google Drive</td><td>Seulement si tu actives la sauvegarde Drive : enregistrer et restaurer ta sauvegarde</td><td>Le fichier de sauvegarde (sorties, traces, réglages, liste des cartes), rangé dans un dossier caché réservé à Pisteo sur <b>ton</b> Drive. Pisteo n'a accès qu'à ce dossier, pas à tes autres fichiers (autorisation « drive.appdata »). Aucune copie ne passe par l'éditeur.</td></tr>
+    <tr><td>Catalogue Pisteo (relais Cloudflare, api.pisteo.app)</td><td>Liste des parcours recommandés ; publication d'un parcours, seulement si tu le proposes ; signalement d'un parcours</td><td>Pour une proposition : le tracé, son nom, sa description et ses points notés, qui deviennent publics sans ton nom. Ton adresse IP n'est gardée que sous forme chiffrée, pour limiter le nombre de propositions et de signalements</td></tr>
     <tr><td>Strava, via un relais Cloudflare</td><td>Seulement si tu connectes ton compte Strava : connexion et envoi des sorties</td><td>Le fichier GPX de la sortie envoyée et ton jeton de connexion. Le relais transmet la demande à Strava sans rien enregistrer.</td></tr>
   </tbody>
 </table>

@@ -635,6 +635,11 @@ body.choosing #sheet, body.choosing .fab-col { display: none !important; }
 .rep-q .chip.small { min-height: 32px; padding: 0 11px; font-size: 12.5px; }
 .rep-prev-box summary { cursor: pointer; font-size: 13px; color: var(--muted); }
 .rep-prev { margin: 6px 0 0; padding: 8px 10px; border-radius: 8px; background: var(--field); color: var(--ink); font: 13px/1.4 var(--font); white-space: pre-wrap; }
+.cp-check { display: flex; gap: 8px; align-items: center; font-size: 14px; }
+.cp-check input { width: 20px; height: 20px; }
+.cp-ok { color: var(--ok); }
+.rt-desc { margin: 4px 0 6px; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+.rt-rep { display: block; margin: 6px auto 0; font-size: 12.5px; }
 .nd-rep { align-self: center; font-size: 13.5px; }
 .mk-note span { display: inline-block; transform: rotate(45deg); }
 

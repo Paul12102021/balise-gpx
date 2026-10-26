@@ -5,7 +5,7 @@
 
 // La page et le code doivent être de la même version. Sinon (page gardée en cache
 // par le téléphone ou par GitHub), on recharge une page fraîche, au plus 3 fois.
-const APP_VERSION = 238;
+const APP_VERSION = 239;
 try {
   const meta = document.querySelector('meta[name="balise-version"]');
   const pageV = meta ? +meta.content : 0;
@@ -3174,6 +3174,7 @@ const RT_CAT = {
   vr:  { rank: 2, badge: 'Véloroute', label: 'Véloroute régionale' },
   vl:  { rank: 3, badge: 'Boucle vélo', label: 'Circuit vélo local' },
   vtt: { rank: 4, badge: 'VTT', label: 'Circuit VTT' },
+  cp:  { rank: -1, badge: 'Pisteo', label: 'Parcours recommandé' },
 };
 function rtCat(t) {
   const n = t.network || '';
@@ -3535,7 +3536,43 @@ function closeRoutes(keepMap) {
   $('routes').hidden = true; rtQClear(); document.body.classList.remove('rtmode');
   if (!keepMap && rtMapOn) rtHideMap();
 }
-function rtListReady() { rtRender(); rtDraw(); rtBarText(); rtEnrich(); }
+function rtListReady() { rtRender(); rtDraw(); rtBarText(); rtEnrich(); rtAddCat(rt.list, rt.at); }
+// ---------- Catalogue « Parcours Pisteo » : parcours proposés par les utilisateurs, vérifiés par le relais ----------
+const CAT_API = 'https://api.pisteo.app/catalogue';
+let catP = null, catOn = false; // catOn : le catalogue a répondu (service activé sur le relais)
+function catLoad() {
+  if (!catP) catP = (async () => {
+    let c = null; try { c = JSON.parse(store.get('catCache') || 'null'); } catch {}
+    if (c && c.on) catOn = true;
+    if (c && Date.now() - c.t < 6 * 36e5) return c.items;
+    try {
+      const r = await fetch(CAT_API, { cache: 'no-cache' }); if (!r.ok) throw new Error('HTTP ' + r.status);
+      const j = await r.json(); const items = Array.isArray(j.items) ? j.items : [];
+      catOn = true; store.set('catCache', JSON.stringify({ t: Date.now(), items, on: 1 })); return items;
+    } catch { return c ? c.items : []; }
+  })();
+  return catP;
+}
+// les parcours du catalogue proches du point, ajoutés en tête de la liste des parcours balisés
+async function rtAddCat(list, at) {
+  if (!list || !at || list.catDone) return;
+  list.catDone = true;
+  const items = await catLoad(), R = rtRadius(), sport = rtBike() ? 'bike' : 'foot', add = [];
+  for (const c of items) {
+    if (c.sport !== sport || !c.bb || !c.h) continue;
+    const box = { lat: clamp(at.lat, c.bb[0], c.bb[2]), lon: clamp(at.lon, c.bb[1], c.bb[3]) };
+    if (hav(at, box) > R) continue; // emprise trop loin : inutile de décoder le tracé
+    let r = null; try { r = await readRouteLink(c.h); } catch {}
+    if (!r) continue;
+    let near = Infinity; for (const p of r.pts) { const d = hav(at, p); if (d < near) near = d; }
+    if (near > R) continue;
+    add.push({ id: 'c:' + c.id, cid: c.id, tags: {}, cat: 'cp', name: c.name, dist: c.dist, near: near < 300 ? 0 : near, big: false, at, src: 'c', h: c.h,
+      bounds: { minlat: c.bb[0], minlon: c.bb[1], maxlat: c.bb[2], maxlon: c.bb[3] }, notes: { desc: r.desc || c.desc || '', wpts: r.wpts || [] }, cdesc: c.desc || r.desc || '' });
+  }
+  if (!add.length || rt.list !== list) return;
+  list.unshift(...add.sort((a, b) => a.near - b.near));
+  rtRender(); rtDraw(); rtBarText(); rtEnrich();
+}
 async function rtSearch() {
   if (rt.busy) { rt.again = true; return; }
   rt.tapped = false;
@@ -3592,7 +3629,7 @@ function rtRender() {
     order.push(li);
     const c = RT_CAT[it.cat], g = rt.geo.get(k);
     if (b.querySelector('b').textContent !== it.name) b.querySelector('b').textContent = it.name;
-    const bits = [c.badge === 'Véloroute' || c.badge === 'Boucle vélo' ? c.label : `${c.badge} · ${c.label}`];
+    const bits = [c.badge === 'Véloroute' || c.badge === 'Boucle vélo' ? c.label : it.cat === 'cp' ? `⭐ ${c.label}` : `${c.badge} · ${c.label}`];
     if (g) { bits.push(fmtDist(g.len) + (g.partial ? ' (portion)' : '')); if (g.hasEle) bits.push('D+ ' + fmtM(g.up)); }
     else if (it.dist) bits.push(fmtDist(it.dist));
     if (!g || !g.partial) bits.push(it.big ? 'portion autour de toi' : it.near ? 'à ' + fmtDist(it.near) : 'passe tout près');
@@ -3675,6 +3712,12 @@ function rtGeom(it) {
   return p;
 }
 async function rtFetchGeo(it, key, at) {
+  if (it.src === 'c') {
+    const r = await readRouteLink(it.h); if (!r) throw new Error('pas de tracé');
+    const p = makePath(r.pts, ''), g = { key, pts: r.pts, len: p.total, partial: false, up: p.hasEle ? p.totalUp : null, hasEle: p.hasEle };
+    if (g.hasEle) g.elevP = Promise.resolve(g);
+    return g;
+  }
   if (it.src === 'd') {
     const segs = await rtdSegments(it).catch(() => null);
     const ch = segs && segs.length && rtChain(segs);
@@ -3797,7 +3840,7 @@ function rtProgress() {
 }
 
 // ---------- Parcours dessinés par Pisteo (instantanés au toucher, filtrables) ----------
-const RT_COL = { gr: '#d7263d', grp: '#e8890c', pr: '#e4b800', ev: '#1f5fd6', vn: '#2f7de1', vr: '#7b3fe4', vl: '#a46be8', vtt: '#7a5230' };
+const RT_COL = { gr: '#d7263d', grp: '#e8890c', pr: '#e4b800', ev: '#1f5fd6', vn: '#2f7de1', vr: '#7b3fe4', vl: '#a46be8', vtt: '#7a5230', cp: '#0f9d76' };
 async function rtDraw() {
   await ready;
   const feats = [];
@@ -3874,7 +3917,7 @@ async function rtOpen(it) {
 
 function rtShow(it, pts, partial, update) {
   const name = it.name + (partial ? ' (portion)' : '');
-  const text = loopGPX(pts, name);
+  const text = loopGPX(pts, name, it.notes);
   if (update) { try { showTrack(parseGPX(text)); } catch { return; } } else loadText(text, false);
   store.set('gpx', text);
   const p = makePath(pts, ''), est = loopEst(p);
@@ -4017,6 +4060,7 @@ async function rtSelect(it) {
   $('rtpDot').style.background = rtColor(it); $('rtpTitle').textContent = it.name;
   $('rtpSub').textContent = 'Chargement du tracé…'; rtMiniProfile($('rtpProf'), null);
   $('rtpGo').disabled = $('rtpKeep').disabled = $('rtpView').disabled = true; $('rtpKeep').textContent = 'Garder';
+  $('rtpDesc').textContent = it.cdesc || ''; $('rtpDesc').hidden = !it.cdesc; $('rtpReport').hidden = it.src !== 'c';
   rtCardMode('prev');
   let g;
   try { g = await rtGeom(it); }
@@ -4059,7 +4103,7 @@ $('rtpClose').onclick = rtUnselect;
 $('rtPickClose').onclick = rtUnselect;
 $('rtpGo').onclick = () => {
   if (!rt.sel || !rt.selPts) return;
-  const it = rt.sel, name = it.name + (rt.selPartial ? ' (portion)' : ''), text = loopGPX(rt.selPts, name);
+  const it = rt.sel, name = it.name + (rt.selPartial ? ' (portion)' : ''), text = loopGPX(rt.selPts, name, it.notes);
   rt.res = { text, name };
   rtUnselect(); closeRoutes();
   loadText(text, false); store.set('gpx', text);
@@ -4089,12 +4133,22 @@ $('rtpView').onclick = () => {
 })();
 $('rtpKeep').onclick = async () => {
   if (!rt.sel || !rt.selPts) return;
-  const name = rt.sel.name + (rt.selPartial ? ' (portion)' : ''), text = loopGPX(rt.selPts, name);
+  const name = rt.sel.name + (rt.selPartial ? ' (portion)' : ''), text = loopGPX(rt.selPts, name, rt.sel.notes);
   await saveRecent(makePath(rt.selPts, name), text);
   $('rtpKeep').textContent = 'Gardé ✓'; $('rtpKeep').disabled = true;
   toast('Parcours gardé dans « Mes traces »', 3000);
 };
 $('rtToggle').onclick = () => rtSetCollapsed(!rtSheet.collapsed);
+$('rtpReport').onclick = async () => {
+  const it = rt.sel; if (!it || it.src !== 'c') return;
+  const why = prompt(tr('Pourquoi signaler ce parcours ? (chemin privé ou interdit, dangereux, texte inapproprié…)'));
+  if (why == null) return;
+  try {
+    const r = await fetch(CAT_API + '/report', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: it.cid, why: why.slice(0, 200) }) });
+    const j = await r.json().catch(() => ({}));
+    toast(j.message || 'Merci, le signalement est pris en compte.', 3500);
+  } catch { toast('Pas de réseau : réessaie plus tard.', 3500); }
+};
 
 // ---------- Nord en haut : la boussole apparaît dès que la carte est tournée ou inclinée ----------
 function northUI() {
@@ -4804,11 +4858,46 @@ function openSend(src) {
   wtSrc = src; const p = makePath(src.pts, '');
   $('wtName').textContent = `${src.name || 'Parcours'} · ${fmtDist(p.total)}${p.hasEle ? ' · D+ ' + fmtM(p.totalUp) : ''}${src.sub ? ' · ' + src.sub : ''}`; wtSay('');
   $('wtQrBox').hidden = true; wtNotesUI();
+  $('wtPropose').hidden = !catOn; if (!catOn) catLoad().then(() => { $('wtPropose').hidden = !catOn; });
   $('watch').hidden = false;
 }
 $('wtDesc').addEventListener('change', () => wtNotes());
 $('wtAddNote').onclick = () => { wtNotes(); $('watch').hidden = true; addNote('send'); };
 // sortie : on l'ouvre sur la carte comme une trace, liée à la sortie pour que les notes y soient enregistrées
+$('wtPropose').onclick = () => {
+  if (!wtSrc) return;
+  const n = wtNotes(), nm = wtSrc.name || '';
+  $('cpName').value = /^(sortie du|trace sans nom|parcours partagé|boucle (à pied|à vélo) de|vers )/i.test(nm) ? '' : nm.replace(/ \(sens inverse\)$/, '').slice(0, 60);
+  $('cpDesc').value = n.desc || ''; cpSport = profile === 'trekking' ? 'bike' : 'foot'; cpSportUI();
+  $('cpOk').checked = false; $('cpMsg').hidden = true; $('cpSend').disabled = false;
+  $('watch').hidden = true; $('propose').hidden = false;
+};
+let cpSport = 'foot';
+function cpSportUI() { $('cpFoot').classList.toggle('on', cpSport === 'foot'); $('cpBike').classList.toggle('on', cpSport === 'bike'); }
+$('cpFoot').onclick = () => { cpSport = 'foot'; cpSportUI(); };
+$('cpBike').onclick = () => { cpSport = 'bike'; cpSportUI(); };
+const cpClose = () => { $('propose').hidden = true; if (wtSrc) $('watch').hidden = false; };
+$('cpClose').onclick = cpClose;
+$('propose').onclick = e => { if (e.target === $('propose')) cpClose(); };
+$('cpSend').onclick = async () => {
+  const say = (m, ok) => { $('cpMsg').textContent = tr(m); $('cpMsg').className = ok ? 'note cp-ok' : 'fin-msg'; $('cpMsg').hidden = false; };
+  const name = $('cpName').value.trim(), desc = $('cpDesc').value.trim();
+  if (name.length < 4) { say('Donne un nom au parcours (lieu, sommet, lac…).'); return; }
+  if (desc.length < 30) { say('Ajoute une description d\'au moins 30 caractères : difficulté, départ, ce qu\'on y voit…'); return; }
+  if (!$('cpOk').checked) { say('Coche la case pour confirmer que tu as fait ce parcours.'); return; }
+  // la description sert aussi au parcours ouvert (et au lien partagé)
+  if (wtSrc.cur && track) { $('wtDesc').value = desc.slice(0, NOTE_DESC_MAX); track.desc = $('wtDesc').value; commitNotes(); }
+  const n = wtNotes(), notes = { desc, wpts: n.wpts };
+  const url = await routeLink(name, wtSrc.pts, notes), h = url.slice(url.indexOf('#'));
+  $('cpSend').disabled = true;
+  try {
+    const r = await fetch(CAT_API + '/propose', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ h, name, sport: cpSport }) });
+    const j = await r.json().catch(() => ({}));
+    if (j.ok) { store.set('catCache', ''); catP = null; rtCache.clear(); $('propose').hidden = true; toast(j.message || 'Parcours publié dans le catalogue. Merci !', 4500); return; }
+    say(j.message || `Envoi impossible (${r.status}).`);
+  } catch { say('Pas de réseau : réessaie quand tu auras une connexion.'); }
+  $('cpSend').disabled = false;
+};
 $('wtRecEdit').onclick = () => {
   const it = wtSrc && wtSrc.rec; if (!it) return;
   if (nav) { toast('Quitte d\'abord la navigation.', 3000); return; }

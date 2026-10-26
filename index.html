@@ -9,13 +9,13 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<meta name="balise-version" content="238">
+<meta name="balise-version" content="239">
 <title>Pisteo</title>
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" href="icon.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
 <link rel="stylesheet" href="vendor/maplibre-gl.css">
-<link rel="stylesheet" href="app.css?v=238">
+<link rel="stylesheet" href="app.css?v=239">
 </head>
 <body>
 <div id="map" aria-label="Carte"></div>
@@ -382,6 +382,7 @@
     <button id="wtLink" class="btn go">Partager un lien</button>
     <p class="note wt-sub">Ton ami touche le lien et le parcours s'ouvre dans Pisteo, même sans l'appli installée.</p>
     <button id="wtQr" class="btn">Afficher un QR code</button>
+    <button id="wtPropose" class="btn" hidden>⭐ Proposer au catalogue Pisteo</button>
     <div id="wtQrBox" class="wt-qr" hidden>
       <canvas id="wtQrCv" aria-label="QR code du parcours"></canvas>
       <p id="wtQrNote" class="note"></p>
@@ -397,6 +398,23 @@
       <p><b>Suunto, Coros</b> : enregistre le fichier, puis dans l'appli de la montre : Carte ou Itinéraires › + › Importer un fichier GPX.</p>
       <p><b>Autres</b> : « Ouvrir dans l'appli de ma montre » puis choisis l'appli de ton appareil ; sinon enregistre le fichier et importe-le depuis son appli.</p>
     </details>
+  </div>
+</div>
+
+<div id="propose" class="lib" hidden>
+  <div class="lib-panel" role="dialog" aria-label="Proposer au catalogue">
+    <div class="lib-head">
+      <b>Proposer au catalogue</b>
+      <button id="cpClose" class="closebtn" aria-label="Fermer"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></svg>Fermer</button>
+    </div>
+    <p class="note">Ton parcours apparaîtra pour tous les utilisateurs de Pisteo, avec les parcours balisés, dès qu'il aura passé les vérifications automatiques.</p>
+    <div class="seg"><button id="cpFoot">À pied</button><button id="cpBike">À vélo</button></div>
+    <input id="cpName" class="search" type="text" maxlength="60" placeholder="Nom du parcours (ex. : Tour du lac de Vassivière)" autocomplete="off">
+    <textarea id="cpDesc" class="rep-text" rows="3" maxlength="500" placeholder="Description : difficulté, départ et parking, ce qu'on y voit, la meilleure saison…"></textarea>
+    <label class="cp-check"><input id="cpOk" type="checkbox"> J'ai fait ce parcours et il est praticable</label>
+    <p class="note">Le tracé, son nom, sa description et ses points notés seront publics, sans ton nom. Un parcours signalé plusieurs fois par d'autres est retiré.</p>
+    <p id="cpMsg" class="fin-msg" role="status" hidden></p>
+    <button id="cpSend" class="btn go">Publier dans le catalogue</button>
   </div>
 </div>
 
@@ -624,8 +642,10 @@
       </div>
       <div id="rtPrev" class="rt-prev" hidden>
         <div class="rt-card-h"><span id="rtpDot" class="rt-dot"></span><div class="rt-prev-t"><b id="rtpTitle"></b><span id="rtpSub"></span></div><button id="rtpClose" class="rt-x" aria-label="Fermer l'aperçu">✕</button></div>
+        <p id="rtpDesc" class="note rt-desc" hidden></p>
         <canvas id="rtpProf" class="rt-prof"></canvas>
         <div class="rt-prev-acts"><button id="rtpView" class="btn small">Aperçu</button><button id="rtpKeep" class="btn small">Garder</button><button id="rtpGo" class="btn small go">Naviguer</button></div>
+        <button id="rtpReport" class="linkbtn rt-rep" hidden>Signaler ce parcours</button>
       </div>
     </div>
     <button id="rtShowMap" class="btn go">Voir la carte ↓</button>
@@ -808,8 +828,8 @@
 
 <script src="vendor/maplibre-gl.js"></script>
 <script src="vendor/qrcode.js"></script>
-<script src="i18n/en.js?v=238"></script>
-<script src="i18n/es.js?v=238"></script>
-<script src="app.js?v=238"></script>
+<script src="i18n/en.js?v=239"></script>
+<script src="i18n/es.js?v=239"></script>
+<script src="app.js?v=239"></script>
 </body>
 </html>
