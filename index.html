@@ -9,13 +9,13 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<meta name="balise-version" content="240">
+<meta name="balise-version" content="241">
 <title>Pisteo</title>
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" href="icon.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
 <link rel="stylesheet" href="vendor/maplibre-gl.css">
-<link rel="stylesheet" href="app.css?v=240">
+<link rel="stylesheet" href="app.css?v=241">
 </head>
 <body>
 <div id="map" aria-label="Carte"></div>
@@ -423,8 +423,11 @@
     <div class="seg"><button id="cpFoot">À pied</button><button id="cpBike">À vélo</button></div>
     <input id="cpName" class="search" type="text" maxlength="60" placeholder="Nom du parcours (ex. : Tour du lac de Vassivière)" autocomplete="off">
     <textarea id="cpDesc" class="rep-text" rows="3" maxlength="500" placeholder="Description : difficulté, départ et parking, ce qu'on y voit, la meilleure saison…"></textarea>
+    <div class="so-ph-head"><b>Photos</b><span class="note">3 au plus, visibles après validation</span><button id="cpPhAdd" class="btn small">＋ Ajouter</button></div>
+    <div id="cpPhotos" class="so-photos"></div>
+    <input type="file" id="cpPhIn" accept="image/*" multiple hidden>
     <label class="cp-check"><input id="cpOk" type="checkbox"> J'ai fait ce parcours et il est praticable</label>
-    <p class="note">Le tracé, son nom, sa description et ses points notés seront publics, sans ton nom. Un parcours signalé plusieurs fois par d'autres est retiré.</p>
+    <p class="note">Le tracé, son nom, sa description, ses points notés et ses photos seront publics, sans ton nom. Évite les photos où l'on reconnaît des personnes ou des plaques d'immatriculation. Un parcours signalé plusieurs fois par d'autres est retiré.</p>
     <p id="cpMsg" class="fin-msg" role="status" hidden></p>
     <button id="cpSend" class="btn go">Publier dans le catalogue</button>
   </div>
@@ -655,6 +658,7 @@
       <div id="rtPrev" class="rt-prev" hidden>
         <div class="rt-card-h"><span id="rtpDot" class="rt-dot"></span><div class="rt-prev-t"><b id="rtpTitle"></b><span id="rtpSub"></span></div><button id="rtpClose" class="rt-x" aria-label="Fermer l'aperçu">✕</button></div>
         <p id="rtpDesc" class="note rt-desc" hidden></p>
+        <div id="rtpPhotos" class="rt-photos" hidden></div>
         <canvas id="rtpProf" class="rt-prof"></canvas>
         <div class="rt-prev-acts"><button id="rtpView" class="btn small">Aperçu</button><button id="rtpKeep" class="btn small">Garder</button><button id="rtpGo" class="btn small go">Naviguer</button></div>
         <button id="rtpReport" class="linkbtn rt-rep" hidden>Signaler ce parcours</button>
@@ -840,8 +844,8 @@
 
 <script src="vendor/maplibre-gl.js"></script>
 <script src="vendor/qrcode.js"></script>
-<script src="i18n/en.js?v=240"></script>
-<script src="i18n/es.js?v=240"></script>
-<script src="app.js?v=240"></script>
+<script src="i18n/en.js?v=241"></script>
+<script src="i18n/es.js?v=241"></script>
+<script src="app.js?v=241"></script>
 </body>
 </html>

@@ -30,6 +30,8 @@ export default {
     const json = (o, status = 200) => new Response(JSON.stringify(o), { status, headers: { ...cors, 'Content-Type': 'application/json' } });
     // page d'administration du catalogue : ouverte depuis un navigateur (pas d'origine), protégée par ADMIN_KEY
     if (path === '/catalogue/admin') return catAdmin(req, env, url);
+    // photos du catalogue : affichées par de simples balises <img> (sans origine)
+    if (path.startsWith('/catalogue/img/') && req.method === 'GET') return catImg(env, url, path);
     if (!okOrigin) return new Response('Origine refusée', { status: 403, headers: cors });
     if (path.startsWith('/catalogue')) {
       try { return await catalogue(req, env, path, json); }
@@ -111,7 +113,8 @@ async function ipKey(req, env) {
 }
 async function loadIndex(env) { return (await env.CATALOGUE.get('index', 'json')) || []; }
 async function saveIndex(env, idx) { await env.CATALOGUE.put('index', JSON.stringify(idx)); }
-const publicItem = it => ({ id: it.id, name: it.name, sport: it.sport, dist: it.dist, up: it.up, start: it.start, bb: it.bb, desc: it.desc, h: it.h, date: it.date });
+const publicItem = it => ({ id: it.id, name: it.name, sport: it.sport, dist: it.dist, up: it.up, start: it.start, bb: it.bb, desc: it.desc, h: it.h, date: it.date, ph: (it.ph || []).filter(p => p.ok).map(p => p.n) });
+const CAT_PHOTOS = 3, CAT_PHOTO_MAX = 700 * 1024;
 
 // vérifications automatiques d'une proposition : renvoie un message d'erreur, ou '' si tout va bien
 async function checkProposal(b, r, idx) {
@@ -157,14 +160,32 @@ async function catalogue(req, env, path, json) {
     if (typeof res === 'string') return json({ ok: false, message: res }, 422);
     let up = 0; for (let i = 1; i < r.pts.length; i++) if (r.pts[i].ele != null && r.pts[i - 1].ele != null && r.pts[i].ele > r.pts[i - 1].ele) up += r.pts[i].ele - r.pts[i - 1].ele;
     const lats = r.pts.map(p => p.lat), lons = r.pts.map(p => p.lon);
+    const tok = crypto.randomUUID(); // jeton qui permet d'ajouter les photos de ce parcours, juste après
     const it = {
+      tok,
       id: crypto.randomUUID().slice(0, 8), name: String(b.name).trim().slice(0, 60), sport: b.sport, dist: Math.round(res.dist), up: r.pts[0].ele != null ? Math.round(up) : null,
       start: [r.pts[0].lat, r.pts[0].lon], bb: [Math.min(...lats), Math.min(...lons), Math.max(...lats), Math.max(...lons)],
       desc: r.desc.trim().slice(0, 500), h: b.h, date: day, by: ik, rep: 0, hidden: false
     };
     idx.push(it); await saveIndex(env, idx);
     await env.CATALOGUE.put(lk, String(n + 1), { expirationTtl: 2 * 86400 });
-    return json({ ok: true, id: it.id, message: 'Parcours publié dans le catalogue. Merci !' });
+    return json({ ok: true, id: it.id, tok, message: 'Parcours publié dans le catalogue. Merci !' });
+  }
+  // photos d'un parcours qu'on vient de proposer (3 au plus) : visibles après ton accord sur la page d'administration
+  // l'appli les envoie réduites et réenregistrées (sans position GPS ni autres métadonnées)
+  if (path === '/catalogue/photo' && req.method === 'POST') {
+    const url = new URL(req.url), id = url.searchParams.get('id'), tok = url.searchParams.get('tok');
+    const idx = await loadIndex(env), it = idx.find(x => x.id === id);
+    if (!it || !tok || it.tok !== tok) return json({ ok: false, message: 'Parcours introuvable.' }, 404);
+    if (Date.now() - Date.parse(it.date + 'T00:00:00Z') > 3 * 86400e3) return json({ ok: false, message: 'Trop tard pour ajouter des photos.' }, 403);
+    it.ph = it.ph || [];
+    if (it.ph.length >= CAT_PHOTOS) return json({ ok: false, message: `${CAT_PHOTOS} photos au plus par parcours.` }, 422);
+    const buf = new Uint8Array(await req.arrayBuffer());
+    if (buf.length < 2000 || buf.length > CAT_PHOTO_MAX || buf[0] !== 0xFF || buf[1] !== 0xD8) return json({ ok: false, message: 'Photo refusée (format ou taille).' }, 422);
+    const n = it.ph.length ? Math.max(...it.ph.map(p => p.n)) + 1 : 0;
+    await env.CATALOGUE.put(`img:${id}:${n}`, buf);
+    it.ph.push({ n, ok: false }); await saveIndex(env, idx);
+    return json({ ok: true, message: 'Photo reçue : visible après validation.' });
   }
   if (path === '/catalogue/report' && req.method === 'POST') {
     const b = await req.json().catch(() => ({}));
@@ -189,9 +210,30 @@ async function catAdmin(req, env, url) {
   const idx = await loadIndex(env);
   if (req.method === 'POST') {
     const f = await req.formData(), id = f.get('id'), act = f.get('act'), i = idx.findIndex(x => x.id === id);
-    if (i >= 0) { if (act === 'del') idx.splice(i, 1); else { idx[i].hidden = act === 'hide'; if (act === 'show') idx[i].rep = 0; } await saveIndex(env, idx); }
+    if (i >= 0) {
+      const it = idx[i], n = +f.get('n');
+      if (act === 'del') { for (const p of it.ph || []) await env.CATALOGUE.delete(`img:${id}:${p.n}`); idx.splice(i, 1); }
+      else if (act === 'phok' || act === 'phno') {
+        const p = (it.ph || []).find(x => x.n === n);
+        if (p && act === 'phok') p.ok = true;
+        if (p && act === 'phno') { it.ph = it.ph.filter(x => x !== p); await env.CATALOGUE.delete(`img:${id}:${n}`); }
+      } else { it.hidden = act === 'hide'; if (act === 'show') it.rep = 0; }
+      await saveIndex(env, idx);
+    }
     return Response.redirect(url.toString(), 303);
   }
-  const k = encodeURIComponent(key), rows = idx.slice().reverse().map(it => `<li class="${it.hidden ? 'h' : ''}"><b>${esc(it.name)}</b> <small>${it.sport === 'bike' ? 'vélo' : 'à pied'} · ${(it.dist / 1000).toFixed(1)} km${it.up != null ? ' · D+ ' + it.up + ' m' : ''} · ${it.date}${it.rep ? ` · <b>${it.rep} signalement(s)</b>` : ''}${it.hidden ? ' · MASQUÉ' : ''}</small><br>${esc(it.desc)}${it.why && it.why.length ? `<br><small>Motifs : ${esc(it.why.filter(Boolean).join(' / '))}</small>` : ''}<br><a href="https://pisteo.app/p/${esc(it.h)}" target="_blank">Ouvrir dans Pisteo</a><form method="post" action="?key=${k}"><input type="hidden" name="id" value="${esc(it.id)}">${it.hidden ? '<button name="act" value="show">Remettre</button>' : '<button name="act" value="hide">Masquer</button>'}<button name="act" value="del" onclick="return confirm('Supprimer définitivement ?')">Supprimer</button></form></li>`).join('');
-  return html(`<h1>Catalogue Pisteo</h1><p>${idx.filter(x => !x.hidden).length} parcours publiés, ${idx.filter(x => x.hidden).length} masqués.</p><ul style="padding:0">${rows || '<li>Aucun parcours pour l\'instant.</li>'}</ul>`);
+  const k = encodeURIComponent(key), rows = idx.slice().reverse().map(it => `<li class="${it.hidden ? 'h' : ''}"><b>${esc(it.name)}</b> <small>${it.sport === 'bike' ? 'vélo' : 'à pied'} · ${(it.dist / 1000).toFixed(1)} km${it.up != null ? ' · D+ ' + it.up + ' m' : ''} · ${it.date}${it.rep ? ` · <b>${it.rep} signalement(s)</b>` : ''}${it.hidden ? ' · MASQUÉ' : ''}</small><br>${esc(it.desc)}${it.why && it.why.length ? `<br><small>Motifs : ${esc(it.why.filter(Boolean).join(' / '))}</small>` : ''}<br>${(it.ph || []).map(p => `<span style="display:inline-block;margin:6px 6px 0 0;text-align:center"><img src="/catalogue/img/${esc(it.id)}/${p.n}?key=${k}" style="width:110px;height:110px;object-fit:cover;border-radius:8px;${p.ok ? '' : 'outline:3px solid #e8833a'}"><br><form method="post" action="?key=${k}" style="display:inline"><input type="hidden" name="id" value="${esc(it.id)}"><input type="hidden" name="n" value="${p.n}">${p.ok ? '' : '<button name="act" value="phok">Accepter</button>'}<button name="act" value="phno">${p.ok ? 'Retirer' : 'Refuser'}</button></form></span>`).join('')}<br><a href="https://pisteo.app/p/${esc(it.h)}" target="_blank">Ouvrir dans Pisteo</a><form method="post" action="?key=${k}"><input type="hidden" name="id" value="${esc(it.id)}">${it.hidden ? '<button name="act" value="show">Remettre</button>' : '<button name="act" value="hide">Masquer</button>'}<button name="act" value="del" onclick="return confirm('Supprimer définitivement ?')">Supprimer</button></form></li>`).join('');
+  const wait = idx.reduce((a, it) => a + (it.ph || []).filter(p => !p.ok).length, 0);
+  return html(`<h1>Catalogue Pisteo</h1><p>${idx.filter(x => !x.hidden).length} parcours publiés, ${idx.filter(x => x.hidden).length} masqués${wait ? `, <b>${wait} photo(s) à valider</b> (entourées en orange)` : ''}.</p><ul style="padding:0">${rows || '<li>Aucun parcours pour l\'instant.</li>'}</ul>`);
+}
+
+// photo d'un parcours : publique si tu l'as acceptée, visible aussi sur la page d'administration
+async function catImg(env, url, path) {
+  const m = path.match(/^\/catalogue\/img\/([\w-]+)\/(\d+)$/);
+  if (!m || !env.CATALOGUE) return new Response('introuvable', { status: 404 });
+  const admin = env.ADMIN_KEY && url.searchParams.get('key') === env.ADMIN_KEY;
+  if (!admin) { const it = (await loadIndex(env)).find(x => x.id === m[1]); if (!it || it.hidden || !(it.ph || []).some(p => p.n === +m[2] && p.ok)) return new Response('introuvable', { status: 404 }); }
+  const buf = await env.CATALOGUE.get(`img:${m[1]}:${m[2]}`, 'arrayBuffer');
+  if (!buf) return new Response('introuvable', { status: 404 });
+  return new Response(buf, { headers: { 'Content-Type': 'image/jpeg', 'Cache-Control': admin ? 'no-store' : 'public, max-age=86400', 'Access-Control-Allow-Origin': '*' } });
 }

@@ -5,7 +5,7 @@
 
 // La page et le code doivent être de la même version. Sinon (page gardée en cache
 // par le téléphone ou par GitHub), on recharge une page fraîche, au plus 3 fois.
-const APP_VERSION = 240;
+const APP_VERSION = 241;
 try {
   const meta = document.querySelector('meta[name="balise-version"]');
   const pageV = meta ? +meta.content : 0;
@@ -1245,7 +1245,7 @@ function phOpen(i, it, pts) {
   $('phImg').src = phUrl(ph.full);
   $('phInfo').textContent = new Date(ph.t).toLocaleString(LOC, { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }) + (ph.lat == null ? tr(' · position inconnue') : '');
   $('phPrev').hidden = i === 0; $('phNext').hidden = i >= soPhotos.length - 1;
-  $('phDel').textContent = tr('Supprimer'); delete $('phDel').dataset.armed;
+  $('phDel').hidden = false; $('phDel').textContent = tr('Supprimer'); delete $('phDel').dataset.armed;
   $('phPrev').onclick = () => phOpen(i - 1, it, pts); $('phNext').onclick = () => phOpen(i + 1, it, pts);
   $('phDel').onclick = async () => {
     if (!$('phDel').dataset.armed) { $('phDel').dataset.armed = '1'; $('phDel').textContent = tr('Toucher encore pour supprimer'); return; }
@@ -3698,7 +3698,7 @@ async function rtAddCat(list, at) {
     let near = Infinity; for (const p of r.pts) { const d = hav(at, p); if (d < near) near = d; }
     if (near > R) continue;
     add.push({ id: 'c:' + c.id, cid: c.id, tags: {}, cat: 'cp', name: c.name, dist: c.dist, near: near < 300 ? 0 : near, big: false, at, src: 'c', h: c.h,
-      bounds: { minlat: c.bb[0], minlon: c.bb[1], maxlat: c.bb[2], maxlon: c.bb[3] }, notes: { desc: r.desc || c.desc || '', wpts: r.wpts || [] }, cdesc: c.desc || r.desc || '' });
+      bounds: { minlat: c.bb[0], minlon: c.bb[1], maxlat: c.bb[2], maxlon: c.bb[3] }, notes: { desc: r.desc || c.desc || '', wpts: r.wpts || [] }, cdesc: c.desc || r.desc || '', ph: Array.isArray(c.ph) ? c.ph : [] });
   }
   if (!add.length || rt.list !== list) return;
   list.unshift(...add.sort((a, b) => a.near - b.near));
@@ -4192,6 +4192,8 @@ async function rtSelect(it) {
   $('rtpSub').textContent = 'Chargement du tracé…'; rtMiniProfile($('rtpProf'), null);
   $('rtpGo').disabled = $('rtpKeep').disabled = $('rtpView').disabled = true; $('rtpKeep').textContent = 'Garder';
   $('rtpDesc').textContent = it.cdesc || ''; $('rtpDesc').hidden = !it.cdesc; $('rtpReport').hidden = it.src !== 'c';
+  const phs = (it.ph || []).map(n => `${CAT_API}/img/${it.cid}/${n}`), strip = $('rtpPhotos'); strip.innerHTML = ''; strip.hidden = !phs.length;
+  phs.forEach((u, i) => { const b = document.createElement('button'); b.className = 'ph-th'; b.style.backgroundImage = `url("${u}")`; b.setAttribute('aria-label', tr('Voir la photo')); b.onclick = () => catPhView(phs, i); strip.appendChild(b); });
   rtCardMode('prev');
   let g;
   try { g = await rtGeom(it); }
@@ -5001,9 +5003,35 @@ $('wtPropose').onclick = () => {
   $('cpName').value = /^(sortie du|trace sans nom|parcours partagé|boucle (à pied|à vélo) de|vers )/i.test(nm) ? '' : nm.replace(/ \(sens inverse\)$/, '').slice(0, 60);
   $('cpDesc').value = n.desc || ''; cpSport = profile === 'trekking' ? 'bike' : 'foot'; cpSportUI();
   $('cpOk').checked = false; $('cpMsg').hidden = true; $('cpSend').disabled = false;
+  // proposé depuis une sortie : ses photos sont reprises (on peut en retirer)
+  cpFiles = wtSrc.rec && soPhotos.length ? soPhotos.slice(0, 3).map(p => p.full) : []; cpThumbs();
   $('watch').hidden = true; $('propose').hidden = false;
 };
-let cpSport = 'foot';
+let cpSport = 'foot', cpFiles = [];
+function catPhView(urls, i) {
+  $('phImg').src = urls[i]; $('phInfo').textContent = `${i + 1} / ${urls.length}`; $('phDel').hidden = true;
+  $('phPrev').hidden = i === 0; $('phNext').hidden = i >= urls.length - 1;
+  $('phPrev').onclick = () => catPhView(urls, i - 1); $('phNext').onclick = () => catPhView(urls, i + 1);
+  $('phView').hidden = false;
+}
+const cpThumbs = () => {
+  const box = $('cpPhotos'); box.innerHTML = '';
+  cpFiles.forEach((f, i) => {
+    const b = document.createElement('button'); b.className = 'ph-th cp-th'; b.style.backgroundImage = `url(${phUrl(f)})`;
+    b.setAttribute('aria-label', tr('Retirer la photo')); b.textContent = '✕'; b.onclick = () => { cpFiles.splice(i, 1); cpThumbs(); }; box.appendChild(b);
+  });
+  $('cpPhAdd').hidden = cpFiles.length >= 3;
+};
+$('cpPhAdd').onclick = () => $('cpPhIn').click();
+$('cpPhIn').onchange = () => { cpFiles = cpFiles.concat([...$('cpPhIn').files]).slice(0, 3); $('cpPhIn').value = ''; cpThumbs(); };
+// photo pour le catalogue : réenregistrée (ce qui retire la position GPS et les autres métadonnées), 1280 px, 600 Ko au plus
+async function cpPhotoBlob(f) {
+  const bmp = await createImageBitmap(f, { imageOrientation: 'from-image' });
+  const k = Math.min(1, 1280 / Math.max(bmp.width, bmp.height)), cv = document.createElement('canvas');
+  cv.width = Math.round(bmp.width * k); cv.height = Math.round(bmp.height * k); cv.getContext('2d').drawImage(bmp, 0, 0, cv.width, cv.height);
+  for (const q of [0.82, 0.7, 0.55]) { const b = await new Promise(ok => cv.toBlob(ok, 'image/jpeg', q)); if (b && b.size < 600 * 1024) return b; }
+  return null;
+}
 function cpSportUI() { $('cpFoot').classList.toggle('on', cpSport === 'foot'); $('cpBike').classList.toggle('on', cpSport === 'bike'); }
 $('cpFoot').onclick = () => { cpSport = 'foot'; cpSportUI(); };
 $('cpBike').onclick = () => { cpSport = 'bike'; cpSportUI(); };
@@ -5024,7 +5052,19 @@ $('cpSend').onclick = async () => {
   try {
     const r = await fetch(CAT_API + '/propose', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ h, name, sport: cpSport }) });
     const j = await r.json().catch(() => ({}));
-    if (j.ok) { store.set('catCache', ''); catP = null; rtCache.clear(); $('propose').hidden = true; toast(j.message || 'Parcours publié dans le catalogue. Merci !', 4500); return; }
+    if (j.ok) {
+      let sent = 0;
+      for (const f of cpFiles) {
+        try {
+          const b = await cpPhotoBlob(f); if (!b) continue;
+          const pr = await fetch(`${CAT_API}/photo?id=${encodeURIComponent(j.id)}&tok=${encodeURIComponent(j.tok)}`, { method: 'POST', headers: { 'Content-Type': 'image/jpeg' }, body: b });
+          if (pr.ok) sent++;
+        } catch { /* réseau coupé : le parcours reste publié sans cette photo */ }
+      }
+      store.set('catCache', ''); catP = null; rtCache.clear(); $('propose').hidden = true; cpFiles = [];
+      toast(tr(j.message || 'Parcours publié dans le catalogue. Merci !') + (sent ? ' ' + tr(sent > 1 ? `${sent} photos envoyées, visibles après validation.` : '1 photo envoyée, visible après validation.') : ''), 5000);
+      return;
+    }
     say(j.message || `Envoi impossible (${r.status}).`);
   } catch { say('Pas de réseau : réessaie quand tu auras une connexion.'); }
   $('cpSend').disabled = false;

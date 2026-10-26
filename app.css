@@ -651,6 +651,9 @@ body.choosing #sheet, body.choosing .fab-col { display: none !important; }
 .ph-bar span { flex: 1; }
 .ph-nav { position: absolute; top: 50%; transform: translateY(-50%); width: 44px; height: 64px; border: 0; border-radius: 10px; background: rgba(0,0,0,.35); color: #fff; font-size: 34px; cursor: pointer; }
 .ph-l { left: 8px; } .ph-r { right: 8px; }
+.rt-photos { display: flex; gap: 6px; overflow-x: auto; margin: 2px 0 8px; }
+.rt-photos .ph-th { flex: 0 0 76px; height: 76px; }
+.cp-th { color: #fff; font-size: 13px; text-shadow: 0 0 4px #000; display: flex; align-items: flex-start; justify-content: flex-end; padding: 4px 6px; }
 .nd-rep { align-self: center; font-size: 13.5px; }
 .mk-note span { display: inline-block; transform: rotate(45deg); }
 
