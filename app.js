@@ -5,7 +5,7 @@
 
 // La page et le code doivent être de la même version. Sinon (page gardée en cache
 // par le téléphone ou par GitHub), on recharge une page fraîche, au plus 3 fois.
-const APP_VERSION = 228;
+const APP_VERSION = 229;
 try {
   const meta = document.querySelector('meta[name="balise-version"]');
   const pageV = meta ? +meta.content : 0;
@@ -6271,7 +6271,7 @@ function litMark(f, pts) {
   litRemember(pts);
 }
 // mémorisé par la forme du tracé (départ, arrivée, longueur), retrouvé quand ce tracé est affiché
-const litCache = new Map();
+var litCache = new Map(); // var : showTrack peut être appelé au démarrage, avant cette ligne
 const litKey = (pts, total) => `${pts[0].lat.toFixed(4)},${pts[0].lon.toFixed(4)}|${pts[pts.length - 1].lat.toFixed(4)},${pts[pts.length - 1].lon.toFixed(4)}|${Math.round(total / 20)}`;
 function litRemember(pts) {
   if (!pts || pts.length < 2 || !pts.some(p => p.lit)) return;
@@ -6290,7 +6290,7 @@ function litShare(pts) {
   for (let k = 1; k < pts.length; k++) { const d = hav(pts[k - 1], pts[k]); all += d; if (pts[k].lit === 'y') lit += d; }
   return all ? lit / all : 0;
 }
-function litFor(t) { return t && t.pts.length > 1 ? litCache.get(litKey(t.pts, t.total)) || null : null; }
+function litFor(t) { return litCache && t && t.pts.length > 1 ? litCache.get(litKey(t.pts, t.total)) || null : null; }
 // résumé et portions sombres sur la carte
 // bouton ampoule (comme la météo) : affiche ou masque l'éclairage ; visible seulement quand on le connaît
 var litShown = false;
