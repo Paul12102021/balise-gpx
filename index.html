@@ -9,13 +9,13 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<meta name="balise-version" content="239">
+<meta name="balise-version" content="240">
 <title>Pisteo</title>
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" href="icon.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
 <link rel="stylesheet" href="vendor/maplibre-gl.css">
-<link rel="stylesheet" href="app.css?v=239">
+<link rel="stylesheet" href="app.css?v=240">
 </head>
 <body>
 <div id="map" aria-label="Carte"></div>
@@ -98,6 +98,8 @@
       <button id="npWx" class="linkbtn">Météo</button>
       <button id="npProfOnly" class="linkbtn">Profil seul</button>
       <button id="npReport" class="linkbtn">Signaler</button>
+      <button id="npPhoto" class="linkbtn">Photo</button>
+      <input type="file" id="phCam" accept="image/*" capture="environment" hidden>
     </div>
     <div class="np-acts">
       <button id="npHome" class="btn np-home" hidden><svg viewBox="0 0 24 24"><path d="M9 14 4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11"/></svg><span>Ramène-moi au départ</span><small id="npHomeD"></small></button>
@@ -342,6 +344,9 @@
         <div><span>Alt. max</span><b id="sdMaxE">–</b></div>
       </div>
       <canvas id="sdProfile" class="so-prof" aria-label="Profil altimétrique"></canvas>
+      <div class="so-ph-head"><b>Photos</b><span id="sdPhCount" class="note"></span><button id="sdPhAdd" class="btn small">＋ Ajouter</button></div>
+      <div id="sdPhotos" class="so-photos"></div>
+      <input type="file" id="phIn" accept="image/*" multiple hidden>
       <p id="sdGps" class="so-gps" hidden></p>
       <div class="so-acts">
         <button id="sdFollow" class="btn go">Refaire ce parcours</button>
@@ -399,6 +404,13 @@
       <p><b>Autres</b> : « Ouvrir dans l'appli de ma montre » puis choisis l'appli de ton appareil ; sinon enregistre le fichier et importe-le depuis son appli.</p>
     </details>
   </div>
+</div>
+
+<div id="phView" class="ph-view" hidden>
+  <img id="phImg" alt="">
+  <button id="phPrev" class="ph-nav ph-l" aria-label="Photo précédente">‹</button>
+  <button id="phNext" class="ph-nav ph-r" aria-label="Photo suivante">›</button>
+  <div class="ph-bar"><span id="phInfo"></span><button id="phDel" class="btn small ghost danger">Supprimer</button><button id="phClose" class="btn small">Fermer</button></div>
 </div>
 
 <div id="propose" class="lib" hidden>
@@ -828,8 +840,8 @@
 
 <script src="vendor/maplibre-gl.js"></script>
 <script src="vendor/qrcode.js"></script>
-<script src="i18n/en.js?v=239"></script>
-<script src="i18n/es.js?v=239"></script>
-<script src="app.js?v=239"></script>
+<script src="i18n/en.js?v=240"></script>
+<script src="i18n/es.js?v=240"></script>
+<script src="app.js?v=240"></script>
 </body>
 </html>

@@ -3,6 +3,7 @@ package fr.pisteo.app;
 import android.Manifest;
 import android.app.Activity;
 import android.content.ActivityNotFoundException;
+import android.content.ClipData;
 import android.content.ContentValues;
 import android.content.Intent;
 import android.content.pm.ApplicationInfo;
@@ -66,6 +67,7 @@ public class MainActivity extends Activity {
 
     private WebView web;
     private ValueCallback<Uri[]> fileCb;
+    private Uri camUri; // photo en cours de prise (bouton « Photo » ou appareil proposé avec la galerie)
     private GeolocationPermissions.Callback geoCb;
     private String geoOrigin;
     private volatile String sharedText;
@@ -152,11 +154,31 @@ public class MainActivity extends Activity {
             @Override
             public boolean onShowFileChooser(WebView view, ValueCallback<Uri[]> cb, FileChooserParams params) {
                 if (fileCb != null) fileCb.onReceiveValue(null);
-                fileCb = cb;
+                fileCb = cb; camUri = null;
+                String[] acc = params.getAcceptTypes();
+                boolean img = acc != null && acc.length > 0 && acc[0] != null && acc[0].startsWith("image");
                 Intent i = new Intent(Intent.ACTION_GET_CONTENT);
                 i.addCategory(Intent.CATEGORY_OPENABLE);
-                i.setType("*/*"); // les GPX n'ont pas toujours le bon type : on laisse tout choisir
-                try { startActivityForResult(Intent.createChooser(i, null), REQ_FILE); }
+                i.setType(img ? "image/*" : "*/*"); // les GPX n'ont pas toujours le bon type : on laisse tout choisir
+                if (params.getMode() == FileChooserParams.MODE_OPEN_MULTIPLE) i.putExtra(Intent.EXTRA_ALLOW_MULTIPLE, true);
+                Intent chooser = Intent.createChooser(i, null);
+                // photos : l'appareil photo est proposé avec la galerie (ou directement, pour le bouton « Photo »)
+                if (img) {
+                    try {
+                        File dir = new File(getCacheDir(), "share");
+                        if (!dir.exists()) dir.mkdirs();
+                        File f = new File(dir, "photo-" + System.currentTimeMillis() + ".jpg");
+                        camUri = FileProvider.getUriForFile(MainActivity.this, getPackageName() + ".files", f);
+                        Intent cam = new Intent(MediaStore.ACTION_IMAGE_CAPTURE);
+                        cam.putExtra(MediaStore.EXTRA_OUTPUT, camUri);
+                        cam.setClipData(ClipData.newRawUri("", camUri));
+                        cam.addFlags(Intent.FLAG_GRANT_WRITE_URI_PERMISSION | Intent.FLAG_GRANT_READ_URI_PERMISSION);
+                        if (params.isCaptureEnabled()) {
+                            try { startActivityForResult(cam, REQ_FILE); return true; } catch (ActivityNotFoundException e) { /* pas d'appareil photo : galerie */ }
+                        } else chooser.putExtra(Intent.EXTRA_INITIAL_INTENTS, new Intent[]{cam});
+                    } catch (Exception e) { camUri = null; }
+                }
+                try { startActivityForResult(chooser, REQ_FILE); }
                 catch (ActivityNotFoundException e) { fileCb = null; return false; }
                 return true;
             }
@@ -290,6 +312,12 @@ public class MainActivity extends Activity {
                     for (int k = 0; k < uris.length; k++) uris[k] = data.getClipData().getItemAt(k).getUri();
                 } else if (data.getData() != null) uris = new Uri[]{data.getData()};
             }
+            // photo prise avec l'appareil : elle est dans le fichier préparé, sans réponse dans « data »
+            if (uris == null && result == RESULT_OK && camUri != null) {
+                File f = new File(new File(getCacheDir(), "share"), camUri.getLastPathSegment());
+                if (f.exists() && f.length() > 0) uris = new Uri[]{camUri};
+            }
+            camUri = null;
             fileCb.onReceiveValue(uris);
             fileCb = null;
         }

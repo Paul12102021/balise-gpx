@@ -5,7 +5,7 @@
 
 // La page et le code doivent être de la même version. Sinon (page gardée en cache
 // par le téléphone ou par GitHub), on recharge une page fraîche, au plus 3 fois.
-const APP_VERSION = 239;
+const APP_VERSION = 240;
 try {
   const meta = document.querySelector('meta[name="balise-version"]');
   const pageV = meta ? +meta.content : 0;
@@ -968,7 +968,7 @@ function openDB() {
   return dbP || (dbP = new Promise((res, rej) => {
     // un autre onglet de l'appli (ancienne version) peut bloquer l'ouverture : on n'attend pas indéfiniment
     const timer = setTimeout(() => { dbP = null; rej(new Error('blocked')); }, 3000);
-    const r = indexedDB.open('balise', 5);
+    const r = indexedDB.open('balise', 6);
     r.onblocked = () => { clearTimeout(timer); dbP = null; rej(new Error('blocked')); };
     r.onupgradeneeded = () => {
       const d = r.result;
@@ -977,6 +977,7 @@ function openDB() {
       if (!d.objectStoreNames.contains('graphs')) d.createObjectStore('graphs', { keyPath: 'id' });
       if (!d.objectStoreNames.contains('graphChunks')) d.createObjectStore('graphChunks', { keyPath: 'id' });
       if (!d.objectStoreNames.contains('places')) d.createObjectStore('places', { keyPath: 'code' });
+      if (!d.objectStoreNames.contains('photos')) d.createObjectStore('photos', { keyPath: 'id' }); // photos des sorties (sur le téléphone)
     };
     r.onsuccess = () => {
       clearTimeout(timer);
@@ -1155,6 +1156,117 @@ async function showSoList() {
 }
 
 let previewRedraw = null;
+// =====================================================================
+// Photos des sorties : gardées sur le téléphone (réduites), placées sur le parcours grâce à leur
+// position GPS ou, à défaut, à l'heure de la prise de vue comparée aux heures de passage.
+// =====================================================================
+// métadonnées EXIF d'un JPEG : heure de prise de vue et position GPS (si l'appareil les a notées)
+function exifRead(buf) {
+  try {
+    const v = new DataView(buf); if (v.getUint16(0) !== 0xFFD8) return {};
+    let o = 2;
+    while (o + 4 < v.byteLength) {
+      const mk = v.getUint16(o), len = v.getUint16(o + 2);
+      if (mk === 0xFFE1 && v.getUint32(o + 4) === 0x45786966) {
+        const t = o + 10, le = v.getUint16(t) === 0x4949, u16 = a => v.getUint16(a, le), u32 = a => v.getUint32(a, le);
+        const ifd = (start, want) => {
+          const out = {}, n = u16(t + start);
+          for (let i = 0; i < n; i++) {
+            const e = t + start + 2 + i * 12, tag = u16(e), type = u16(e + 2), cnt = u32(e + 4), val = e + 8;
+            if (!want.includes(tag)) continue;
+            if (type === 2) { const p = cnt > 4 ? t + u32(val) : val; let s = ''; for (let k = 0; k < cnt - 1; k++) s += String.fromCharCode(v.getUint8(p + k)); out[tag] = s; }
+            else if (type === 5) { const p = t + u32(val), a = []; for (let k = 0; k < cnt; k++) a.push(u32(p + k * 8) / (u32(p + k * 8 + 4) || 1)); out[tag] = a; }
+            else if (type === 4 || type === 3) out[tag] = type === 4 ? u32(val) : u16(val);
+          }
+          return out;
+        };
+        const r0 = ifd(u32(t + 4), [0x8769, 0x8825, 0x0132]), res = {};
+        const ex = r0[0x8769] ? ifd(r0[0x8769], [0x9003]) : {}, ds = ex[0x9003] || r0[0x0132];
+        const m = ds && /^(\d{4}):(\d\d):(\d\d) (\d\d):(\d\d):(\d\d)/.exec(ds);
+        if (m) res.t = new Date(+m[1], m[2] - 1, +m[3], +m[4], +m[5], +m[6]).getTime(); // heure locale du téléphone
+        if (r0[0x8825]) {
+          const g = ifd(r0[0x8825], [1, 2, 3, 4]), dms = a => a && a[0] + a[1] / 60 + a[2] / 3600;
+          if (g[2] && g[4]) { res.lat = dms(g[2]) * (g[1] === 'S' ? -1 : 1); res.lon = dms(g[4]) * (g[3] === 'W' ? -1 : 1); if (!res.lat && !res.lon) { delete res.lat; delete res.lon; } }
+        }
+        return res;
+      }
+      if ((mk & 0xFF00) !== 0xFF00) break;
+      o += 2 + len;
+    }
+  } catch { /* fichier inattendu : sans métadonnées */ }
+  return {};
+}
+// photo réduite (1600 px) et vignette (240 px), dans le bon sens
+async function photoShrink(file) {
+  const bmp = await createImageBitmap(file, { imageOrientation: 'from-image' });
+  const make = (max, q) => {
+    const k = Math.min(1, max / Math.max(bmp.width, bmp.height)), w = Math.round(bmp.width * k), h = Math.round(bmp.height * k);
+    const cv = document.createElement('canvas'); cv.width = w; cv.height = h; cv.getContext('2d').drawImage(bmp, 0, 0, w, h);
+    return new Promise(ok => cv.toBlob(ok, 'image/jpeg', q));
+  };
+  const [full, thumb] = await Promise.all([make(1600, 0.82), make(240, 0.7)]);
+  bmp.close && bmp.close();
+  return { full, thumb };
+}
+// position d'une photo sans GPS : le point de la sortie enregistré à l'heure la plus proche (10 min au plus)
+function photoPlace(t, pts) {
+  let best = null, bd = 6e5;
+  for (const p of pts) if (isFinite(p.t)) { const d = Math.abs(p.t - t); if (d < bd) { bd = d; best = p; } }
+  return best ? { lat: best.lat, lon: best.lon } : null;
+}
+async function photoAdd(file, ref, pts, pos) {
+  const ex = exifRead(await file.slice(0, 256 * 1024).arrayBuffer());
+  const { full, thumb } = await photoShrink(file);
+  const t = ex.t || pos && pos.t || file.lastModified || Date.now();
+  const at = ex.lat != null ? { lat: ex.lat, lon: ex.lon } : pos ? { lat: pos.lat, lon: pos.lon } : pts ? photoPlace(t, pts) : null;
+  const ph = { id: Date.now().toString(36) + Math.random().toString(36).slice(2, 7), ref, t, lat: at ? at.lat : null, lon: at ? at.lon : null, full, thumb };
+  await idb('readwrite', st => st.put(ph), 'photos');
+  return ph;
+}
+// photos d'une sortie : ajoutées à la sortie, ou prises pendant (bouton « Photo » en navigation)
+async function photosOf(it, pts) {
+  let all = []; try { all = (await idb('readonly', st => st.getAll(), 'photos')) || []; } catch { return []; }
+  const ts = pts.filter(p => isFinite(p.t)).map(p => p.t), t0 = ts.length ? Math.min(...ts) : it.start, t1 = ts.length ? Math.max(...ts) : it.start;
+  return all.filter(p => p.ref === 'rec:' + it.id || (p.ref === 'live' && t0 && p.t >= t0 - 6e4 && p.t <= t1 + 6e4)).sort((a, b) => a.t - b.t);
+}
+let soPhotos = [], phIdx = 0, phUrls = [];
+function phRevoke() { phUrls.forEach(u => URL.revokeObjectURL(u)); phUrls = []; }
+const phUrl = b => { const u = URL.createObjectURL(b); phUrls.push(u); return u; };
+function soPhotosUI(it, pts) {
+  const box = $('sdPhotos'); box.innerHTML = '';
+  soPhotos.forEach((ph, i) => {
+    const b = document.createElement('button'); b.className = 'ph-th'; b.setAttribute('aria-label', tr('Voir la photo'));
+    b.style.backgroundImage = `url(${phUrl(ph.thumb)})`; b.onclick = () => phOpen(i, it, pts); box.appendChild(b);
+  });
+  $('sdPhCount').textContent = soPhotos.length ? `${soPhotos.length} photo${soPhotos.length > 1 ? 's' : ''}` : tr('Aucune photo');
+}
+function phOpen(i, it, pts) {
+  phIdx = i; const ph = soPhotos[i]; if (!ph) { $('phView').hidden = true; return; }
+  $('phImg').src = phUrl(ph.full);
+  $('phInfo').textContent = new Date(ph.t).toLocaleString(LOC, { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }) + (ph.lat == null ? tr(' · position inconnue') : '');
+  $('phPrev').hidden = i === 0; $('phNext').hidden = i >= soPhotos.length - 1;
+  $('phDel').textContent = tr('Supprimer'); delete $('phDel').dataset.armed;
+  $('phPrev').onclick = () => phOpen(i - 1, it, pts); $('phNext').onclick = () => phOpen(i + 1, it, pts);
+  $('phDel').onclick = async () => {
+    if (!$('phDel').dataset.armed) { $('phDel').dataset.armed = '1'; $('phDel').textContent = tr('Toucher encore pour supprimer'); return; }
+    await idb('readwrite', st => st.delete(ph.id), 'photos').catch(() => {});
+    soPhotos.splice(i, 1); soPhotosUI(it, pts); previewRedraw && previewRedraw();
+    if (!soPhotos.length) { $('phView').hidden = true; return; }
+    phOpen(Math.min(i, soPhotos.length - 1), it, pts);
+  };
+  $('phView').hidden = false;
+}
+$('phClose').onclick = () => { $('phView').hidden = true; };
+$('phView').onclick = e => { if (e.target === $('phView')) $('phView').hidden = true; };
+// photo prise pendant la navigation : position et heure du moment
+$('npPhoto').onclick = () => $('phCam').click();
+$('phCam').onchange = async () => {
+  const files = [...$('phCam').files]; $('phCam').value = '';
+  if (!files.length) return;
+  let n = 0;
+  for (const f of files) { try { await photoAdd(f, 'live', null, me ? { lat: me.lat, lon: me.lon, t: Date.now() } : null); n++; } catch {} }
+  toast(n ? (n > 1 ? `${n} photos gardées` : 'Photo gardée') + ' · ' + tr('visible dans la sortie') : 'Photo illisible.', 3000);
+};
 function showSoDetail(it) {
   $('soList').hidden = true; $('soDetail').hidden = false;
   $('sorties').querySelector('.lib-panel').scrollTop = 0;
@@ -1183,8 +1295,20 @@ function showSoDetail(it) {
   $('sdGps').textContent = gaps.n
     ? `⚠️ Enregistrement interrompu ${gaps.n} fois (${fmtDur(gaps.ms / 1000)} sans position, ${fmtDist(gaps.dist)} tracés en ligne droite). Le téléphone a sans doute mis l'appli en pause écran éteint.`
     : '✓ Enregistrement continu, sans coupure du GPS';
-  previewRedraw = () => { drawRecMap($('sdMap'), pts); };
+  phRevoke(); soPhotos = []; soPhotosUI(it, pts);
+  previewRedraw = () => { drawRecMap($('sdMap'), pts, soPhotos); };
   requestAnimationFrame(() => { previewRedraw && previewRedraw(); if (hasE) drawRecProfile($('sdProfile'), pts); });
+  photosOf(it, pts).then(l => { if ($('soDetail').hidden) return; soPhotos = l; soPhotosUI(it, pts); previewRedraw && previewRedraw(); });
+  $('sdPhAdd').onclick = () => $('phIn').click();
+  $('phIn').onchange = async () => {
+    const files = [...$('phIn').files]; $('phIn').value = '';
+    if (!files.length) return;
+    $('sdPhCount').textContent = tr('Ajout des photos…');
+    let n = 0, lost = 0;
+    for (const f of files.slice(0, 30)) { try { const ph = await photoAdd(f, 'rec:' + it.id, pts); soPhotos.push(ph); n++; if (ph.lat == null) lost++; } catch {} }
+    soPhotos.sort((a, b) => a.t - b.t); soPhotosUI(it, pts); previewRedraw && previewRedraw();
+    toast(!n ? 'Photo illisible.' : lost ? `${n} photo${n > 1 ? 's' : ''} ajoutée${n > 1 ? 's' : ''}, ${lost} sans position (prise hors de la sortie)` : `${n} photo${n > 1 ? 's' : ''} ajoutée${n > 1 ? 's' : ''} et placée${n > 1 ? 's' : ''} sur le parcours`, 4000);
+  };
   $('sdFollow').onclick = () => { closeSorties(); loadText(it.text, false); store.set('gpx', it.text.length < 4.5e6 ? it.text : ''); setTimeout(() => startNav(), 300); };
   $('sdExport').onclick = () => shareGPX(it.text, it.title || it.name);
   // partager le parcours de la sortie (lien, QR code, montre) : le tracé seul, sans les heures
@@ -1204,6 +1328,7 @@ function showSoDetail(it) {
   del.onclick = async () => {
     if (!del.dataset.armed) { del.dataset.armed = '1'; del.textContent = 'Toucher encore pour supprimer'; return; }
     await idb('readwrite', s => s.delete(it.id)).catch(() => {});
+    for (const ph of soPhotos) await idb('readwrite', st => st.delete(ph.id), 'photos').catch(() => {});
     toast('Sortie supprimée'); showSoList();
   };
 }
@@ -1596,7 +1721,7 @@ $('sdLayer').onclick = () => {
   const list = SO_LAYERS(), k = list.indexOf(soLayer()), n = list[(k + 1) % list.length];
   store.set('soLayer', n.id); previewRedraw && previewRedraw();
 };
-function drawRecMap(cv, pts) {
+function drawRecMap(cv, pts, photos) {
   const dpr = window.devicePixelRatio || 1, W = cv.clientWidth, H = cv.clientHeight;
   if (!W) return;
   cv.width = W * dpr; cv.height = H * dpr;
@@ -1623,6 +1748,12 @@ function drawRecMap(cv, pts) {
   stroke('#fff', 7); stroke(COL.rec, 4);
   const dot = ([x, y], col) => { ctx.beginPath(); ctx.arc(x, y, 6, 0, 7); ctx.fillStyle = col; ctx.fill(); ctx.lineWidth = 2.5; ctx.strokeStyle = '#fff'; ctx.stroke(); };
   dot(P[0], cssVar('--go') || '#2F5E45'); dot(P[P.length - 1], '#C62828');
+  for (const ph of photos || []) {
+    if (ph.lat == null) continue;
+    const x = wx(ph.lon, z) - ox, y = wy(ph.lat, z) - oy;
+    ctx.beginPath(); ctx.arc(x, y, 8, 0, 7); ctx.fillStyle = '#fff'; ctx.fill(); ctx.lineWidth = 2; ctx.strokeStyle = '#E8833A'; ctx.stroke();
+    ctx.font = '10px system-ui, sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText('📷', x, y + 0.5);
+  }
 }
 function drawRecProfile(cv, pts) {
   const dpr = window.devicePixelRatio || 1, W = cv.clientWidth, H = cv.clientHeight;
