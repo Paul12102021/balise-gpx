@@ -5,7 +5,7 @@
 
 // La page et le code doivent être de la même version. Sinon (page gardée en cache
 // par le téléphone ou par GitHub), on recharge une page fraîche, au plus 3 fois.
-const APP_VERSION = 226;
+const APP_VERSION = 227;
 try {
   const meta = document.querySelector('meta[name="balise-version"]');
   const pageV = meta ? +meta.content : 0;
@@ -2109,8 +2109,8 @@ function riverProfile(renew) {
   return riverP;
 }
 // de nuit, à pied : profil personnalisé « nuit.brf » (privilégie les voies éclairées) ; donne aussi l'éclairage de chaque voie
-// réglage « De nuit, privilégier l'éclairé » (activé par défaut) : seulement à pied, entre le coucher et le lever du soleil
-const routeLitOn = () => store.get('litNight') !== '0' && isDarkNow();
+// réglage « De nuit, privilégier l'éclairé » (désactivé par défaut) : seulement à pied, entre le coucher et le lever du soleil
+const routeLitOn = () => store.get('litNight') === '1' && isDarkNow();
 let nightId = null, nightP = null;
 function nightProfile(renew) {
   if (renew) { nightId = null; nightP = null; }
@@ -2820,6 +2820,14 @@ async function makeLoop() {
   loopCfg.seed = (loopCfg.seed + 137.5) % 360; // la prochaine proposition partira dans une autre direction
   const t0 = Date.now(), tick = setInterval(() => toast(`Recherche d'une boucle… ${Math.round((Date.now() - t0) / 1000)} s`, 3000), 1000);
   try {
+    // de nuit : trois directions essayées en même temps, on garde la plus éclairée (les données d'éclairage sont inégales selon les quartiers)
+    if (profile !== 'trekking' && routeLitOn()) {
+      const angs = [ang, (ang + 120) % 360, (ang + 240) % 360];
+      const res = await Promise.all(angs.map(a => routeVia(loopPoints(start, r, a), 45000).then(p => removeSpurs(p), () => null)));
+      let bestA = null, bestS = -1;
+      res.forEach((p, i) => { if (!p) return; const s = litShare(p); if (s > bestS) { bestS = s; bestA = angs[i]; } });
+      if (bestA != null) ang = bestA;
+    }
     for (let tryN = 0; tryN < 4; tryN++) {
       let pts;
       try { pts = removeSpurs(await routeVia(loopPoints(start, r, ang), 45000)); litRemember(pts); }
@@ -6277,6 +6285,11 @@ function litRemember(pts) {
   litCache.set(litKey(pts, tot), segs);
   if (litCache.size > 30) litCache.delete(litCache.keys().next().value);
 }
+function litShare(pts) {
+  let all = 0, lit = 0;
+  for (let k = 1; k < pts.length; k++) { const d = hav(pts[k - 1], pts[k]); all += d; if (pts[k].lit === 'y') lit += d; }
+  return all ? lit / all : 0;
+}
 function litFor(t) { return t && t.pts.length > 1 ? litCache.get(litKey(t.pts, t.total)) || null : null; }
 // résumé et portions sombres sur la carte
 function litUI() {
@@ -6321,7 +6334,7 @@ function isDarkNow() {
   const now = Date.now(), st = sunTimes(now, c.lat, c.lon); if (!st) return false;
   return now > st.set - 20 * 60000 || now < st.rise + 10 * 60000;
 }
-$('optLit').checked = store.get('litNight') !== '0';
+$('optLit').checked = store.get('litNight') === '1';
 $('optLit').onchange = e => store.set('litNight', e.target.checked ? '1' : '0');
 
 // ---------- ramène-moi au départ ----------
