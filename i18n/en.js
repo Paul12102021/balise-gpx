@@ -418,9 +418,13 @@ const exact = {
   'Langue · Language': 'Language · Langue', 'Unités': 'Units', 'Kilomètres, mètres': 'Kilometres, metres', 'Miles, pieds': 'Miles, feet', 'Automatique · Auto': 'Automatic · Auto',
   'Attention : le GPS ne fonctionne qu\'en HTTPS.': 'Warning: GPS only works over HTTPS.', 'Itinéraire': 'Route', 'Trace': 'Track', 'Sortie': 'Outing',
   'durée': 'duration', 'vélo': 'bike', 'à pied': 'on foot', 'à vélo': 'by bike', 'Rapide': 'Fast', 'Balade': 'Leisurely',
+  "Eau": "Water", "Passage difficile": "Tricky section", "Danger": "Danger", "Info": "Info", "Point supprimé": "Point removed", "Touche la carte à l'endroit du point à noter": "Tap the map where the point is", "Point noté : il sera dans le lien partagé": "Point added: it will be in the shared link", "30 points au plus par parcours.": "30 points at most per route.", "Aucun point noté": "No points added", "Parcours trop long pour un QR code : partage plutôt le lien.": "Route too long for a QR code: share the link instead.", "Fais scanner l'écran par un autre téléphone, ou prends une capture d'écran pour l'imprimer.": "Let another phone scan the screen, or take a screenshot to print it.", "Fais scanner l'écran par un autre téléphone, ou enregistre l'image pour l'imprimer.": "Let another phone scan the screen, or save the image to print it.", "Description (facultatif) : difficulté, parking, conseils…": "Description (optional): difficulty, parking, tips…", "+ Noter un point": "+ Add a point", "Afficher un QR code": "Show a QR code", "Enregistrer l'image": "Save the image", "QR code du parcours": "Route QR code", "Noter un point": "Add a point", "Un mot pour les autres (facultatif)": "A word for others (optional)", "Ajouter le point": "Add the point",
 };
 const D = '(\\d+(?:[.,]\\d+)?)';
 const patterns = [
+  [/^(\d+) points? notés? sur la carte$/, m => `${m[1]} point${+m[1] > 1 ? 's' : ''} added on the map`],
+  [/^(.+) · à scanner pour l'ouvrir dans Pisteo$/, m => `${m[1]} · scan to open it in Pisteo`],
+  [/^Image enregistrée : (.+)$/, m => `Image saved: ${m[1]}`],
   // distances and times
   [/^(\d+) mètres$/, m => m[1] + ' metres'],
   [/^(\d+) kilomètres? et demi$/, m => km(+m[1], true)],

@@ -9,13 +9,13 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<meta name="balise-version" content="233">
+<meta name="balise-version" content="234">
 <title>Pisteo</title>
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" href="icon.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
 <link rel="stylesheet" href="vendor/maplibre-gl.css">
-<link rel="stylesheet" href="app.css?v=233">
+<link rel="stylesheet" href="app.css?v=234">
 </head>
 <body>
 <div id="map" aria-label="Carte"></div>
@@ -158,6 +158,7 @@
       <svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></svg>
     </button>
   </div>
+  <p id="trackDesc" class="track-desc" hidden></p>
   <div id="trChips" class="tr-chips" hidden>
     <span id="sunChip" class="chip sun-chip"></span>
   </div>
@@ -371,8 +372,18 @@
       <button id="wtClose" class="closebtn" aria-label="Fermer"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></svg>Fermer</button>
     </div>
     <p id="wtName" class="lib-sum"></p>
+    <div id="wtNotes" class="wt-notes" hidden>
+      <textarea id="wtDesc" rows="2" maxlength="500" placeholder="Description (facultatif) : difficulté, parking, conseils…"></textarea>
+      <div class="wt-noterow"><span id="wtNoteCount" class="note"></span><button id="wtAddNote" class="btn small">+ Noter un point</button></div>
+    </div>
     <button id="wtLink" class="btn go">Partager un lien</button>
     <p class="note wt-sub">Ton ami touche le lien et le parcours s'ouvre dans Pisteo, même sans l'appli installée.</p>
+    <button id="wtQr" class="btn">Afficher un QR code</button>
+    <div id="wtQrBox" class="wt-qr" hidden>
+      <canvas id="wtQrCv" aria-label="QR code du parcours"></canvas>
+      <p id="wtQrNote" class="note"></p>
+      <button id="wtQrSave" class="btn">Enregistrer l'image</button>
+    </div>
     <button id="wtOpen" class="btn">Ouvrir dans l'appli de ma montre</button>
     <button id="wtSave" class="btn">Enregistrer le fichier GPX</button>
     <p id="wtMsg" class="fin-msg" role="status" hidden></p>
@@ -383,6 +394,18 @@
       <p><b>Suunto, Coros</b> : enregistre le fichier, puis dans l'appli de la montre : Carte ou Itinéraires › + › Importer un fichier GPX.</p>
       <p><b>Autres</b> : « Ouvrir dans l'appli de ma montre » puis choisis l'appli de ton appareil ; sinon enregistre le fichier et importe-le depuis son appli.</p>
     </details>
+  </div>
+</div>
+
+<div id="noteDlg" class="lib" hidden>
+  <div class="lib-panel" role="dialog" aria-label="Noter un point">
+    <div class="lib-head">
+      <b>Noter un point</b>
+      <button id="ndClose" class="closebtn" aria-label="Fermer"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></svg>Fermer</button>
+    </div>
+    <div id="ndKinds" class="nd-kinds"></div>
+    <input id="ndText" class="search" type="text" maxlength="120" placeholder="Un mot pour les autres (facultatif)" autocomplete="off" enterkeyhint="done">
+    <button id="ndOk" class="btn go">Ajouter le point</button>
   </div>
 </div>
 
@@ -764,8 +787,9 @@
 <div id="toast" class="toast" hidden></div>
 
 <script src="vendor/maplibre-gl.js"></script>
-<script src="i18n/en.js?v=233"></script>
-<script src="i18n/es.js?v=233"></script>
-<script src="app.js?v=233"></script>
+<script src="vendor/qrcode.js"></script>
+<script src="i18n/en.js?v=234"></script>
+<script src="i18n/es.js?v=234"></script>
+<script src="app.js?v=234"></script>
 </body>
 </html>

@@ -5,7 +5,7 @@
 
 // La page et le code doivent être de la même version. Sinon (page gardée en cache
 // par le téléphone ou par GitHub), on recharge une page fraîche, au plus 3 fois.
-const APP_VERSION = 232;
+const APP_VERSION = 234;
 try {
   const meta = document.querySelector('meta[name="balise-version"]');
   const pageV = meta ? +meta.content : 0;
@@ -18,7 +18,7 @@ try {
       throw new Error('version');
     }
   } else sessionStorage.removeItem('fixVersion');
-  if (/[?&]fresh=/.test(location.search)) history.replaceState(null, '', location.pathname + (/[?&]shared=1/.test(location.search) ? '?shared=1' : /[?&]migrate=1/.test(location.search) ? '?migrate=1' : ''));
+  if (/[?&]fresh=/.test(location.search)) history.replaceState(null, '', location.pathname + (/[?&]shared=1/.test(location.search) ? '?shared=1' : /[?&]migrate=1/.test(location.search) ? '?migrate=1' : '') + location.hash); // garder le parcours partagé (#…)
 } catch (e) { if (e.message === 'version') return; }
 
 // =====================================================================
@@ -586,8 +586,112 @@ function parseGPX(text) {
   }).filter(p => isFinite(p.lat) && isFinite(p.lon));
   if (pts.length < 2) throw new Error('La trace contient moins de deux points.');
   const nameEl = doc.querySelector('trk > name, rte > name, metadata > name');
-  return { name: nameEl ? nameEl.textContent.trim() : 'Trace sans nom', pts };
+  // points notés (<wpt>) et description : partagés avec le parcours
+  const wpts = [...doc.getElementsByTagName('wpt')].slice(0, NOTE_MAX).map(w => {
+    const g = k => { const e = w.getElementsByTagName(k)[0]; return e ? e.textContent.trim() : ''; };
+    const name = g('name'), desc = g('desc') || g('cmt');
+    return { lat: +w.getAttribute('lat'), lon: +w.getAttribute('lon'), kind: NOTE_KINDS[g('type')] ? g('type') : 'info',
+      name: (name || desc).slice(0, 120), desc: name && desc && desc !== name ? desc.slice(0, 300) : '' };
+  }).filter(w => isFinite(w.lat) && isFinite(w.lon) && w.name);
+  const dEl = doc.querySelector('metadata > desc, trk > desc, rte > desc');
+  return { name: nameEl ? nameEl.textContent.trim() : 'Trace sans nom', pts, wpts, desc: dEl ? dEl.textContent.trim().slice(0, NOTE_DESC_MAX) : '' };
 }
+// ---------- points notés sur la trace (vue, eau, passage difficile…) et description ----------
+const NOTE_MAX = 30, NOTE_DESC_MAX = 500;
+const NOTE_KINDS = {
+  vue: { e: '📷', l: 'Point de vue' }, eau: { e: '💧', l: 'Eau' }, difficile: { e: '🥾', l: 'Passage difficile' },
+  danger: { e: '⚠️', l: 'Danger' }, info: { e: '📍', l: 'Info' }
+};
+let noteMks = [];
+function drawNotes() {
+  noteMks.forEach(m => m.remove()); noteMks = [];
+  if (!track) return;
+  track.wpts.forEach((n, i) => {
+    const e = document.createElement('button'); e.className = 'mk-note k-' + n.kind; e.innerHTML = `<span>${NOTE_KINDS[n.kind].e}</span>`;
+    e.setAttribute('aria-label', tr(NOTE_KINDS[n.kind].l) + ' : ' + n.name);
+    e.onclick = ev => {
+      ev.stopPropagation();
+      const t = `${NOTE_KINDS[n.kind].e} ${n.name}${n.desc ? ' · ' + n.desc : ''}`, mine = track;
+      toast(t, 6000, nav ? null : { label: 'Supprimer', run: () => { if (track !== mine) return; mine.wpts.splice(mine.wpts.indexOf(n), 1); commitNotes(); toast('Point supprimé', 2500); } });
+    };
+    noteMks.push(new maplibregl.Marker({ element: e, anchor: 'bottom', offset: [0, -4] }).setLngLat([n.lon, n.lat]).addTo(map));
+  });
+}
+function trackDescUI() {
+  const d = track && track.desc;
+  $('trackDesc').textContent = d || ''; $('trackDesc').hidden = !d;
+}
+// réécrit le GPX enregistré avec les points et la description à jour (le reste du fichier est gardé tel quel)
+function withNotes(text, notes) {
+  try {
+    const doc = new DOMParser().parseFromString(text, 'application/xml');
+    if (doc.querySelector('parsererror')) throw new Error('gpx');
+    const root = doc.documentElement, ns = root.namespaceURI || null, kids = e => [...e.children];
+    const mk = (tag, txt) => { const e = doc.createElementNS(ns, tag); if (txt != null) e.textContent = txt; return e; };
+    [...doc.getElementsByTagName('wpt')].forEach(e => e.remove());
+    let md = kids(root).find(e => e.localName === 'metadata');
+    if (md) kids(md).filter(e => e.localName === 'desc').forEach(e => e.remove());
+    kids(root).filter(e => e.localName === 'trk' || e.localName === 'rte').forEach(t => kids(t).filter(e => e.localName === 'desc').forEach(e => e.remove()));
+    if (notes.desc) {
+      if (!md) { md = mk('metadata'); root.insertBefore(md, root.firstElementChild); }
+      const nm = kids(md).find(e => e.localName === 'name');
+      md.insertBefore(mk('desc', notes.desc), nm ? nm.nextSibling : md.firstChild);
+    }
+    const ref = md ? md.nextSibling : root.firstChild;
+    for (const n of notes.wpts) {
+      const w = mk('wpt'); w.setAttribute('lat', n.lat.toFixed(6)); w.setAttribute('lon', n.lon.toFixed(6));
+      w.append(mk('name', n.name)); if (n.desc) w.append(mk('desc', n.desc)); w.append(mk('type', n.kind));
+      root.insertBefore(w, ref);
+    }
+    return '<?xml version="1.0" encoding="UTF-8"?>\n' + new XMLSerializer().serializeToString(doc).replace(/^\s*<\?xml[^>]*\?>\s*/, '');
+  } catch { return loopGPX(track.pts, track.name, notes); }
+}
+// enregistre les notes de la trace ouverte (et dans « Mes traces » si elle y est)
+async function commitNotes() {
+  if (!track) return;
+  const mine = track, saved = store.get('gpx'), base = saved && saved.includes('<trkpt') ? saved : loopGPX(mine.pts, mine.name);
+  const text = withNotes(base, { desc: mine.desc, wpts: mine.wpts });
+  store.set('gpx', text.length < 4.5e6 ? text : '');
+  drawNotes(); trackDescUI();
+  try {
+    const id = mine.name + '|' + Math.round(mine.total), it = (await listRecent()).find(x => x.id === id);
+    if (it) await idb('readwrite', st => st.put(Object.assign({}, it, { text })));
+  } catch { /* « Mes traces » indisponible : la trace ouverte garde ses notes */ }
+}
+// noter un point : on touche la carte, puis on choisit le type et on écrit un mot
+let ndPt = null, ndKind = 'vue';
+function addNote(after) {
+  if (!track) return;
+  startPick('Touche la carte à l\'endroit du point à noter', Object.assign(pt => {
+    ndPt = pt; ndKind = 'vue'; $('ndText').value = ''; ndKindsUI(); $('noteDlg').hidden = false; $('noteDlg').dataset.after = after || '';
+    setTimeout(() => $('ndText').focus(), 50);
+  }, { cancel: () => { if (after === 'send') openSend({ name: track.name, pts: track.pts, cur: true }); } }));
+}
+function ndKindsUI() {
+  const box = $('ndKinds'); box.innerHTML = '';
+  for (const k in NOTE_KINDS) {
+    const b = document.createElement('button'); b.className = 'chip' + (k === ndKind ? '' : ' nd-off'); b.textContent = NOTE_KINDS[k].e + ' ' + tr(NOTE_KINDS[k].l);
+    b.onclick = () => { ndKind = k; ndKindsUI(); }; box.appendChild(b);
+  }
+}
+function ndClose(ok) {
+  $('noteDlg').hidden = true;
+  const after = $('noteDlg').dataset.after;
+  if (ok && track && ndPt) {
+    if (track.wpts.length >= NOTE_MAX) toast(`${NOTE_MAX} points au plus par parcours.`, 3500);
+    else {
+      const txt = $('ndText').value.trim().slice(0, 120) || tr(NOTE_KINDS[ndKind].l);
+      track.wpts.push({ lat: ndPt.lat, lon: ndPt.lon, kind: ndKind, name: txt, desc: '' }); commitNotes();
+      toast('Point noté : il sera dans le lien partagé', 3000);
+    }
+  }
+  ndPt = null;
+  if (after === 'send' && track) openSend({ name: track.name, pts: track.pts, cur: true });
+}
+$('ndOk').onclick = () => ndClose(true);
+$('ndClose').onclick = () => ndClose(false);
+$('noteDlg').onclick = e => { if (e.target === $('noteDlg')) ndClose(false); };
+$('ndText').addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); ndClose(true); } });
 
 function boundsOf(ptsList) {
   const b = new maplibregl.LngLatBounds();
@@ -606,6 +710,7 @@ function fitTo(ptsList) {
 async function showTrack(t, fit = true) {
   joinNear = false;
   track = makePath(t.pts, t.name); progress = null; clearRejoin(); loadDone();
+  track.wpts = (t.wpts || []).slice(); track.desc = t.desc || ''; trackDescUI();
   track.lit = litFor(track);
   setTimeout(trChipsUpdate, 0);
   // carrefours à feux de l'itinéraire (position le long du tracé), pour le temps estimé
@@ -619,7 +724,7 @@ async function showTrack(t, fit = true) {
   await ready;
   if (track !== mine) return; // une autre trace a été ouverte entre-temps
   setSrc('track', lineFeature(track.pts)); setDone(doneInfo().along / (track.total || 1), true); litUI();
-  startMk.setLngLat([t.pts[0].lon, t.pts[0].lat]).addTo(map);
+  startMk.setLngLat([t.pts[0].lon, t.pts[0].lat]).addTo(map); drawNotes();
   const last = t.pts[t.pts.length - 1];
   endMk.setLngLat([last.lon, last.lat]).addTo(map);
   if (fit) { map.setPadding({ top: 0, bottom: 0, left: 0, right: 0 }); fitTo([track.pts]); }
@@ -639,7 +744,7 @@ function closeTrack(quiet) {
   // parcours balisés : on quitte leur affichage avec la trace (sauf si leur panneau est ouvert)
   if (rtMapOn && $('routes').hidden) rtHideMap();
   setSrc('track', EMPTY); setSrc('turn', EMPTY); litUI();
-  startMk.remove(); endMk.remove();
+  startMk.remove(); endMk.remove(); drawNotes(); trackDescUI();
   store.set('gpx', '');
   $('trackName').textContent = 'Aucune trace chargée'; $('btnClose').hidden = true; $('btnReverse').hidden = true; $('btnWatch').hidden = true; $('btnSaveTr').hidden = true; $('btnNew').hidden = true; $('btnNew').parentElement.classList.remove('has-new');
   drawProfile(); updateStats(); updateOfflineInfo();
@@ -687,7 +792,7 @@ $('btnReverse').onclick = () => {
   if (nav) { toast('Quitte d\'abord la navigation pour inverser la trace.'); return; }
   const rev = track.name.endsWith(' (sens inverse)');
   const name = rev ? track.name.replace(/ \(sens inverse\)$/, '') : track.name + ' (sens inverse)';
-  const text = loopGPX(track.pts.slice().reverse(), name);
+  const text = loopGPX(track.pts.slice().reverse(), name, { desc: track.desc, wpts: track.wpts });
   const hadWx = wxShown(), dep = depAt();
   loadText(text, false); store.set('gpx', text.length < 4.5e6 ? text : '');
   // météo affichée : on la garde, recalculée dans le nouveau sens (avec la même heure de départ)
@@ -777,7 +882,7 @@ async function renderLib() {
     open.querySelector('span').textContent = `${fmtDist(it.dist)}${it.up != null ? ' · D+ ' + fmtM(it.up) : ''} · ouverte le ${fmtDate(it.date)}`;
     open.onclick = () => { closeLib(); loadText(it.text); };
     const share = document.createElement('button'); share.className = 'lib-del'; share.setAttribute('aria-label', 'Envoyer ' + it.name);
-    share.innerHTML = ICON_SHARE; share.onclick = () => { try { const t = parseGPX(it.text); openSend({ name: it.name, pts: t.pts }); } catch { shareGPX(it.text, it.name); } };
+    share.innerHTML = ICON_SHARE; share.onclick = () => { try { const t = parseGPX(it.text); openSend({ name: it.name, pts: t.pts, wpts: t.wpts, desc: t.desc }); } catch { shareGPX(it.text, it.name); } };
     const del = document.createElement('button'); del.className = 'lib-del'; del.setAttribute('aria-label', 'Retirer ' + it.name);
     del.innerHTML = ICON_DEL; del.onclick = async () => { await idb('readwrite', st => st.delete(it.id)).catch(() => {}); renderLib(); };
     li.append(open, share, del); list.appendChild(li);
@@ -2872,9 +2977,11 @@ async function makeLoop() {
   if (!best) { toast('Aucune boucle trouvée ici. Essaie un autre point de départ.', 5000); return; }
   showLoop(best.pts);
 }
-function loopGPX(pts, name) {
+function loopGPX(pts, name, notes) {
   const esc = s => s.replace(/[<&>]/g, c => ({ '<': '&lt;', '&': '&amp;', '>': '&gt;' }[c]));
-  return `<?xml version="1.0" encoding="UTF-8"?>\n<gpx version="1.1" creator="Pisteo" xmlns="http://www.topografix.com/GPX/1/1">\n  <trk><name>${esc(name)}</name><trkseg>\n` +
+  const meta = notes && notes.desc ? `  <metadata><desc>${esc(notes.desc)}</desc></metadata>\n` : '';
+  const wp = notes && notes.wpts ? notes.wpts.map(n => `  <wpt lat="${n.lat.toFixed(6)}" lon="${n.lon.toFixed(6)}"><name>${esc(n.name)}</name>${n.desc ? `<desc>${esc(n.desc)}</desc>` : ''}<type>${n.kind}</type></wpt>\n`).join('') : '';
+  return `<?xml version="1.0" encoding="UTF-8"?>\n<gpx version="1.1" creator="Pisteo" xmlns="http://www.topografix.com/GPX/1/1">\n${meta}${wp}  <trk><name>${esc(name)}</name><trkseg>\n` +
     pts.map(p => `    <trkpt lat="${p.lat.toFixed(6)}" lon="${p.lon.toFixed(6)}">${p.ele != null ? `<ele>${(+p.ele).toFixed(1)}</ele>` : ''}</trkpt>`).join('\n') + '\n  </trkseg></trk>\n</gpx>\n';
 }
 function showLoop(pts) {
@@ -4514,15 +4621,75 @@ let wtSrc = null;
 function wtFile() {
   const name = (wtSrc.name || 'Parcours Pisteo').replace(/\.gpx$/i, '').trim().slice(0, 60);
   const fname = name.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 40) + '.gpx';
-  return { name, fname: fname === '.gpx' ? 'parcours-pisteo.gpx' : fname, text: loopGPX(wtSrc.pts, name) };
+  return { name, fname: fname === '.gpx' ? 'parcours-pisteo.gpx' : fname, text: loopGPX(wtSrc.pts, name, wtNotes()) };
+}
+// notes envoyées avec le parcours : celles de la trace ouverte (modifiables ici), sinon celles du fichier
+function wtNotes() {
+  if (wtSrc && wtSrc.cur && track) {
+    const d = $('wtDesc').value.trim().slice(0, NOTE_DESC_MAX);
+    if (d !== track.desc) { track.desc = d; commitNotes(); }
+    return { desc: track.desc, wpts: track.wpts };
+  }
+  return { desc: (wtSrc && wtSrc.desc) || '', wpts: (wtSrc && wtSrc.wpts) || [] };
+}
+function wtNotesUI() {
+  const cur = !!(wtSrc && wtSrc.cur && track);
+  $('wtNotes').hidden = !cur;
+  if (!cur) return;
+  $('wtDesc').value = track.desc || '';
+  const n = track.wpts.length;
+  $('wtNoteCount').textContent = n ? `${n} point${n > 1 ? 's' : ''} noté${n > 1 ? 's' : ''} sur la carte` : 'Aucun point noté';
 }
 function wtSay(m) { $('wtMsg').textContent = m || ''; $('wtMsg').hidden = !m; }
 function openSend(src) {
   wtSrc = src; const p = makePath(src.pts, '');
   $('wtName').textContent = `${src.name || 'Parcours'} · ${fmtDist(p.total)}${p.hasEle ? ' · D+ ' + fmtM(p.totalUp) : ''}`; wtSay('');
+  $('wtQrBox').hidden = true; wtNotesUI();
   $('watch').hidden = false;
 }
-$('btnWatch').onclick = () => { if (track) openSend({ name: track.name, pts: track.pts }); };
+$('wtDesc').addEventListener('change', () => wtNotes());
+$('wtAddNote').onclick = () => { wtNotes(); $('watch').hidden = true; addNote('send'); };
+// QR code du lien : à montrer sur l'écran, ou à imprimer (club, départ d'une boucle…)
+// le lien est raccourci (tracé plus simplifié) pour rester lisible par l'appareil photo
+async function qrLink() {
+  const notes = wtNotes();
+  let url = '';
+  for (const max of [300, 200, 140, 100, 70, 50]) { url = await routeLink(wtSrc.name, wtSrc.pts, notes, max); if (url.length <= 900) break; }
+  return url;
+}
+$('wtQr').onclick = async () => {
+  if (!wtSrc) return;
+  if (!$('wtQrBox').hidden) { $('wtQrBox').hidden = true; return; }
+  const url = await qrLink();
+  let q; try { q = qrcode(0, 'L'); q.addData(url); q.make(); } catch { wtSay('Parcours trop long pour un QR code : partage plutôt le lien.'); return; }
+  const n = q.getModuleCount(), quiet = 4, scale = Math.max(4, Math.ceil(720 / (n + 2 * quiet)));
+  const cv = $('wtQrCv'), side = (n + 2 * quiet) * scale, foot = 70;
+  cv.width = side; cv.height = side + foot;
+  const ctx = cv.getContext('2d');
+  ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, cv.width, cv.height); ctx.fillStyle = '#000';
+  for (let r = 0; r < n; r++) for (let c = 0; c < n; c++) if (q.isDark(r, c)) ctx.fillRect((c + quiet) * scale, (r + quiet) * scale, scale, scale);
+  // sous le code : nom, distance et D+, pour une affiche ou un message
+  ctx.fillStyle = '#17201c'; ctx.textAlign = 'center';
+  ctx.font = `700 ${Math.round(side / 22)}px system-ui, sans-serif`;
+  ctx.fillText((wtSrc.name || 'Parcours').slice(0, 40), side / 2, side + foot * 0.38);
+  const p = makePath(wtSrc.pts, '');
+  ctx.font = `${Math.round(side / 30)}px system-ui, sans-serif`; ctx.fillStyle = '#4a5550';
+  ctx.fillText(tr(`${fmtDist(p.total)}${p.hasEle ? ' · D+ ' + fmtM(p.totalUp) : ''} · à scanner pour l'ouvrir dans Pisteo`), side / 2, side + foot * 0.8);
+  $('wtQrSave').hidden = !!AND; // appli Android : une capture d'écran suffit
+  $('wtQrNote').textContent = tr(AND ? 'Fais scanner l\'écran par un autre téléphone, ou prends une capture d\'écran pour l\'imprimer.' : 'Fais scanner l\'écran par un autre téléphone, ou enregistre l\'image pour l\'imprimer.');
+  $('wtQrBox').hidden = false; wtSay('');
+  setTimeout(() => $('wtQrBox').scrollIntoView({ block: 'nearest', behavior: 'smooth' }), 50);
+};
+$('wtQrSave').onclick = () => {
+  $('wtQrCv').toBlob(async b => {
+    if (!b) return;
+    const fname = wtFile().fname.replace(/\.gpx$/, '-qr.png'), file = new File([b], fname, { type: 'image/png' });
+    try { if (navigator.canShare && navigator.canShare({ files: [file] })) { await navigator.share({ files: [file], title: wtSrc.name }); return; } } catch (e) { if (e.name === 'AbortError') return; }
+    const a = document.createElement('a'); a.href = URL.createObjectURL(b); a.download = fname; document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(a.href), 4000); wtSay(`Image enregistrée : ${fname}`);
+  }, 'image/png');
+};
+$('btnWatch').onclick = () => { if (track) openSend({ name: track.name, pts: track.pts, cur: true }); };
 $('wtClose').onclick = () => { $('watch').hidden = true; };
 $('watch').onclick = e => { if (e.target === $('watch')) $('watch').hidden = true; };
 $('wtOpen').onclick = () => {
@@ -4566,13 +4733,20 @@ function simplifyDP(pts, max = 600) {
   while (out.length > max && tol < 200) { tol *= 1.5; out = run(tol); }
   return out;
 }
-async function routeLink(name, pts) {
-  const sp = simplifyDP(pts), hasE = sp.some(p => p.ele != null), bytes = [1, hasE ? 1 : 0];
+async function routeLink(name, pts, notes, max = 600) {
+  const sp = simplifyDP(pts, max), hasE = sp.some(p => p.ele != null);
+  const withN = !!(notes && (notes.desc || (notes.wpts && notes.wpts.length))), bytes = [withN ? 2 : 1, hasE ? 1 : 0];
   const put = v => { v = v < 0 ? -2 * v - 1 : 2 * v; while (v > 127) { bytes.push((v & 127) | 128); v = Math.floor(v / 128); } bytes.push(v); };
+  if (withN) put(sp.length);
   let pa = 0, po = 0, pe = 0;
   for (const p of sp) {
     const a = Math.round(p.lat * 1e5), o = Math.round(p.lon * 1e5); put(a - pa); put(o - po); pa = a; po = o;
     if (hasE) { const e = Math.round(p.ele != null ? p.ele : pe); put(e - pe); pe = e; }
+  }
+  // notes : description et points (type, position, texte), à la suite du tracé
+  if (withN) {
+    const ks = Object.keys(NOTE_KINDS), J = { d: notes.desc || '', w: (notes.wpts || []).slice(0, NOTE_MAX).map(n => [Math.round(n.lat * 1e5), Math.round(n.lon * 1e5), ks.indexOf(n.kind), n.name, n.desc || ''].slice(0, n.desc ? 5 : 4)) };
+    bytes.push(...new TextEncoder().encode(JSON.stringify(J)));
   }
   const raw = new Uint8Array(bytes), z = await zip(raw, 'in').catch(() => null);
   const data = z && z.length < raw.length ? 'z' + b64enc(z) : 'r' + b64enc(raw);
@@ -4581,13 +4755,21 @@ async function routeLink(name, pts) {
 async function readRouteLink(hash) {
   const m = /^#?([zr])([A-Za-z0-9_-]+)(?:~(.*))?$/.exec(hash || ''); if (!m) return null;
   let u8 = b64dec(m[2]); if (m[1] === 'z') u8 = await zip(u8, 'out');
-  if (!u8 || u8[0] !== 1) return null;
-  const hasE = u8[1] === 1, pts = []; let i = 2;
+  if (!u8 || (u8[0] !== 1 && u8[0] !== 2)) return null;
+  const v2 = u8[0] === 2, hasE = u8[1] === 1, pts = []; let i = 2;
   const get = () => { let v = 0, f = 1, b; do { b = u8[i++]; v += (b & 127) * f; f *= 128; } while (b & 128 && i < u8.length); return v & 1 ? -(v + 1) / 2 : v / 2; };
+  const count = v2 ? get() : Infinity;
   let a = 0, o = 0, e = 0;
-  while (i < u8.length) { a += get(); o += get(); if (hasE) e += get(); pts.push({ lat: a / 1e5, lon: o / 1e5, ele: hasE ? e : null }); }
+  while (i < u8.length && pts.length < count) { a += get(); o += get(); if (hasE) e += get(); pts.push({ lat: a / 1e5, lon: o / 1e5, ele: hasE ? e : null }); }
+  let desc = '', wpts = [];
+  if (v2 && i < u8.length) try {
+    const J = JSON.parse(new TextDecoder().decode(u8.subarray(i))), ks = Object.keys(NOTE_KINDS), s = (x, n) => String(x || '').slice(0, n);
+    desc = s(J.d, NOTE_DESC_MAX);
+    wpts = (Array.isArray(J.w) ? J.w : []).slice(0, NOTE_MAX).map(w => ({ lat: +w[0] / 1e5, lon: +w[1] / 1e5, kind: ks[w[2]] || 'info', name: s(w[3], 120), desc: s(w[4], 300) }))
+      .filter(w => isFinite(w.lat) && isFinite(w.lon) && Math.abs(w.lat) <= 90 && w.name);
+  } catch { /* notes illisibles : le tracé seul */ }
   let name = ''; try { name = decodeURIComponent(m[3] || ''); } catch {}
-  return pts.length > 1 ? { name: name || 'Parcours partagé', pts } : null;
+  return pts.length > 1 ? { name: name || 'Parcours partagé', pts, desc, wpts } : null;
 }
 function copyText(t) {
   try { if (navigator.clipboard && navigator.clipboard.writeText) { navigator.clipboard.writeText(t); return true; } } catch {}
@@ -4596,7 +4778,7 @@ function copyText(t) {
 }
 $('wtLink').onclick = async () => {
   if (!wtSrc) return;
-  const p = makePath(wtSrc.pts, ''), url = await routeLink(wtSrc.name, wtSrc.pts);
+  const p = makePath(wtSrc.pts, ''), url = await routeLink(wtSrc.name, wtSrc.pts, wtNotes());
   const info = `${wtSrc.name || 'Parcours'} · ${fmtDist(p.total)}${p.hasEle ? ' · D+ ' + fmtM(p.totalUp) : ''}`;
   const text = tr(`${info} — ouvre-le dans Pisteo :`) + ' ' + url;
   if (AND && AND.shareText) { try { AND.shareText(text, info); return; } catch {} }
@@ -4609,7 +4791,7 @@ async function openRouteLink() {
   history.replaceState(null, '', location.pathname + location.search);
   let r = null; try { r = await readRouteLink(h); } catch {}
   if (!r) { toast('Lien de parcours illisible.', 4000); return; }
-  loadText(loopGPX(r.pts, r.name), false);
+  loadText(loopGPX(r.pts, r.name, { desc: r.desc, wpts: r.wpts }), false);
   toast(`Parcours reçu : ${r.name} · « Enregistrer » pour le garder`, 5000);
   // reçu dans le navigateur d'un téléphone Android : proposer l'appli (une fois Pisteo public sur le Play Store)
   if (PLAY_PUBLIC && !AND && /Android/i.test(navigator.userAgent) && !store.get('playHint'))

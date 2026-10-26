@@ -418,8 +418,12 @@ const exact = {
   'Langue · Language': 'Idioma · Language', 'Unités': 'Unidades', 'Kilomètres, mètres': 'Kilómetros, metros', 'Miles, pieds': 'Millas, pies', 'Automatique · Auto': 'Automático · Auto',
   'Attention : le GPS ne fonctionne qu\'en HTTPS.': 'Atención: el GPS solo funciona con HTTPS.', 'Itinéraire': 'Ruta', 'Trace': 'Track', 'Sortie': 'Salida',
   'durée': 'duración', 'vélo': 'bici', 'à pied': 'a pie', 'à vélo': 'en bici', 'Rapide': 'Rápida', 'Balade': 'Tranquila',
+  "Eau": "Agua", "Passage difficile": "Paso difícil", "Danger": "Peligro", "Info": "Info", "Point supprimé": "Punto eliminado", "Touche la carte à l'endroit du point à noter": "Toca el mapa donde está el punto", "Point noté : il sera dans le lien partagé": "Punto añadido: irá en el enlace compartido", "30 points au plus par parcours.": "30 puntos como máximo por ruta.", "Aucun point noté": "Ningún punto añadido", "Parcours trop long pour un QR code : partage plutôt le lien.": "Ruta demasiado larga para un código QR: comparte mejor el enlace.", "Fais scanner l'écran par un autre téléphone, ou prends une capture d'écran pour l'imprimer.": "Deja que otro móvil escanee la pantalla, o haz una captura para imprimirla.", "Fais scanner l'écran par un autre téléphone, ou enregistre l'image pour l'imprimer.": "Deja que otro móvil escanee la pantalla, o guarda la imagen para imprimirla.", "Description (facultatif) : difficulté, parking, conseils…": "Descripción (opcional): dificultad, aparcamiento, consejos…", "+ Noter un point": "+ Añadir un punto", "Afficher un QR code": "Mostrar un código QR", "Enregistrer l'image": "Guardar la imagen", "QR code du parcours": "Código QR de la ruta", "Noter un point": "Añadir un punto", "Un mot pour les autres (facultatif)": "Una nota para los demás (opcional)", "Ajouter le point": "Añadir el punto",
 };
 const patterns = [
+  [/^(\d+) points? notés? sur la carte$/, m => `${m[1]} punto${+m[1] > 1 ? 's' : ''} en el mapa`],
+  [/^(.+) · à scanner pour l'ouvrir dans Pisteo$/, m => `${m[1]} · escanéalo para abrirlo en Pisteo`],
+  [/^Image enregistrée : (.+)$/, m => `Imagen guardada: ${m[1]}`],
   // distancias
   [/^(\d+) mètres$/, m => m[1] + ' metros'],
   [/^(\d+) kilomètres? et demi$/, m => kmEs(+m[1], true)],
