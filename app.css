@@ -769,3 +769,13 @@ body.wx-on:not(.side) .trackrow { justify-content: space-between; } /* les bouto
 .fin-del[data-armed="1"] { color: var(--warn); }
 #npResume span { white-space: nowrap; }
 #npResume small { min-width: 0; max-width: 50%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* éclairage : option de calcul et résumé */
+.lit-opt { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 10px 12px; border-radius: 12px; background: var(--field); }
+.lit-opt[hidden] { display: none; }
+.lit-opt label { display: flex; flex-direction: column; gap: 2px; }
+.lit-opt b { font-size: 15px; }
+.lit-opt small { color: var(--muted); font-size: 12.5px; }
+.lit-chip { display: inline-flex; gap: 4px; align-items: center; font: 600 12.5px system-ui, sans-serif; background: var(--field); color: var(--ink); border-radius: 999px; padding: 4px 10px; margin: 0 0 4px; }
+.lit-chip[hidden] { display: none; }
+.lit-chip span { color: var(--muted); font-weight: 500; }

@@ -5,7 +5,7 @@
 
 // La page et le code doivent être de la même version. Sinon (page gardée en cache
 // par le téléphone ou par GitHub), on recharge une page fraîche, au plus 3 fois.
-const APP_VERSION = 224;
+const APP_VERSION = 225;
 try {
   const meta = document.querySelector('meta[name="balise-version"]');
   const pageV = meta ? +meta.content : 0;
@@ -599,6 +599,7 @@ function fitTo(ptsList) {
 async function showTrack(t, fit = true) {
   joinNear = false;
   track = makePath(t.pts, t.name); progress = null; clearRejoin(); loadDone();
+  track.lit = litFor(track);
   setTimeout(trChipsUpdate, 0);
   // carrefours à feux de l'itinéraire (position le long du tracé), pour le temps estimé
   track.sig = (t.signals || []).map(s => { const pr = project(track, s, true); return pr && pr.dist < 60 ? pr.along : null; }).filter(v => v != null).sort((x, y) => x - y);
@@ -610,7 +611,7 @@ async function showTrack(t, fit = true) {
   const mine = track;
   await ready;
   if (track !== mine) return; // une autre trace a été ouverte entre-temps
-  setSrc('track', lineFeature(track.pts)); setDone(doneInfo().along / (track.total || 1), true);
+  setSrc('track', lineFeature(track.pts)); setDone(doneInfo().along / (track.total || 1), true); litUI();
   startMk.setLngLat([t.pts[0].lon, t.pts[0].lat]).addTo(map);
   const last = t.pts[t.pts.length - 1];
   endMk.setLngLat([last.lon, last.lat]).addTo(map);
@@ -630,7 +631,7 @@ function closeTrack(quiet) {
   wxOn = false; wxDep = null; scrubD = null; if (scrubMk) scrubMk.remove(); wxApply(); trChipsUpdate(); // la météo part avec la trace
   // parcours balisés : on quitte leur affichage avec la trace (sauf si leur panneau est ouvert)
   if (rtMapOn && $('routes').hidden) rtHideMap();
-  setSrc('track', EMPTY); setSrc('turn', EMPTY);
+  setSrc('track', EMPTY); setSrc('turn', EMPTY); litUI();
   startMk.remove(); endMk.remove();
   store.set('gpx', '');
   $('trackName').textContent = 'Aucune trace chargée'; $('btnClose').hidden = true; $('btnReverse').hidden = true; $('btnWatch').hidden = true; $('btnSaveTr').hidden = true; $('btnNew').hidden = true; $('btnNew').parentElement.classList.remove('has-new');
@@ -2107,8 +2108,22 @@ function riverProfile(renew) {
   })().catch(e => { riverP = null; throw e; });
   return riverP;
 }
+// de nuit, à pied : profil personnalisé « nuit.brf » (privilégie les voies éclairées) ; donne aussi l'éclairage de chaque voie
+var routeLit = false; // choix « De nuit : privilégier l'éclairé » (boucles et trajets à pied)
+let nightId = null, nightP = null;
+function nightProfile(renew) {
+  if (renew) { nightId = null; nightP = null; }
+  if (nightId) return Promise.resolve(nightId);
+  nightP = nightP || (async () => {
+    const t = await fetch('nuit.brf?v=' + APP_VERSION).then(r => { if (!r.ok) throw new Error('profil'); return r.text(); });
+    const j = await fetch('https://brouter.de/brouter/profile', { method: 'POST', body: t }).then(r => r.json());
+    if (!j.profileid) { const e = new Error(j.error || 'profil refusé'); e.server = true; throw e; }
+    return (nightId = j.profileid);
+  })().catch(e => { nightP = null; throw e; });
+  return nightP;
+}
 async function brProf(style) {
-  if (profile !== 'trekking') return profile;
+  if (profile !== 'trekking') return routeLit ? nightProfile() : profile;
   return style === 'river' ? riverProfile() : 'trekking';
 }
 // requête BRouter ; un profil personnalisé expiré sur le serveur est renvoyé une fois
@@ -2116,9 +2131,9 @@ async function brFetch(lonlats, style, signal) {
   for (let k = 0; ; k++) {
     const prof = await brProf(style);
     const r = await fetch(`https://brouter.de/brouter?lonlats=${lonlats}&profile=${prof}&alternativeidx=0&format=geojson`, { signal });
-    if (r.ok) return r.json();
+    if (r.ok) { const j = await r.json(); if (prof === nightId) j.lit = true; return j; }
     const m = (await r.text().catch(() => '')).slice(0, 200);
-    if (k === 0 && /^custom_/.test(prof)) { await riverProfile(true); continue; }
+    if (k === 0 && /^custom_/.test(prof)) { if (prof === nightId) await nightProfile(true); else await riverProfile(true); continue; }
     const e = new Error(m || 'HTTP ' + r.status); e.server = true; throw e;
   }
 }
@@ -2378,6 +2393,7 @@ async function fetchRoute(a, b, ms = 12000, style) {
     const ll = q => `${q.lon.toFixed(6)},${q.lat.toFixed(6)}`;
     const j = await brFetch(`${ll(a)}|${ll(b)}`, style, ctrl.signal), f = j.features && j.features[0];
     const pts = f.geometry.coordinates.map(c => ({ lon: c[0], lat: c[1], ele: c[2] != null ? c[2] : null }));
+    if (j.lit) litMark(f, pts);
     return { pts, len: +f.properties['track-length'] || 0, signals: brSignals(f) };
   } finally { clearTimeout(timer); }
 }
@@ -2439,13 +2455,13 @@ $('btnRejoin').onclick = () => {
 // =====================================================================
 function openDest() {
   toggleMore(false);
-  $('destProf').value = profile;
+  $('destProf').value = profile; litOptInit();
   $('dest').hidden = false;
 }
 function closeDest() { $('dest').hidden = true; $('destQ').blur(); }
 $('destClose').onclick = closeDest;
 $('dest').onclick = e => { if (e.target === $('dest')) closeDest(); };
-$('destProf').onchange = e => setProfile(e.target.value);
+$('destProf').onchange = e => { setProfile(e.target.value); litOptUI(); };
 // balade libre : l'ancienne trace (ou l'ancien trajet) est fermée, elle reste dans Mes traces
 $('destFree').onclick = () => { closeDest(); if (track) { closeTrack(true); toast('Trace fermée · elle reste dans Mes traces', 3500); } startNav(true); };
 
@@ -2711,12 +2727,12 @@ function lpUI() {
 }
 // la distance (ou durée) proposée qui correspond à la valeur saisie reste surlignée
 function lpMark() { const v = +$('lpVal').value; $('lpQuick').querySelectorAll('button').forEach(b => b.classList.toggle('on', +b.dataset.v === v)); }
-function openLoop() { closeDest(); closeLib(); toggleMore(false); $('loopBar').hidden = true; lpUI(); $('loop').hidden = false; }
+function openLoop() { closeDest(); closeLib(); toggleMore(false); $('loopBar').hidden = true; lpUI(); litOptInit(); $('loop').hidden = false; }
 $('destLoop').onclick = openLoop;
 $('loopClose').onclick = () => { $('loop').hidden = true; };
 $('loop').onclick = e => { if (e.target === $('loop')) $('loop').hidden = true; };
-$('lpFoot').onclick = () => { setProfile('hiking-mountain', true); loopCfg.val = null; lpUI(); };
-$('lpBike').onclick = () => { setProfile('trekking', true); loopCfg.val = null; lpUI(); };
+$('lpFoot').onclick = () => { setProfile('hiking-mountain', true); loopCfg.val = null; lpUI(); litOptUI(); };
+$('lpBike').onclick = () => { setProfile('trekking', true); loopCfg.val = null; lpUI(); litOptUI(); };
 $('lpByKm').onclick = () => { loopCfg.byTime = false; loopCfg.val = null; lpUI(); };
 $('lpByTime').onclick = () => { loopCfg.byTime = true; loopCfg.val = null; lpUI(); };
 $('lpVal').oninput = e => { loopCfg.val = +e.target.value || null; lpMark(); };
@@ -2734,8 +2750,9 @@ async function routeVia(pts, ms, style) {
   const ll = q => `${q.lon.toFixed(6)},${q.lat.toFixed(6)}`;
   const ctrl = new AbortController(), timer = setTimeout(() => ctrl.abort(), ms);
   try {
-    const f = (await brFetch(pts.map(ll).join('|'), style, ctrl.signal)).features[0];
+    const j = await brFetch(pts.map(ll).join('|'), style, ctrl.signal), f = j.features[0];
     const out = f.geometry.coordinates.map(c => ({ lon: c[0], lat: c[1], ele: c[2] != null ? c[2] : null }));
+    if (j.lit) litMark(f, out);
     out.signals = brSignals(f);
     return out;
   } catch (e) {
@@ -2804,7 +2821,7 @@ async function makeLoop() {
   try {
     for (let tryN = 0; tryN < 4; tryN++) {
       let pts;
-      try { pts = removeSpurs(await routeVia(loopPoints(start, r, ang), 45000)); }
+      try { pts = removeSpurs(await routeVia(loopPoints(start, r, ang), 45000)); litRemember(pts); }
       catch (e) {
         if (!e.server) throw e;
         ang = (ang + 60) % 360; continue; // point dans la mer, sans chemin… : autre direction
@@ -4233,9 +4250,11 @@ function drawProfileOn(cv) {
   // marge gauche à la largeur des altitudes affichées (pas d'espace perdu avant elles)
   const ticks = eleTicks(lo, hi, [10, 20, 50, 100, 200, 250, 500, 1000]);
   const L0 = Math.ceil(Math.max(14, ...ticks.map(t => ctx.measureText(t[1]).width))) + 5; cv._L0 = L0;
-  const B = T ? 26 : 16, w = W - L0 - 4, h = H - B - 4 - T; // météo : place pour la bande « ciel » au-dessus des km
+  const LB = track.lit ? 7 : 0; // bande « éclairage »
+  const B = (T ? 26 : 16) + LB, w = W - L0 - 4, h = H - B - 4 - T; // météo : place pour la bande « ciel » au-dessus des km
   const X = d => L0 + d / track.total * w, Y = e => 4 + T + (1 - (e - lo) / (hi - lo)) * h;
   if (T) wxBands(ctx, X, 4 + T, h);
+  if (LB) litBand(ctx, X, 4 + T + h + (T ? 15 : 2));
   ctx.strokeStyle = cssVar('--line'); ctx.lineWidth = 1; ctx.textAlign = 'right'; ctx.textBaseline = 'middle';
   for (const [v, lab] of ticks) {
     const y = Math.round(Y(v)) + .5; ctx.beginPath(); ctx.moveTo(L0, y); ctx.lineTo(W, y); ctx.stroke(); ctx.fillText(lab, L0 - 4, y);
@@ -6229,6 +6248,84 @@ function nightCheck(info) {
   toast(`🌙 ${tr('Il te reste')} ${fmtDur((st.set - now) / 1000)} ${tr('de jour')} · ${tr('arrivée prévue')} ${hm(arr)}, ${tr('coucher du soleil à')} ${hm(st.set)}`, 9000);
   say(tr('Attention : tu risques d\'arriver après la tombée de la nuit.'));
 }
+
+// ---------- éclairage le long du parcours (itinéraires calculés « de nuit ») ----------
+// BRouter renvoie les étiquettes de chaque voie (lit=yes / lit=no) ; chaque point reçoit l'état de sa voie
+function litMark(f, pts) {
+  const msgs = (f.properties && f.properties.messages || []).slice(1);
+  let i = 0;
+  for (const m of msgs) {
+    const k = /\blit=yes\b/.test(m[9]) ? 'y' : /\blit=no\b/.test(m[9]) ? 'n' : 'u', lon = +m[0] / 1e6, lat = +m[1] / 1e6;
+    while (i < pts.length) { pts[i].lit = k; const hit = Math.abs(pts[i].lon - lon) < 2e-6 && Math.abs(pts[i].lat - lat) < 2e-6; i++; if (hit) break; }
+  }
+  while (i < pts.length) { pts[i].lit = pts[i - 1] ? pts[i - 1].lit : 'u'; i++; }
+  litRemember(pts);
+}
+// mémorisé par la forme du tracé (départ, arrivée, longueur), retrouvé quand ce tracé est affiché
+const litCache = new Map();
+const litKey = (pts, total) => `${pts[0].lat.toFixed(4)},${pts[0].lon.toFixed(4)}|${pts[pts.length - 1].lat.toFixed(4)},${pts[pts.length - 1].lon.toFixed(4)}|${Math.round(total / 20)}`;
+function litRemember(pts) {
+  if (!pts || pts.length < 2 || !pts.some(p => p.lit)) return;
+  let tot = 0; const cum = [0]; for (let k = 1; k < pts.length; k++) cum.push(tot += hav(pts[k - 1], pts[k]));
+  if (!tot) return;
+  const segs = []; // [début, fin, état] en fractions du parcours
+  for (let k = 1; k < pts.length; k++) {
+    const st = pts[k].lit || 'u', a = cum[k - 1] / tot, b = cum[k] / tot, last = segs[segs.length - 1];
+    if (last && last[2] === st) last[1] = b; else segs.push([a, b, st]);
+  }
+  litCache.set(litKey(pts, tot), segs);
+  if (litCache.size > 30) litCache.delete(litCache.keys().next().value);
+}
+function litFor(t) { return t && t.pts.length > 1 ? litCache.get(litKey(t.pts, t.total)) || null : null; }
+// résumé et portions sombres sur la carte
+function litUI() {
+  const segs = track && track.lit, chip = $('litChip');
+  const feats = [];
+  if (segs) {
+    const len = { y: 0, n: 0, u: 0 };
+    for (const [a, b, k] of segs) {
+      len[k] += (b - a) * track.total;
+      if (k === 'y') continue;
+      const c = []; for (let d = a * track.total; d <= b * track.total + 1; d += Math.max(8, (b - a) * track.total / 60)) { const q = pointAt(track, Math.min(d, b * track.total)); c.push([q.lon, q.lat]); }
+      if (c.length > 1) feats.push({ type: 'Feature', properties: { k }, geometry: { type: 'LineString', coordinates: c } });
+    }
+    const pc = Math.round(len.y / track.total * 100);
+    chip.innerHTML = `💡 ${pc} % ${tr('éclairé')}${len.n > 30 ? ` <span>· ${fmtDist(len.n)} ${tr('sombre')}</span>` : ''}${len.u > 30 ? ` <span>· ${fmtDist(len.u)} ${tr('inconnu')}</span>` : ''}`;
+  }
+  chip.hidden = !segs || nav;
+  const data = { type: 'FeatureCollection', features: feats };
+  try {
+    if (map.getSource('litdark')) map.getSource('litdark').setData(data);
+    else if (feats.length) {
+      map.addSource('litdark', { type: 'geojson', data });
+      map.addLayer({ id: 'litdark-bg', type: 'line', source: 'litdark', layout: { 'line-cap': 'round', 'line-join': 'round' }, paint: { 'line-color': '#1b1f2a', 'line-width': ['interpolate', ['linear'], ['zoom'], 10, 5, 16, 10] } });
+      map.addLayer({ id: 'litdark', type: 'line', source: 'litdark', layout: { 'line-join': 'round' }, paint: { 'line-color': ['match', ['get', 'k'], 'n', '#9aa6b8', '#e8742a'], 'line-width': ['interpolate', ['linear'], ['zoom'], 10, 2.5, 16, 5], 'line-dasharray': [1.2, 1.2] } });
+    }
+  } catch { /* carte pas prête */ }
+}
+// bande sous le profil : jaune éclairé, gris foncé sombre, tirets inconnu
+function litBand(ctx, X, y) {
+  ctx.save();
+  for (const [a, b, k] of track.lit) {
+    const x0 = X(a * track.total), x1 = X(b * track.total);
+    if (k === 'y') { ctx.fillStyle = '#f2c94c'; ctx.fillRect(x0, y, Math.max(1, x1 - x0), 4); }
+    else if (k === 'n') { ctx.fillStyle = '#4a5568'; ctx.fillRect(x0, y, Math.max(1, x1 - x0), 4); }
+    else { ctx.fillStyle = '#8a8f99'; for (let x = x0; x < x1; x += 6) ctx.fillRect(x, y, Math.min(3, x1 - x), 4); }
+  }
+  ctx.restore();
+}
+// il fait nuit ici (entre le coucher et le lever du soleil) : l'option « éclairé » est proposée cochée
+function isDarkNow() {
+  const c = me || (map && map.getCenter && { lat: map.getCenter().lat, lon: map.getCenter().lng }); if (!c) return false;
+  const now = Date.now(), st = sunTimes(now, c.lat, c.lon); if (!st) return false;
+  return now > st.set - 20 * 60000 || now < st.rise + 10 * 60000;
+}
+function litOptUI() {
+  const foot = profile !== 'trekking';
+  for (const id of ['lpLit', 'destLit']) { const r = $(id + 'Row'); r.hidden = !foot; $(id).checked = routeLit; }
+}
+function litOptInit() { routeLit = isDarkNow(); litOptUI(); }
+for (const id of ['lpLit', 'destLit']) $(id).onchange = e => { routeLit = e.target.checked; litOptUI(); };
 
 // ---------- ramène-moi au départ ----------
 var navHome = null;
