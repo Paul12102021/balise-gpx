@@ -774,3 +774,6 @@ body.wx-on:not(.side) .trackrow { justify-content: space-between; } /* les bouto
 .lit-chip { display: inline-flex; gap: 4px; align-items: center; font: 600 12.5px system-ui, sans-serif; background: var(--field); color: var(--ink); border-radius: 999px; padding: 4px 10px; margin: 0 0 4px; }
 .lit-chip[hidden] { display: none; }
 .lit-chip span { color: var(--muted); font-weight: 500; }
+.lit-chip b { font-weight: 700; }
+.lit-chip b.warn { color: #f08a24; }
+.lit-chip { flex-wrap: wrap; border-radius: 12px; }

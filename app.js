@@ -5,7 +5,7 @@
 
 // La page et le code doivent être de la même version. Sinon (page gardée en cache
 // par le téléphone ou par GitHub), on recharge une page fraîche, au plus 3 fois.
-const APP_VERSION = 230;
+const APP_VERSION = 231;
 try {
   const meta = document.querySelector('meta[name="balise-version"]');
   const pageV = meta ? +meta.content : 0;
@@ -6322,8 +6322,10 @@ function litUI() {
       const c = []; for (let d = a * track.total; d <= b * track.total + 1; d += Math.max(8, (b - a) * track.total / 60)) { const q = pointAt(track, Math.min(d, b * track.total)); c.push([q.lon, q.lat]); }
       if (c.length > 1) feats.push({ type: 'Feature', properties: { k }, geometry: { type: 'LineString', coordinates: c } });
     }
+    // d'abord ce qui compte pour la sécurité : les portions confirmées sans éclairage ; puis le confirmé éclairé
     const pc = Math.round(len.y / track.total * 100);
-    chip.innerHTML = `💡 ${pc} % ${tr('éclairé')}${len.n > 30 ? ` <span>· ${fmtDist(len.n)} ${tr('sombre')}</span>` : ''}${len.u > 30 ? ` <span>· ${fmtDist(len.u)} ${tr('non renseigné')}</span>` : ''}`;
+    const head = len.n > 30 ? `<b class="warn">⚠ ${fmtDist(len.n)} ${tr('sans éclairage')}</b>` : `<b>✓ ${tr('Aucune portion sombre connue')}</b>`;
+    chip.innerHTML = `${head} <span>· ${pc} % ${tr('confirmé éclairé')}${len.u > 30 ? ` · ${fmtDist(len.u)} ${tr('non renseigné')}` : ''}</span>`;
   }
   chip.hidden = !segs || nav;
   const data = { type: 'FeatureCollection', features: feats };

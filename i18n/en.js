@@ -161,6 +161,7 @@ const exact = {
   "De nuit, privilégier l'éclairé": 'At night, prefer lit streets', "À pied : itinéraires et boucles par les rues éclairées, du coucher au lever du soleil": 'On foot: routes and loops along lit streets, from sunset to sunrise',
   'Éclairage le long du parcours': 'Street lighting along the route', 'Éclairage': 'Lighting',
   'non renseigné': 'not recorded',
+  'sans éclairage': 'without lighting', 'Aucune portion sombre connue': 'No known dark sections', 'confirmé éclairé': 'confirmed lit',
   'Hors ligne': 'Offline', 'Sorties et traces': 'Outings and tracks', 'Navigation': 'Navigation', 'Voix et vibrations': 'Voice and vibration', 'Affichage': 'Display', 'Import manuel': 'Manual import', 'Envoi automatique': 'Auto upload',
   'Je me déplace': 'I travel', 'Pour les itinéraires et le temps estimé': 'For routes and estimated time', 'À pied': 'On foot', 'À vélo': 'By bike',
   'Cartes hors ligne': 'Offline maps', 'Trace, département ou zone': 'Track, French département or area', 'Mes cartes': 'My maps',
