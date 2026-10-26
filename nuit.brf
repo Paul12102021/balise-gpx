@@ -372,9 +372,9 @@ assign trafficpenalty = 0
 # Pisteo : de nuit, l'éclairage compte
 assign lit_penalty =
   if lit=yes then 0
-  else if lit=no then 2.0
-  else if highway=footway|pedestrian|living_street|residential then 0.4
-  else 1.0
+  else if lit=no then 8.0
+  else if highway=footway|pedestrian|living_street|residential then 3.0
+  else 6.0
 
 assign costfactor
 add lit_penalty

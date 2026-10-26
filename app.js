@@ -5,7 +5,7 @@
 
 // La page et le code doivent être de la même version. Sinon (page gardée en cache
 // par le téléphone ou par GitHub), on recharge une page fraîche, au plus 3 fois.
-const APP_VERSION = 225;
+const APP_VERSION = 226;
 try {
   const meta = document.querySelector('meta[name="balise-version"]');
   const pageV = meta ? +meta.content : 0;
@@ -964,7 +964,7 @@ function stvUI() {
 }
 // ---------- Sauvegarde : sorties, traces et réglages dans un fichier, et restauration ----------
 // réglages choisis par l'utilisateur (pas l'état en cours, ni les caches, ni la connexion Strava)
-const BK_KEYS = ['thr', 'voice', 'vib', 'autoRec', 'alertNight', 'soBilan', 'poi', 'gdAuto', 'eco', 'ecoSeen', 'banner', 'theme', 'profile', 'layerId', 'soLayer',
+const BK_KEYS = ['thr', 'voice', 'vib', 'autoRec', 'alertNight', 'litNight', 'soBilan', 'poi', 'gdAuto', 'eco', 'ecoSeen', 'banner', 'theme', 'profile', 'layerId', 'soLayer',
   'rtFilt', 'npProfOnly', 'showPacks', 'stvAuto', 'recHint'];
 const bkCount = items => {
   const r = items.filter(isRec).length;
@@ -2109,7 +2109,8 @@ function riverProfile(renew) {
   return riverP;
 }
 // de nuit, à pied : profil personnalisé « nuit.brf » (privilégie les voies éclairées) ; donne aussi l'éclairage de chaque voie
-var routeLit = false; // choix « De nuit : privilégier l'éclairé » (boucles et trajets à pied)
+// réglage « De nuit, privilégier l'éclairé » (activé par défaut) : seulement à pied, entre le coucher et le lever du soleil
+const routeLitOn = () => store.get('litNight') !== '0' && isDarkNow();
 let nightId = null, nightP = null;
 function nightProfile(renew) {
   if (renew) { nightId = null; nightP = null; }
@@ -2123,7 +2124,7 @@ function nightProfile(renew) {
   return nightP;
 }
 async function brProf(style) {
-  if (profile !== 'trekking') return routeLit ? nightProfile() : profile;
+  if (profile !== 'trekking') return routeLitOn() ? nightProfile() : profile;
   return style === 'river' ? riverProfile() : 'trekking';
 }
 // requête BRouter ; un profil personnalisé expiré sur le serveur est renvoyé une fois
@@ -2455,13 +2456,13 @@ $('btnRejoin').onclick = () => {
 // =====================================================================
 function openDest() {
   toggleMore(false);
-  $('destProf').value = profile; litOptInit();
+  $('destProf').value = profile;
   $('dest').hidden = false;
 }
 function closeDest() { $('dest').hidden = true; $('destQ').blur(); }
 $('destClose').onclick = closeDest;
 $('dest').onclick = e => { if (e.target === $('dest')) closeDest(); };
-$('destProf').onchange = e => { setProfile(e.target.value); litOptUI(); };
+$('destProf').onchange = e => setProfile(e.target.value);
 // balade libre : l'ancienne trace (ou l'ancien trajet) est fermée, elle reste dans Mes traces
 $('destFree').onclick = () => { closeDest(); if (track) { closeTrack(true); toast('Trace fermée · elle reste dans Mes traces', 3500); } startNav(true); };
 
@@ -2727,12 +2728,12 @@ function lpUI() {
 }
 // la distance (ou durée) proposée qui correspond à la valeur saisie reste surlignée
 function lpMark() { const v = +$('lpVal').value; $('lpQuick').querySelectorAll('button').forEach(b => b.classList.toggle('on', +b.dataset.v === v)); }
-function openLoop() { closeDest(); closeLib(); toggleMore(false); $('loopBar').hidden = true; lpUI(); litOptInit(); $('loop').hidden = false; }
+function openLoop() { closeDest(); closeLib(); toggleMore(false); $('loopBar').hidden = true; lpUI(); $('loop').hidden = false; }
 $('destLoop').onclick = openLoop;
 $('loopClose').onclick = () => { $('loop').hidden = true; };
 $('loop').onclick = e => { if (e.target === $('loop')) $('loop').hidden = true; };
-$('lpFoot').onclick = () => { setProfile('hiking-mountain', true); loopCfg.val = null; lpUI(); litOptUI(); };
-$('lpBike').onclick = () => { setProfile('trekking', true); loopCfg.val = null; lpUI(); litOptUI(); };
+$('lpFoot').onclick = () => { setProfile('hiking-mountain', true); loopCfg.val = null; lpUI(); };
+$('lpBike').onclick = () => { setProfile('trekking', true); loopCfg.val = null; lpUI(); };
 $('lpByKm').onclick = () => { loopCfg.byTime = false; loopCfg.val = null; lpUI(); };
 $('lpByTime').onclick = () => { loopCfg.byTime = true; loopCfg.val = null; lpUI(); };
 $('lpVal').oninput = e => { loopCfg.val = +e.target.value || null; lpMark(); };
@@ -6320,12 +6321,8 @@ function isDarkNow() {
   const now = Date.now(), st = sunTimes(now, c.lat, c.lon); if (!st) return false;
   return now > st.set - 20 * 60000 || now < st.rise + 10 * 60000;
 }
-function litOptUI() {
-  const foot = profile !== 'trekking';
-  for (const id of ['lpLit', 'destLit']) { const r = $(id + 'Row'); r.hidden = !foot; $(id).checked = routeLit; }
-}
-function litOptInit() { routeLit = isDarkNow(); litOptUI(); }
-for (const id of ['lpLit', 'destLit']) $(id).onchange = e => { routeLit = e.target.checked; litOptUI(); };
+$('optLit').checked = store.get('litNight') !== '0';
+$('optLit').onchange = e => store.set('litNight', e.target.checked ? '1' : '0');
 
 // ---------- ramène-moi au départ ----------
 var navHome = null;
