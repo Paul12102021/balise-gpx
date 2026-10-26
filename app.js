@@ -5,7 +5,7 @@
 
 // La page et le code doivent être de la même version. Sinon (page gardée en cache
 // par le téléphone ou par GitHub), on recharge une page fraîche, au plus 3 fois.
-const APP_VERSION = 223;
+const APP_VERSION = 224;
 try {
   const meta = document.querySelector('meta[name="balise-version"]');
   const pageV = meta ? +meta.content : 0;
@@ -1611,6 +1611,7 @@ async function startNav(free = false) {
   updateStats(); bgTrack();
 }
 function stopNav() {
+  navPrev = null;
   stopPip(); nav = false; document.body.classList.remove('nav', 'free'); applyEco(); toggleNavMore(false, true);
   stopSim(); clearRejoin(); isOff = false;
   ttsCancel();
@@ -4118,9 +4119,22 @@ async function goTo(dest) {
   if (!r) { toast('Itinéraire impossible pour l\'instant, réessaie dans un instant.', 5000); return; }
   r.pts.push({ lat: dest.lat, lon: dest.lon, ele: null });
   if (!track) document.body.classList.remove('free');
+  // le parcours suivi est gardé de côté : on peut le reprendre (« Reprendre le parcours »)
+  if (track && !track.route) navPrev = { name: track.name, pts: track.pts.map(p => ({ lat: p.lat, lon: p.lon, ele: p.ele })) };
   await showTrack({ name: 'Vers ' + dest.label, pts: r.pts, signals: r.signals }, false);
   track.route = dest; track.style = profile === 'trekking' ? bikeStyle : null;
   arrived = false; guidance(); say(`Itinéraire prêt : ${speakDist(track.total)}. Allons-y !`);
+  vibrate([60, 60, 60]); homeUI();
+  toast(`✓ ${tr('Itinéraire vers')} ${dest.label} : ${fmtDist(track.total)}`, 7000, navPrev ? { label: tr('Annuler'), run: resumePrev } : null);
+}
+// revenir au parcours d'avant le détour (vers le départ, vers un lieu)
+var navPrev = null;
+async function resumePrev() {
+  if (!navPrev || !nav) return;
+  const p = navPrev; navPrev = null;
+  await showTrack(p, false);
+  isOff = false; offCount = 0; arrived = false; guidance(); homeUI();
+  say(tr('Je reprends le parcours.')); toast(`✓ ${tr('Parcours repris')} : ${p.name}`, 4000);
 }
 async function reroute() {
   if (routing || !me || !track || !track.route) return;
@@ -6220,9 +6234,12 @@ function nightCheck(info) {
 var navHome = null;
 function homeUI() {
   const b = $('npHome'), home = navHome, ok = !!(nav && home && me && !me.sim && hav(me, home) > 150);
-  b.hidden = !ok;
+  b.hidden = !ok || !!(track && track.route); // déjà en route vers le départ ou un lieu
   if (ok) $('npHomeD').textContent = '· ' + fmtDist(hav(me, home));
+  const rs = $('npResume'), can = !!(nav && navPrev && track && track.route);
+  rs.hidden = !can; if (can) $('npResumeN').textContent = navPrev.name;
 }
+$('npResume').onclick = resumePrev;
 $('npHome').onclick = () => { if (navHome) goTo({ lat: navHome.lat, lon: navHome.lon, label: tr('le départ') }); };
 
 // ---------- bilan des sorties : mois, année, tout (repliable, choix retenu) ----------

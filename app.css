@@ -767,3 +767,5 @@ body.wx-on:not(.side) .trackrow { justify-content: space-between; } /* les bouto
 .nb-stop i { width: 12px; height: 12px; border-radius: 3px; background: var(--go-ink); display: block; }
 .fin-del { border: 0; background: none; color: var(--muted); font: 13px system-ui, sans-serif; text-decoration: underline; padding: 6px; cursor: pointer; align-self: center; }
 .fin-del[data-armed="1"] { color: var(--warn); }
+#npResume span { white-space: nowrap; }
+#npResume small { min-width: 0; max-width: 50%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
