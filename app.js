@@ -5,7 +5,7 @@
 
 // La page et le code doivent être de la même version. Sinon (page gardée en cache
 // par le téléphone ou par GitHub), on recharge une page fraîche, au plus 3 fois.
-const APP_VERSION = 221;
+const APP_VERSION = 222;
 try {
   const meta = document.querySelector('meta[name="balise-version"]');
   const pageV = meta ? +meta.content : 0;
@@ -1876,7 +1876,11 @@ function guidance() {
     return;
   }
   if (!progress) return;
-  if (arrived && !rejoin) { setBanner('done', '', 'Vous êtes arrivé', 'flag', `${track.name}`); setSrc('turn', EMPTY); return; }
+  if (arrived && !rejoin) { // arrivée : le résumé de la sortie (ou du parcours), sans rien à choisir
+    const on = actState === 'on' || actState === 'paused';
+    const sum = on ? [fmtDist(act.d), fmtDur(actElapsed() / 1000), rec.some(q => q.ele != null) ? 'D+ ' + fmtM(recUp()) : ''] : [fmtDist(track.total), track.hasEle ? 'D+ ' + fmtM(track.totalUp) : ''];
+    setBanner('done', '', 'Vous êtes arrivé', 'flag', '🏁 ' + sum.filter(Boolean).join(' · ')); setSrc('turn', EMPTY); return;
+  }
   if (isOff && !rejoin) {
     setBanner('off', fmtDist(progress.dist), routing ? 'Hors trace · calcul du retour…' : 'Hors trace', 'off', 'Touchez ↩ pour un itinéraire de retour');
     return;
@@ -4559,7 +4563,8 @@ function openFinish() {
   $('finAvg').textContent = el > 30 ? kmh(act.d / el * 3.6) : '–';
   $('finUp').textContent = rec.some(p => p.ele != null) ? fmtM(recUp()) : '–';
   $('finTitle').textContent = actName();
-  $('finDelete').textContent = 'Supprimer cette sortie'; $('finDelete').dataset.armed = '';
+  $('finDelete').textContent = tr('Ne pas garder cette sortie'); $('finDelete').dataset.armed = '';
+  $('finContinue').textContent = tr(nav ? 'Reprendre la navigation' : 'Continuer la sortie'); $('finExport').hidden = true;
   $('finMsg').hidden = true;
   $('finish').hidden = false;
 }
@@ -4578,12 +4583,12 @@ async function endActivity(keep) {
     } catch {
       // on ne perd rien : la sortie reste en cours (en pause) et peut être exportée
       if (actState === 'on') { act.since = Date.now(); }
-      btn.disabled = false; btn.textContent = 'Terminer et garder dans Mes sorties';
+      btn.disabled = false; btn.textContent = tr('✓ Enregistrer la sortie'); $('finExport').hidden = false; // repli : exporter
       $('finMsg').textContent = 'Impossible de ranger la sortie : un autre onglet de Pisteo est ouvert. Ferme les autres onglets puis réessaie, ou touche « Exporter le GPX ».';
       $('finMsg').hidden = false;
       return;
     }
-    btn.disabled = false; btn.textContent = 'Terminer et garder dans Mes sorties';
+    btn.disabled = false; btn.textContent = tr('✓ Enregistrer la sortie');
   }
   rec = []; saveRec(); drawRec(); recSeg = 0;
   act = { ms: 0, since: null, d: 0, start: null }; saveAct();

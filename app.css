@@ -231,7 +231,6 @@ body.nav[data-banner="hidden"] .navtop:not([data-tone="off"]):not([data-tone="re
   background: var(--field); color: var(--ink); display: grid; place-items: center; cursor: pointer;
 }
 .nb-btn svg { width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-width: 2.2; stroke-linecap: round; }
-#btnExit { color: var(--warn); }
 
 .speed {
   position: fixed; z-index: 9; left: 12px; bottom: calc(var(--nav-h, 92px) + 12px);
@@ -762,3 +761,9 @@ body.side.wx-on #profile { height: 200px; }
 /* météo affichée sur téléphone : la barre est pleine de boutons, le bout de nom ne sert à rien */
 body.wx-on:not(.side) .trackname { display: none; }
 body.wx-on:not(.side) .trackrow { justify-content: space-between; } /* les boutons occupent toute la largeur */
+
+/* fin de navigation : « Terminer » plutôt qu'une croix (couleurs douces) */
+.nb-btn.nb-stop { width: auto; min-width: 62px; padding: 0 10px; border-radius: 14px; display: flex; flex-direction: column; gap: 3px; align-items: center; justify-content: center; font: 600 11px system-ui, sans-serif; color: var(--ink); }
+.nb-stop i { width: 12px; height: 12px; border-radius: 3px; background: var(--go-ink); display: block; }
+.fin-del { border: 0; background: none; color: var(--muted); font: 13px system-ui, sans-serif; text-decoration: underline; padding: 6px; cursor: pointer; align-self: center; }
+.fin-del[data-armed="1"] { color: var(--warn); }

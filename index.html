@@ -9,13 +9,13 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<meta name="balise-version" content="221">
+<meta name="balise-version" content="222">
 <title>Pisteo</title>
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" href="icon.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
 <link rel="stylesheet" href="vendor/maplibre-gl.css">
-<link rel="stylesheet" href="app.css?v=221">
+<link rel="stylesheet" href="app.css?v=222">
 </head>
 <body>
 <div id="map" aria-label="Carte"></div>
@@ -81,9 +81,7 @@
   <div class="nb-grip" id="nbGrip" role="button" aria-label="Afficher ou masquer la progression"></div>
   <div id="joinPick" class="join-pick" hidden><span>Rejoindre la trace</span><div class="seg"><button id="jpStart">au départ</button><button id="jpNear">au plus proche</button></div></div>
   <div class="nb-row">
-    <button id="btnExit" class="nb-btn" aria-label="Quitter la navigation">
-      <svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></svg>
-    </button>
+    <button id="btnExit" class="nb-btn nb-stop" aria-label="Terminer la navigation"><i></i><span>Terminer</span></button>
     <div class="nb-stats">
       <div class="nb-stat"><b id="nbEta">–</b><span id="nbDur">arrivée</span></div>
       <div class="nb-stat"><b id="nbRem">–</b><span id="nbL2">restant</span></div>
@@ -683,7 +681,7 @@
 
 <div id="finish" class="lib" hidden>
   <div class="lib-panel" role="dialog" aria-label="Terminer la sortie">
-    <div class="lib-head"><b>Terminer la sortie ?</b></div>
+    <div class="lib-head"><b>Fin de la sortie</b></div>
     <div class="note" id="finTitle"></div>
     <div class="np-grid fin-grid">
       <div><span>Distance</span><b id="finDist">–</b></div>
@@ -692,10 +690,10 @@
       <div><span>D+</span><b id="finUp">–</b></div>
     </div>
     <p id="finMsg" class="fin-msg" hidden></p>
-    <button id="finSave" class="btn go">Terminer et garder dans Mes sorties</button>
-    <button id="finExport" class="btn">Exporter le GPX</button>
-    <button id="finContinue" class="btn ghost">Continuer la sortie</button>
-    <button id="finDelete" class="btn ghost danger">Supprimer cette sortie</button>
+    <button id="finSave" class="btn go">✓ Enregistrer la sortie</button>
+    <button id="finExport" class="btn" hidden>Exporter le GPX</button>
+    <button id="finContinue" class="btn">Continuer la sortie</button>
+    <button id="finDelete" class="fin-del">Ne pas garder cette sortie</button>
   </div>
 </div>
 
@@ -757,8 +755,8 @@
 <div id="toast" class="toast" hidden></div>
 
 <script src="vendor/maplibre-gl.js"></script>
-<script src="i18n/en.js?v=221"></script>
-<script src="i18n/es.js?v=221"></script>
-<script src="app.js?v=221"></script>
+<script src="i18n/en.js?v=222"></script>
+<script src="i18n/es.js?v=222"></script>
+<script src="app.js?v=222"></script>
 </body>
 </html>
