@@ -5,7 +5,7 @@
 
 // La page et le code doivent être de la même version. Sinon (page gardée en cache
 // par le téléphone ou par GitHub), on recharge une page fraîche, au plus 3 fois.
-const APP_VERSION = 237;
+const APP_VERSION = 238;
 try {
   const meta = document.querySelector('meta[name="balise-version"]');
   const pageV = meta ? +meta.content : 0;
@@ -654,6 +654,7 @@ async function commitNotes() {
   store.set('gpx', text.length < 4.5e6 ? text : '');
   drawNotes(); trackDescUI();
   try {
+    if (mine.recItem) { mine.recItem.text = text; const r = mine.recItem; await idb('readwrite', st => st.put(r)); return; }
     const id = mine.name + '|' + Math.round(mine.total), it = (await listRecent()).find(x => x.id === id);
     if (it) await idb('readwrite', st => st.put(Object.assign({}, it, { text })));
   } catch { /* « Mes traces » indisponible : la trace ouverte garde ses notes */ }
@@ -1189,7 +1190,8 @@ function showSoDetail(it) {
   // partager le parcours de la sortie (lien, QR code, montre) : le tracé seul, sans les heures
   $('sdShare').onclick = () => {
     if (pts.length < 2) { toast('Sortie trop courte pour être partagée.', 3000); return; }
-    openSend({ name: recTitle(it), pts: pts.map(p => ({ lat: p.lat, lon: p.lon, ele: p.ele })), sub: move ? tr('fait en ') + fmtDur(move / 1000) : '' });
+    let g = {}; try { g = parseGPX(it.text); } catch {}
+    openSend({ name: recTitle(it), pts: pts.map(p => ({ lat: p.lat, lon: p.lon, ele: p.ele })), wpts: g.wpts || [], desc: g.desc || '', rec: it, sub: move ? tr('fait en ') + fmtDur(move / 1000) : '' });
   };
   stvButton(it);
   $('sdRename').onclick = async () => {
@@ -4788,7 +4790,9 @@ function wtNotes() {
   return { desc: (wtSrc && wtSrc.desc) || '', wpts: (wtSrc && wtSrc.wpts) || [] };
 }
 function wtNotesUI() {
-  const cur = !!(wtSrc && wtSrc.cur && track);
+  const cur = !!(wtSrc && wtSrc.cur && track), rec = !cur && wtSrc && wtSrc.rec;
+  $('wtRecNotes').hidden = !rec;
+  if (rec) { const n = (wtSrc.wpts || []).length; $('wtRecInfo').textContent = wtSrc.desc || n ? tr('Description et points notés inclus') + (n ? ` (${n})` : '') : tr('Ajoute une description ou des points (vue, eau, danger…) pour ceux qui le referont'); }
   $('wtNotes').hidden = !cur;
   if (!cur) return;
   $('wtDesc').value = track.desc || '';
@@ -4804,6 +4808,16 @@ function openSend(src) {
 }
 $('wtDesc').addEventListener('change', () => wtNotes());
 $('wtAddNote').onclick = () => { wtNotes(); $('watch').hidden = true; addNote('send'); };
+// sortie : on l'ouvre sur la carte comme une trace, liée à la sortie pour que les notes y soient enregistrées
+$('wtRecEdit').onclick = () => {
+  const it = wtSrc && wtSrc.rec; if (!it) return;
+  if (nav) { toast('Quitte d\'abord la navigation.', 3000); return; }
+  $('watch').hidden = true; closeSorties();
+  loadText(it.text, false); store.set('gpx', it.text.length < 4.5e6 ? it.text : '');
+  if (!track) return;
+  track.recItem = it; track.name = recTitle(it);
+  openSend({ name: track.name, pts: track.pts, cur: true, sub: wtSrc.sub });
+};
 // QR code du lien : à montrer sur l'écran, ou à imprimer (club, départ d'une boucle…)
 // le lien est raccourci (tracé plus simplifié) pour rester lisible par l'appareil photo
 async function qrLink() {
