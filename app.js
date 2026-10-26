@@ -5,7 +5,7 @@
 
 // La page et le code doivent être de la même version. Sinon (page gardée en cache
 // par le téléphone ou par GitHub), on recharge une page fraîche, au plus 3 fois.
-const APP_VERSION = 231;
+const APP_VERSION = 232;
 try {
   const meta = document.querySelector('meta[name="balise-version"]');
   const pageV = meta ? +meta.content : 0;
@@ -4121,6 +4121,7 @@ async function planGo(go = true) {
   const sg = plan.segs[0], simple = plan.wps.length === 2 && sg && !sg.straight;
   const style = simple && profile === 'trekking' ? sg.style || null : null;
   const pts = removeSpurs(planAll()), signals = plan.segs.flatMap(s => (s && s.pts.signals) || []);
+  litRemember(pts); // éclairage (itinéraire calculé de nuit, à pied)
   const back = go ? null : { go: plan.go, wps: plan.wps.map(w => Object.assign({}, w)), segs: plan.segs, straight: plan.straight };
   closePlan();
   await showTrack({ name: 'Vers ' + dest.label, pts, signals }, true);
@@ -4136,7 +4137,7 @@ $('ptView').onclick = async () => {
   if (plan.go) { planGo(false); return; }
   // tracé point par point : affiché dans l'aperçu (pas encore dans « Mes traces » : bouton Enregistrer) ;
   // fermer l'aperçu ramène au placement des points
-  const pts = removeSpurs(planAll());
+  const pts = removeSpurs(planAll()); litRemember(pts);
   const name = `Itinéraire ${profile === 'trekking' ? 'à vélo' : 'à pied'}`; // la distance s'affiche déjà à côté
   const back = { go: null, wps: plan.wps.map(w => Object.assign({}, w)), segs: plan.segs, straight: plan.straight };
   closePlan();
@@ -4159,7 +4160,7 @@ async function goTo(dest) {
   try { r = await fetchRoute(pos, dest, wait * 1000); }
   catch { await loadGraphs(); r = localRouteTo(pos, dest); }
   if (!r) { toast('Itinéraire impossible pour l\'instant, réessaie dans un instant.', 5000); return; }
-  r.pts.push({ lat: dest.lat, lon: dest.lon, ele: null });
+  r.pts.push({ lat: dest.lat, lon: dest.lon, ele: null, lit: (r.pts[r.pts.length - 1] || {}).lit }); litRemember(r.pts);
   if (!track) document.body.classList.remove('free');
   // le parcours suivi est gardé de côté : on peut le reprendre (« Reprendre le parcours »)
   if (track && !track.route) navPrev = { name: track.name, pts: track.pts.map(p => ({ lat: p.lat, lon: p.lon, ele: p.ele })) };
@@ -4186,7 +4187,7 @@ async function reroute() {
     let r;
     try { r = await fetchRoute(me, dest, Math.round(clamp(25 + hav(me, dest) / 1000 * 0.4, 25, 120)) * 1000, style); }
     catch (e) { await loadGraphs(); r = localRouteTo(me, dest); if (!r) throw e; }
-    r.pts.push({ lat: dest.lat, lon: dest.lon, ele: null });
+    r.pts.push({ lat: dest.lat, lon: dest.lon, ele: null, lit: (r.pts[r.pts.length - 1] || {}).lit }); litRemember(r.pts);
     await showTrack({ name: 'Vers ' + dest.label, pts: r.pts, signals: r.signals }, false);
     track.route = dest; track.style = style; isOff = false; offCount = 0; arrived = false;
     say('J\'ai recalculé l\'itinéraire.');
