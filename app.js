@@ -5,7 +5,7 @@
 
 // La page et le code doivent être de la même version. Sinon (page gardée en cache
 // par le téléphone ou par GitHub), on recharge une page fraîche, au plus 3 fois.
-const APP_VERSION = 235;
+const APP_VERSION = 236;
 try {
   const meta = document.querySelector('meta[name="balise-version"]');
   const pageV = meta ? +meta.content : 0;
@@ -700,6 +700,25 @@ const REP_KINDS = {
   ferme: '🚧 Chemin fermé ou impraticable', obstacle: '🌲 Obstacle (arbre tombé, éboulement…)', balisage: '🪧 Balisage manquant ou effacé',
   absent: '➕ Chemin absent de la carte', autre: '✏️ Autre problème'
 };
+// questions guidées par type : les réponses forment une note claire, que les bénévoles peuvent traiter sans venir sur place
+const REP_Q = {
+  ferme: [['Cause', ['Travaux', 'Éboulement ou effondrement', 'Propriété privée ou interdiction', 'Végétation envahissante', 'Inconnue']],
+          ['Durée', ['Temporaire', 'Durable', 'Je ne sais pas']]],
+  obstacle: [['Type', ['Arbre tombé', 'Éboulement', 'Boue ou inondation', 'Passerelle abîmée', 'Autre']],
+             ['Passage', ['Franchissable', 'Infranchissable']]],
+  balisage: [['Problème', ['Absent', 'Effacé', 'Contradictoire', 'Panneau manquant']]],
+  absent: [['Type de chemin', ['Sentier', 'Chemin large ou piste', 'Piste cyclable']],
+           ['Praticable', ['À pied', 'À vélo', 'À pied et à vélo']]],
+  autre: []
+};
+const REP_HINT = {
+  ferme: 'Précisions (facultatif) : panneau sur place, déviation possible…',
+  obstacle: 'Précisions (facultatif) : taille, contournement possible…',
+  balisage: 'Quel balisage ? Couleur, nom de l\'itinéraire (GR, PR…), sens de marche',
+  absent: 'Où mène ce chemin ? Revêtement, état…',
+  autre: 'Décris le problème (obligatoire)'
+};
+let repAns = {};
 const REP_DAY_MAX = 5;
 let repPt = null, repKind = 'ferme', repAfter = null;
 function openUrl(u) {
@@ -708,17 +727,40 @@ function openUrl(u) {
 }
 function openReport(pt, after) {
   if (!pt) { toast('Position GPS introuvable. Va à découvert et réessaie.', 4000); return; }
-  repPt = { lat: pt.lat, lon: pt.lon }; repAfter = after || null; repKind = 'ferme'; $('repText').value = ''; repKindsUI(); $('repMsg').hidden = true;
+  repPt = { lat: pt.lat, lon: pt.lon }; repAfter = after || null; repKind = 'ferme'; repAns = {}; $('repText').value = ''; repKindsUI(); $('repMsg').hidden = true;
   $('repDlg').hidden = false;
 }
 function repKindsUI() {
   const box = $('repKinds'); box.innerHTML = '';
   for (const k in REP_KINDS) {
     const b = document.createElement('button'); b.className = 'chip' + (k === repKind ? '' : ' nd-off'); b.textContent = tr(REP_KINDS[k]);
-    b.onclick = () => { repKind = k; repKindsUI(); }; box.appendChild(b);
+    b.onclick = () => { if (k !== repKind) { repKind = k; repAns = {}; } repKindsUI(); }; box.appendChild(b);
   }
-  $('repText').placeholder = tr(repKind === 'absent' || repKind === 'autre' ? 'Décris le problème (obligatoire)' : 'Précisions (facultatif) : depuis quand, sur quelle longueur…');
+  const qb = $('repQs'); qb.innerHTML = '';
+  for (const [q, opts] of REP_Q[repKind]) {
+    const row = document.createElement('div'); row.className = 'rep-q';
+    const lab = document.createElement('span'); lab.textContent = tr(q); row.appendChild(lab);
+    const ch = document.createElement('div'); ch.className = 'nd-kinds';
+    for (const o of opts) {
+      const b = document.createElement('button'); b.className = 'chip small' + (repAns[q] === o ? '' : ' nd-off'); b.textContent = tr(o);
+      b.onclick = () => { repAns[q] = repAns[q] === o ? undefined : o; repKindsUI(); }; ch.appendChild(b);
+    }
+    row.appendChild(ch); qb.appendChild(row);
+  }
+  $('repText').placeholder = tr(REP_HINT[repKind]);
+  repPreview();
 }
+// la note telle qu'elle partira : une ligne par information, la date du constat et le moyen de déplacement
+function repNoteText() {
+  const L = [tr(REP_KINDS[repKind].replace(/^\S+\s/, ''))];
+  for (const [q] of REP_Q[repKind]) if (repAns[q]) L.push(`${tr(q)} : ${tr(repAns[q])}`);
+  const det = $('repText').value.trim().slice(0, 500);
+  if (det) L.push(`${tr('Précisions')} : ${det}`);
+  L.push(tr(`Constaté ${profile === 'trekking' ? 'à vélo' : 'à pied'} le ${new Date().toLocaleDateString(LOC, { day: 'numeric', month: 'long', year: 'numeric' })}`));
+  return L.join('\n') + '\n\n#Pisteo';
+}
+function repPreview() { $('repPrev').textContent = repNoteText(); }
+$('repText').addEventListener('input', repPreview);
 function repClose() { $('repDlg').hidden = true; const a = repAfter; repAfter = null; if (a) a(); }
 const repQueue = () => { try { return JSON.parse(store.get('osmQueue') || '[]'); } catch { return []; } };
 const repSent = () => { try { return JSON.parse(store.get('osmSent') || '[]').filter(t => Date.now() - t < 864e5); } catch { return []; } };
@@ -726,9 +768,11 @@ $('repOk').onclick = async () => {
   if (!repPt) return;
   const det = $('repText').value.trim().slice(0, 500);
   const say = m => { $('repMsg').textContent = tr(m); $('repMsg').hidden = false; };
-  if ((repKind === 'absent' || repKind === 'autre') && det.length < 8) { say('Décris le problème en quelques mots : les bénévoles doivent comprendre quoi corriger.'); return; }
+  if ((repKind === 'absent' || repKind === 'autre' || repKind === 'balisage') && det.length < 8) { say(repKind === 'balisage' ? 'Indique le balisage concerné (couleur ou nom de l\'itinéraire) : sans ça, impossible de le corriger.' : 'Décris le problème en quelques mots : les bénévoles doivent comprendre quoi corriger.'); return; }
+  const missing = REP_Q[repKind].filter(([q]) => !repAns[q]).map(([q]) => tr(q).toLowerCase());
+  if (missing.length) { say(tr('Réponds aussi à : ') + missing.join(', ')); return; }
   if (repSent().length + repQueue().length >= REP_DAY_MAX) { say(`${REP_DAY_MAX} signalements par jour au plus, pour éviter les envois en double.`); return; }
-  const label = REP_KINDS[repKind].replace(/^\S+\s/, ''), text = `${tr(label)}${det ? ' : ' + det : ''}\n\n#Pisteo`;
+  const text = repNoteText();
   const q = repQueue(); q.push({ lat: +repPt.lat.toFixed(6), lon: +repPt.lon.toFixed(6), text, t: Date.now() }); store.set('osmQueue', JSON.stringify(q));
   repClose();
   const n = await repFlush();

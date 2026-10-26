@@ -9,13 +9,13 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<meta name="balise-version" content="235">
+<meta name="balise-version" content="236">
 <title>Pisteo</title>
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" href="icon.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
 <link rel="stylesheet" href="vendor/maplibre-gl.css">
-<link rel="stylesheet" href="app.css?v=235">
+<link rel="stylesheet" href="app.css?v=236">
 </head>
 <body>
 <div id="map" aria-label="Carte"></div>
@@ -418,7 +418,9 @@
       <button id="repCancel" class="closebtn" aria-label="Fermer"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></svg>Fermer</button>
     </div>
     <div id="repKinds" class="nd-kinds"></div>
-    <textarea id="repText" class="rep-text" rows="3" maxlength="500"></textarea>
+    <div id="repQs" class="rep-qs"></div>
+    <textarea id="repText" class="rep-text" rows="2" maxlength="500"></textarea>
+    <details class="rep-prev-box"><summary>Aperçu de la note</summary><pre id="repPrev" class="rep-prev"></pre></details>
     <p class="note">Ton signalement devient une note publique sur OpenStreetMap, à cet endroit, sans ton nom. Des bénévoles s'en servent pour corriger la carte. N'y mets pas d'informations personnelles.</p>
     <p id="repMsg" class="fin-msg" role="status" hidden></p>
     <button id="repOk" class="btn go">Envoyer à OpenStreetMap</button>
@@ -804,8 +806,8 @@
 
 <script src="vendor/maplibre-gl.js"></script>
 <script src="vendor/qrcode.js"></script>
-<script src="i18n/en.js?v=235"></script>
-<script src="i18n/es.js?v=235"></script>
-<script src="app.js?v=235"></script>
+<script src="i18n/en.js?v=236"></script>
+<script src="i18n/es.js?v=236"></script>
+<script src="app.js?v=236"></script>
 </body>
 </html>
