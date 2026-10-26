@@ -308,7 +308,7 @@ const exact = {
   'Niveau de détail': 'Detail level', 'Standard (routes, chemins, relief)': 'Standard (roads, paths, relief)', 'Détaillé (≈ 4× plus lourd)': 'Detailed (≈ 4× larger)',
   'Inclure les chemins pour les itinéraires hors connexion': 'Include paths for offline routing', 'Une zone de la carte · partout dans le monde': 'An area of the map · anywhere in the world',
   'Cadre la zone voulue sur la carte, puis télécharge-la.': 'Frame the area on the map, then download it.',
-  'Automatique (IGN en France, Monde ailleurs)': 'Automatic (IGN in France, World elsewhere)', 'IGN (France)': 'IGN (France)', 'Monde (OpenFreeMap)': 'World (OpenFreeMap)',
+  'Automatique (IGN en France, Monde ailleurs)': 'Automatic (IGN in France, World elsewhere)', 'IGN (France)': 'IGN (France)', 'Photos aériennes': 'Aerial photos', 'Photos aériennes : France seulement': 'Aerial photos: France only', 'Monde (OpenFreeMap)': 'World (OpenFreeMap)',
   'Choisir la zone sur la carte': 'Choose the area on the map', 'Arrêter le téléchargement': 'Stop the download', 'Téléchargées': 'Downloaded',
   'Aucune carte téléchargée pour l\'instant.': 'No maps downloaded yet.', 'Montrer ces zones sur la carte': 'Show these areas on the map', 'Tout supprimer': 'Delete all',
   'Carte téléchargée : Plan IGN (France), libre d\'utilisation hors ligne. Sans réseau, l\'appli passe toute seule sur cette carte. Garde l\'écran allumé pendant un téléchargement.':
@@ -452,7 +452,7 @@ const patterns = [
   [/^Itinéraire de retour : (.+) par le chemin( \(calculé hors connexion\))?$/, (m, t) => `Route back: ${t(m[1])} by trail${m[2] ? ' (calculated offline)' : ''}`],
   [/^Ligne droite : (.+)\. Trace à (.+), cap (\d+)°$/, (m, t) => `Straight line: ${t(m[1])}. Track ${m[2]} away, heading ${m[3]}°`],
   [/^pas de réseau, (.+)$/, 'no network, $1'],
-  [/^Fond de carte : (.+?)( · service bénévole, parfois lent ou indisponible)?$/, (m, t) => 'Base map: ' + t(m[1]) + (m[2] ? ' · volunteer service, sometimes slow or unavailable' : '')],
+  [/^Fond de carte : (.+?)( · service bénévole, parfois lent ou indisponible| · en ligne seulement)?$/, (m, t) => 'Base map: ' + t(m[1]) + (m[2] === ' · en ligne seulement' ? ' · online only' : m[2] ? ' · volunteer service, sometimes slow or unavailable' : '')],
   [/^(.+) ne répond pas : carte (.+) à la place$/, (m, t) => `${t(m[1])} is not responding: ${t(m[2])} map instead`],
   [/^Pas de réseau : carte (.+) hors ligne$/, (m, t) => `No network: offline ${t(m[1])} map`],
   [/^Trace chargée : (.+)$/, 'Track loaded: $1'],

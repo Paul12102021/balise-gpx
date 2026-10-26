@@ -308,7 +308,7 @@ const exact = {
   'Niveau de détail': 'Nivel de detalle', 'Standard (routes, chemins, relief)': 'Estándar (carreteras, caminos, relieve)', 'Détaillé (≈ 4× plus lourd)': 'Detallado (≈ 4× más pesado)',
   'Inclure les chemins pour les itinéraires hors connexion': 'Incluir los caminos para rutas sin conexión', 'Une zone de la carte · partout dans le monde': 'Una zona del mapa · en todo el mundo',
   'Cadre la zone voulue sur la carte, puis télécharge-la.': 'Encuadra la zona en el mapa y descárgala.',
-  'Automatique (IGN en France, Monde ailleurs)': 'Automático (mapa nacional si existe, Mundo en otros sitios)', 'IGN (France)': 'IGN (Francia)', 'Monde (OpenFreeMap)': 'Mundo (OpenFreeMap)',
+  'Automatique (IGN en France, Monde ailleurs)': 'Automático (mapa nacional si existe, Mundo en otros sitios)', 'IGN (France)': 'IGN (Francia)', 'Photos aériennes': 'Fotos aéreas', 'Photos aériennes : France seulement': 'Fotos aéreas: solo Francia', 'Monde (OpenFreeMap)': 'Mundo (OpenFreeMap)',
   'Choisir la zone sur la carte': 'Elegir la zona en el mapa', 'Arrêter le téléchargement': 'Detener la descarga', 'Téléchargées': 'Descargados',
   'Aucune carte téléchargée pour l\'instant.': 'Todavía no hay mapas descargados.', 'Montrer ces zones sur la carte': 'Mostrar estas zonas en el mapa', 'Tout supprimer': 'Eliminar todo',
   'Carte téléchargée : Plan IGN (France), libre d\'utilisation hors ligne. Sans réseau, l\'appli passe toute seule sur cette carte. Garde l\'écran allumé pendant un téléchargement.':
@@ -451,7 +451,7 @@ const patterns = [
   [/^Itinéraire de retour : (.+) par le chemin( \(calculé hors connexion\))?$/, (m, t) => `Ruta de vuelta: ${t(m[1])} por el camino${m[2] ? ' (calculada sin conexión)' : ''}`],
   [/^Ligne droite : (.+)\. Trace à (.+), cap (\d+)°$/, (m, t) => `Línea recta: ${t(m[1])}. Track a ${m[2]}, rumbo ${m[3]}°`],
   [/^pas de réseau, (.+)$/, 'sin conexión, $1'],
-  [/^Fond de carte : (.+?)( · service bénévole, parfois lent ou indisponible)?$/, (m, t) => 'Mapa base: ' + t(m[1]) + (m[2] ? ' · servicio voluntario, a veces lento o no disponible' : '')],
+  [/^Fond de carte : (.+?)( · service bénévole, parfois lent ou indisponible| · en ligne seulement)?$/, (m, t) => 'Mapa base: ' + t(m[1]) + (m[2] === ' · en ligne seulement' ? ' · solo en línea' : m[2] ? ' · servicio voluntario, a veces lento o no disponible' : '')],
   [/^(.+) ne répond pas : carte (.+) à la place$/, (m, t) => `${t(m[1])} no responde: mapa ${t(m[2])} en su lugar`],
   [/^Pas de réseau : carte (.+) hors ligne$/, (m, t) => `Sin conexión: mapa ${t(m[1])} sin conexión`],
   [/^Trace chargée : (.+)$/, 'Track cargado: $1'],

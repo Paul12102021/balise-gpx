@@ -318,6 +318,8 @@ function infoAt(along) {
 // =====================================================================
 // Plan IGN : données ouvertes, seul fond que l'on télécharge pour le hors ligne
 const IGN_URL = 'https://data.geopf.fr/wmts?SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0&LAYER=GEOGRAPHICALGRIDSYSTEMS.PLANIGNV2&STYLE=normal&TILEMATRIXSET=PM_0_19&TILEMATRIX={z}&TILEROW={y}&TILECOL={x}&FORMAT=image/png';
+// Photos aériennes IGN (BD ORTHO) : données ouvertes, France et outre-mer seulement, affichage en ligne
+const ORTHO_URL = 'https://data.geopf.fr/wmts?SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0&LAYER=ORTHOIMAGERY.ORTHOPHOTOS&STYLE=normal&TILEMATRIXSET=PM_0_19&TILEMATRIX={z}&TILEROW={y}&TILECOL={x}&FORMAT=image/jpeg';
 // IGN et Monde : libres de diffusion, utilisables hors ligne.
 // Topo et CyclOSM : serveurs de bénévoles, affichage en ligne seulement, sans garantie de service.
 // Cartes officielles libres et téléchargeables, chacune dans son pays : le premier fond prend celle du pays affiché
@@ -352,6 +354,7 @@ const mercBBox = (z, x, y) => { const o = Math.PI * 6378137, s = 2 * o / 2 ** z;
 const natTileUrl = prov => (z, x, y) => NAT[prov].url.replace('{z}', z).replace('{x}', x).replace('{y}', y).replace('{bbox-epsg-3857}', mercBBox(+z, +x, +y));
 const LAYERS = [
   { id: 'ign', get name() { return NAT[natCur].name; }, get tiles() { return [NAT[natCur].url]; }, get max() { return NAT[natCur].max; }, get attr() { return NAT[natCur].attr; } },
+  { id: 'ortho', name: 'Photos aériennes', tiles: [ORTHO_URL], max: 19, france: true, attr: '© <a href="https://www.ign.fr">IGN</a> · BD ORTHO' },
   { id: 'monde', name: 'Monde (OpenFreeMap)', vector: true, max: 14 },
   { id: 'topo', name: 'Topo', tiles: ['a', 'b', 'c'].map(s => `https://${s}.tile.opentopomap.org/{z}/{x}/{y}.png`), max: 17, volunteer: true,
     attr: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>, SRTM · © <a href="https://opentopomap.org">OpenTopoMap</a>' },
@@ -522,21 +525,25 @@ async function setLayer(i, remember = true) {
 }
 $('btnLayer').onclick = () => {
   offlineSwitched = null;
-  const next = (layerIdx + 1) % LAYERS.length;
-  setLayer(next); toast('Fond de carte : ' + LAYERS[next].name + (LAYERS[next].volunteer ? ' · service bénévole, parfois lent ou indisponible' : ''), LAYERS[next].volunteer ? 4000 : 2800);
+  // les photos aériennes IGN ne couvrent que la France : on les saute quand la carte est sur un autre pays
+  let next = (layerIdx + 1) % LAYERS.length;
+  while (LAYERS[next].france && natCur !== 'ign') next = (next + 1) % LAYERS.length;
+  const N = LAYERS[next];
+  setLayer(next); toast('Fond de carte : ' + N.name + (N.volunteer ? ' · service bénévole, parfois lent ou indisponible' : N.france ? ' · en ligne seulement' : ''), N.volunteer ? 4000 : 2800);
 };
 // Fond bénévole qui ne répond plus : on passe sur IGN (France) ou Monde, sans changer le choix enregistré
 let baseErrs = [];
 map.on('error', e => {
   const L = LAYERS[layerIdx];
-  if (!L || !L.volunteer || e.sourceId !== 'base' || navigator.onLine === false) return;
+  if (!L || !(L.volunteer || L.france) || e.sourceId !== 'base' || navigator.onLine === false) return;
   const now = Date.now(); baseErrs = baseErrs.filter(t => now - t < 20000); baseErrs.push(now);
   if (baseErrs.length < 8) return;
   baseErrs = [];
   const c = map.getCenter(), inFr = c.lng > -5.5 && c.lng < 9.8 && c.lat > 41.2 && c.lat < 51.2;
-  const to = LAYERS.findIndex(l => l.id === (inFr ? 'ign' : 'monde'));
+  // photos aériennes hors de France : pas d'images → carte officielle du pays affiché (ou Monde)
+  const to = L.france ? (natCur !== 'ign' || inFr ? 0 : LAYERS.findIndex(l => l.id === 'monde')) : LAYERS.findIndex(l => l.id === (inFr ? 'ign' : 'monde'));
   setLayer(to, false);
-  toast(`${L.name} ne répond pas : carte ${LAYERS[to].name} à la place`, 4500);
+  toast(L.france && !inFr ? 'Photos aériennes : France seulement' : `${L.name} ne répond pas : carte ${LAYERS[to].name} à la place`, 4500);
 });
 
 // Sans réseau, on bascule tout seul sur la carte IGN téléchargée, puis on revient au fond choisi

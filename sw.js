@@ -1,6 +1,6 @@
 /* Service worker : appli disponible hors ligne + tuiles de carte en cache */
-const APP = 'app-v232', TILES = 'tiles-v2';
-const SHELL = ['./', 'index.html', 'app.css?v=232', 'app.js?v=232', 'i18n/en.js?v=232', 'i18n/es.js?v=232', 'vendor/maplibre-gl.js', 'vendor/maplibre-gl.css',
+const APP = 'app-v233', TILES = 'tiles-v2';
+const SHELL = ['./', 'index.html', 'app.css?v=233', 'app.js?v=233', 'i18n/en.js?v=233', 'i18n/es.js?v=233', 'vendor/maplibre-gl.js', 'vendor/maplibre-gl.css',
   'departements.json', 'regions/countries.json', 'manifest.webmanifest', 'icon.svg', 'icon-192.png', 'icon-512.png', 'icon-maskable-512.png', 'apple-touch-icon.png'];
 
 // Clé de cache commune avec la page : https://tiles.balise/<fond>/<z>/<x>/<y>
@@ -34,7 +34,7 @@ function parseTile(url) {
   if (url.hostname === 'basemap.nationalmap.gov' && (m = url.pathname.match(/^\/arcgis\/rest\/services\/USGSTopo\/MapServer\/tile\/(\d+)\/(\d+)\/(\d+)$/)))
     return { prov: 'us', z: +m[1], x: +m[3], y: +m[2] };
   if (url.hostname === 'data.geopf.fr' && /GetTile/i.test(url.searchParams.get('REQUEST') || ''))
-    return { prov: 'ign', z: +url.searchParams.get('TILEMATRIX'), x: +url.searchParams.get('TILECOL'), y: +url.searchParams.get('TILEROW') };
+    return { prov: /ORTHOIMAGERY/i.test(url.searchParams.get('LAYER') || '') ? 'ortho' : 'ign', z: +url.searchParams.get('TILEMATRIX'), x: +url.searchParams.get('TILECOL'), y: +url.searchParams.get('TILEROW') };
   return null;
 }
 
