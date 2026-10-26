@@ -5,7 +5,7 @@
 
 // La page et le code doivent être de la même version. Sinon (page gardée en cache
 // par le téléphone ou par GitHub), on recharge une page fraîche, au plus 3 fois.
-const APP_VERSION = 229;
+const APP_VERSION = 230;
 try {
   const meta = document.querySelector('meta[name="balise-version"]');
   const pageV = meta ? +meta.content : 0;
@@ -2820,13 +2820,29 @@ async function makeLoop() {
   loopCfg.seed = (loopCfg.seed + 137.5) % 360; // la prochaine proposition partira dans une autre direction
   const t0 = Date.now(), tick = setInterval(() => toast(`Recherche d'une boucle… ${Math.round((Date.now() - t0) / 1000)} s`, 3000), 1000);
   try {
-    // de nuit : trois directions essayées en même temps, on garde la plus éclairée (les données d'éclairage sont inégales selon les quartiers)
+    // de nuit : trois directions essayées en même temps ; puis les points de passage sont posés sur des rues
+    // éclairées trouvées par ces essais (les trajets entre eux restent ainsi dans l'éclairé)
     if (profile !== 'trekking' && routeLitOn()) {
+      const pool = [], addPool = pts => { let last = null; for (const q of pts) if (q.lit === 'y' && (!last || hav(last, q) > 40)) { pool.push(q); last = q; } };
+      const evalLoop = pts => { const p = makePath(pts, ''), m = measure(p), err = Math.abs(m - target) / target, sh = litShare(pts); return { pts, m, err, sh, score: sh - Math.max(0, err - 0.1) * 3 }; };
       const angs = [ang, (ang + 120) % 360, (ang + 240) % 360];
-      const res = await Promise.all(angs.map(a => routeVia(loopPoints(start, r, a), 45000).then(p => removeSpurs(p), () => null)));
-      let bestA = null, bestS = -1;
-      res.forEach((p, i) => { if (!p) return; const s = litShare(p); if (s > bestS) { bestS = s; bestA = angs[i]; } });
-      if (bestA != null) ang = bestA;
+      const probes = await Promise.all(angs.map(a => routeVia(loopPoints(start, r, a), 45000).then(p => removeSpurs(p), () => null)));
+      let night = null, nightAng = ang;
+      probes.forEach((p, i) => { if (!p) return; litRemember(p); addPool(p); const c = evalLoop(p); if (!night || c.score > night.score) { night = c; nightAng = angs[i]; } });
+      if (night) {
+        for (let k = 0; k < 2 && !(night.err < 0.12 && night.sh >= 0.85); k++) {
+          r *= clamp(target / night.m, 0.6, 1.6);
+          const wps = loopPoints(start, r, nightAng);
+          for (let w = 1; w < wps.length - 1; w++) { // le point éclairé connu le plus proche
+            let bq = null, bd = r * 0.7; for (const q of pool) { const d = hav(q, wps[w]); if (d < bd) { bd = d; bq = q; } }
+            if (bq) wps[w] = { lat: bq.lat, lon: bq.lon };
+          }
+          let pts; try { pts = removeSpurs(await routeVia(wps, 45000)); } catch (e) { if (!e.server) throw e; break; }
+          litRemember(pts); addPool(pts);
+          const c = evalLoop(pts); if (c.score > night.score) night = c;
+        }
+        clearInterval(tick); showLoop(night.pts); return;
+      }
     }
     for (let tryN = 0; tryN < 4; tryN++) {
       let pts;
@@ -6307,7 +6323,7 @@ function litUI() {
       if (c.length > 1) feats.push({ type: 'Feature', properties: { k }, geometry: { type: 'LineString', coordinates: c } });
     }
     const pc = Math.round(len.y / track.total * 100);
-    chip.innerHTML = `💡 ${pc} % ${tr('éclairé')}${len.n > 30 ? ` <span>· ${fmtDist(len.n)} ${tr('sombre')}</span>` : ''}${len.u > 30 ? ` <span>· ${fmtDist(len.u)} ${tr('inconnu')}</span>` : ''}`;
+    chip.innerHTML = `💡 ${pc} % ${tr('éclairé')}${len.n > 30 ? ` <span>· ${fmtDist(len.n)} ${tr('sombre')}</span>` : ''}${len.u > 30 ? ` <span>· ${fmtDist(len.u)} ${tr('non renseigné')}</span>` : ''}`;
   }
   chip.hidden = !segs || nav;
   const data = { type: 'FeatureCollection', features: feats };
