@@ -5,7 +5,7 @@
 
 // La page et le code doivent être de la même version. Sinon (page gardée en cache
 // par le téléphone ou par GitHub), on recharge une page fraîche, au plus 3 fois.
-const APP_VERSION = 222;
+const APP_VERSION = 223;
 try {
   const meta = document.querySelector('meta[name="balise-version"]');
   const pageV = meta ? +meta.content : 0;
@@ -5776,7 +5776,11 @@ document.addEventListener('click', e => {
   for (const sel of document.querySelectorAll('select')) {
     if (sel.disabled || !sel.offsetParent) continue;
     const r = sel.getBoundingClientRect();
-    if (e.clientX >= r.left && e.clientX <= r.right && e.clientY >= r.top && e.clientY <= r.bottom) { e.preventDefault(); e.stopPropagation(); openPicker(sel); return; }
+    if (!(e.clientX >= r.left && e.clientX <= r.right && e.clientY >= r.top && e.clientY <= r.bottom)) continue;
+    // seulement si rien n'est par-dessus (une fenêtre ouverte au même endroit, ex. Strava sur « Indications »)
+    const top = document.elementFromPoint(e.clientX, e.clientY);
+    if (!top || !(sel === top || sel.parentElement.contains(top))) continue;
+    e.preventDefault(); e.stopPropagation(); openPicker(sel); return;
   }
 }, true);
 
