@@ -5,7 +5,7 @@
 
 // La page et le code doivent être de la même version. Sinon (page gardée en cache
 // par le téléphone ou par GitHub), on recharge une page fraîche, au plus 3 fois.
-const APP_VERSION = 227;
+const APP_VERSION = 228;
 try {
   const meta = document.querySelector('meta[name="balise-version"]');
   const pageV = meta ? +meta.content : 0;
@@ -628,7 +628,7 @@ function closeTrack(quiet) {
   const savedText = store.get('gpx');
   if (nav) stopNav();
   track = null; progress = null; done = null; clearRejoin(); $('loopBar').hidden = true; $('rtBar').hidden = true;
-  wxOn = false; wxDep = null; scrubD = null; if (scrubMk) scrubMk.remove(); wxApply(); trChipsUpdate(); // la météo part avec la trace
+  litShown = false; wxOn = false; wxDep = null; scrubD = null; if (scrubMk) scrubMk.remove(); wxApply(); trChipsUpdate(); // la météo part avec la trace
   // parcours balisés : on quitte leur affichage avec la trace (sauf si leur panneau est ouvert)
   if (rtMapOn && $('routes').hidden) rtHideMap();
   setSrc('track', EMPTY); setSrc('turn', EMPTY); litUI();
@@ -4259,7 +4259,7 @@ function drawProfileOn(cv) {
   // marge gauche à la largeur des altitudes affichées (pas d'espace perdu avant elles)
   const ticks = eleTicks(lo, hi, [10, 20, 50, 100, 200, 250, 500, 1000]);
   const L0 = Math.ceil(Math.max(14, ...ticks.map(t => ctx.measureText(t[1]).width))) + 5; cv._L0 = L0;
-  const LB = track.lit ? 7 : 0; // bande « éclairage »
+  const LB = track.lit && litShown ? 7 : 0; // bande « éclairage »
   const B = (T ? 26 : 16) + LB, w = W - L0 - 4, h = H - B - 4 - T; // météo : place pour la bande « ciel » au-dessus des km
   const X = d => L0 + d / track.total * w, Y = e => 4 + T + (1 - (e - lo) / (hi - lo)) * h;
   if (T) wxBands(ctx, X, 4 + T, h);
@@ -6292,8 +6292,11 @@ function litShare(pts) {
 }
 function litFor(t) { return t && t.pts.length > 1 ? litCache.get(litKey(t.pts, t.total)) || null : null; }
 // résumé et portions sombres sur la carte
+// bouton ampoule (comme la météo) : affiche ou masque l'éclairage ; visible seulement quand on le connaît
+var litShown = false;
 function litUI() {
-  const segs = track && track.lit, chip = $('litChip');
+  const known = !!(track && track.lit), segs = known && litShown ? track.lit : null, chip = $('litChip');
+  $('btnLit').hidden = !known || nav; $('btnLit').classList.toggle('on', !!segs);
   const feats = [];
   if (segs) {
     const len = { y: 0, n: 0, u: 0 };
@@ -6334,6 +6337,7 @@ function isDarkNow() {
   const now = Date.now(), st = sunTimes(now, c.lat, c.lon); if (!st) return false;
   return now > st.set - 20 * 60000 || now < st.rise + 10 * 60000;
 }
+$('btnLit').onclick = () => { litShown = !litShown; litUI(); drawProfile(); };
 $('optLit').checked = store.get('litNight') === '1';
 $('optLit').onchange = e => store.set('litNight', e.target.checked ? '1' : '0');
 

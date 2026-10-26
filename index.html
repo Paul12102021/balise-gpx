@@ -9,13 +9,13 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<meta name="balise-version" content="227">
+<meta name="balise-version" content="228">
 <title>Pisteo</title>
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" href="icon.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
 <link rel="stylesheet" href="vendor/maplibre-gl.css">
-<link rel="stylesheet" href="app.css?v=227">
+<link rel="stylesheet" href="app.css?v=228">
 </head>
 <body>
 <div id="map" aria-label="Carte"></div>
@@ -136,6 +136,9 @@
   <div class="trackrow">
     <div class="trackname" id="trackName">Aucune trace chargée</div>
     <button id="btnSaveTr" class="closebtn save" hidden aria-label="Enregistrer la trace dans Mes traces"></button>
+    <button id="btnLit" class="closebtn icon wx-btn" hidden aria-label="Éclairage le long du parcours" title="Éclairage">
+      <svg viewBox="0 0 24 24"><path d="M9 18h6M10 21h4"/><path d="M12 3a6 6 0 0 0-3.5 10.9c.6.5 1 1.2 1 2.1h5c0-.9.4-1.6 1-2.1A6 6 0 0 0 12 3z"/></svg>
+    </button>
     <button id="wxInfo" class="closebtn icon" hidden aria-label="Légende météo" title="Légende météo">
       <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><path d="M12 11v5.5M12 7.6v.1"/></svg>
     </button>
@@ -761,8 +764,8 @@
 <div id="toast" class="toast" hidden></div>
 
 <script src="vendor/maplibre-gl.js"></script>
-<script src="i18n/en.js?v=227"></script>
-<script src="i18n/es.js?v=227"></script>
-<script src="app.js?v=227"></script>
+<script src="i18n/en.js?v=228"></script>
+<script src="i18n/es.js?v=228"></script>
+<script src="app.js?v=228"></script>
 </body>
 </html>
