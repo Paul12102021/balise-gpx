@@ -47,10 +47,25 @@ export default {
         if (b.code) { body.set('code', b.code); body.set('grant_type', 'authorization_code'); }
         else if (b.refresh_token) { body.set('refresh_token', b.refresh_token); body.set('grant_type', 'refresh_token'); }
         else return json({ message: 'code ou refresh_token manquant' }, 400);
-        return pass(await fetch('https://www.strava.com/oauth/token', { method: 'POST', body }));
+        const r = await fetch('https://www.strava.com/oauth/token', { method: 'POST', body }), txt = await r.text();
+        // nouvelle connexion : l'athlète est compté (suivi de la capacité Strava, page d'administration)
+        if (r.ok && env.CATALOGUE) { try {
+          const j = JSON.parse(txt); let id = j.athlete && j.athlete.id;
+          // renouvellement (toutes les 6 h) : on retrouve l'athlète, pour compter aussi ceux connectés avant ce suivi
+          if (!id && j.access_token) id = (await (await fetch(API + '/athlete', { headers: { Authorization: 'Bearer ' + j.access_token } })).json()).id;
+          if (id && !(await env.CATALOGUE.get('stv:ath:' + id))) await env.CATALOGUE.put('stv:ath:' + id, new Date().toISOString().slice(0, 10));
+        } catch {} }
+        return new Response(txt, { status: r.status, headers: { ...cors, 'Content-Type': r.headers.get('Content-Type') || 'application/json' } });
       }
       const auth = req.headers.get('Authorization') || '';
       if (!/^Bearer \S+$/.test(auth)) return json({ message: 'jeton manquant' }, 401);
+      // déconnexion depuis Pisteo : l'autorisation est retirée chez Strava (une place de libérée) et l'athlète décompté
+      if (path === '/revoke' && req.method === 'POST') {
+        let id = null; try { id = (await (await fetch(API + '/athlete', { headers: { Authorization: auth } })).json()).id; } catch {}
+        const r = await fetch('https://www.strava.com/oauth/deauthorize', { method: 'POST', headers: { Authorization: auth } });
+        if (id && env.CATALOGUE) await env.CATALOGUE.delete('stv:ath:' + id);
+        return json({ ok: r.ok });
+      }
       // dépôt d'un GPX
       if (path === '/upload' && req.method === 'POST') {
         return pass(await fetch(API + '/uploads', { method: 'POST', headers: { Authorization: auth }, body: await req.formData() }));
@@ -290,7 +305,9 @@ ${(it.ph || []).length ? `<div class="phs">${it.ph.map(p => `<div class="ph${p.o
 <div class="acts"><a href="https://pisteo.app/p/${esc(it.h)}" target="_blank" rel="noopener">Ouvrir dans Pisteo ↗</a>${form(it.id, it.hidden ? '<button class="ok" name="act" value="show">Remettre en ligne</button>' : '<button name="act" value="hide">Masquer</button>')}${form(it.id, `<button class="no" name="act" value="del" onclick="return confirm('Supprimer définitivement « ${esc(it.name).replace(/'/g, '’')} » ?')">Supprimer</button>`)}</div>
 </div></article>`));
   const nPh = idx.reduce((a, it) => a + waitN(it), 0);
-  const head = `<header><h1>⭐ Catalogue Pisteo</h1><div class="stats"><div class="st"><b>${idx.filter(x => !x.hidden).length}</b>en ligne</div><div class="st"><b>${nPh}</b>photo${nPh > 1 ? 's' : ''} à valider</div><div class="st"><b>${idx.filter(x => x.rep || x.hidden).length}</b>signalé${idx.filter(x => x.rep || x.hidden).length > 1 ? 's' : ''} ou masqué${idx.filter(x => x.rep || x.hidden).length > 1 ? 's' : ''}</div><div class="st"><b>${idx.filter(x => x.date === new Date().toISOString().slice(0, 10)).length}</b>aujourd'hui</div></div>
+  // athlètes connectés à Strava via Pisteo (capacité de l'appli Strava : 10 avant validation)
+  let nStv = 0; try { let cur; do { const l = await env.CATALOGUE.list({ prefix: 'stv:ath:', cursor: cur }); nStv += l.keys.length; cur = l.list_complete ? null : l.cursor; } while (cur); } catch {}
+  const head = `<header><h1>⭐ Catalogue Pisteo</h1><div class="stats"><div class="st"><b>${idx.filter(x => !x.hidden).length}</b>en ligne</div><div class="st"><b>${nPh}</b>photo${nPh > 1 ? 's' : ''} à valider</div><div class="st"><b>${idx.filter(x => x.rep || x.hidden).length}</b>signalé${idx.filter(x => x.rep || x.hidden).length > 1 ? 's' : ''} ou masqué${idx.filter(x => x.rep || x.hidden).length > 1 ? 's' : ''}</div><div class="st"><b>${idx.filter(x => x.date === new Date().toISOString().slice(0, 10)).length}</b>aujourd'hui</div><div class="st"><b>${nStv}</b>connecté${nStv > 1 ? 's' : ''} Strava</div></div>
 <nav>${tabs.map(([id, l, arr]) => `<a href="?key=${k}&f=${id}" class="${id === f ? 'on' : ''}">${l} (${arr.length})</a>`).join('')}</nav></header>`;
   const empty = { wait: 'Aucune photo à valider. 👌', rep: 'Aucun parcours signalé.', all: 'Aucun parcours pour l’instant.' }[f] || '';
   return page(`${head}<main>${cards.join('') || `<p class="empty">${empty}</p>`}</main>`);

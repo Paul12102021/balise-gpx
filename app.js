@@ -5,7 +5,7 @@
 
 // La page et le code doivent être de la même version. Sinon (page gardée en cache
 // par le téléphone ou par GitHub), on recharge une page fraîche, au plus 3 fois.
-const APP_VERSION = 248;
+const APP_VERSION = 249;
 try {
   const meta = document.querySelector('meta[name="balise-version"]');
   const pageV = meta ? +meta.content : 0;
@@ -1500,7 +1500,11 @@ $('stvClose').onclick = () => { $('strava').hidden = true; };
 $('strava').onclick = e => { if (e.target === $('strava')) $('strava').hidden = true; };
 $('stvAuto').onchange = e => { store.set('stvAuto', e.target.checked ? '1' : '0'); stvUI(); };
 $('stvRetryBtn').onclick = () => { store.set('stvInactive', ''); stvUI(); toast('Envoi direct réactivé : essaie « Mettre sur Strava » sur une sortie', 4000); };
-$('stvOff').onclick = () => { store.set('stvTok', ''); stvUI(); toast('Strava déconnecté'); };
+$('stvOff').onclick = async () => {
+  // l'autorisation est aussi retirée chez Strava (libère une place sur les 10 de l'appli Strava)
+  try { const a = await stvAccess(); if (a) await fetch(STRAVA_RELAY + '/revoke', { method: 'POST', headers: { Authorization: 'Bearer ' + a } }); } catch {}
+  store.set('stvTok', ''); stvUI(); toast('Strava déconnecté');
+};
 $('stvConnect').onclick = () => {
   if (!STRAVA_RELAY) return;
   const q = `client_id=${STRAVA_CLIENT_ID}&response_type=code&approval_prompt=auto&scope=read,activity:write`;
