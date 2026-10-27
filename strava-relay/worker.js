@@ -272,6 +272,7 @@ addEventListener('pageshow',e=>{if(e.persisted)location.reload()})</script></bod
   const esc = t => String(t).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
   const key = url.searchParams.get('key') || '';
   if (!env.ADMIN_KEY || key !== env.ADMIN_KEY || !env.CATALOGUE) return page('<main><p class="empty">Accès refusé.</p></main>', 403);
+  if (url.searchParams.get('tab') === 'stats' && url.searchParams.get('csv')) return statsCsv(env, url);
   if (url.searchParams.get('tab') === 'stats') return page(await statsHtml(env, url, encodeURIComponent(key), esc));
   const idx = await loadIndex(env);
   if (req.method === 'POST') {
@@ -398,7 +399,8 @@ ${kpi('Calcul d’une boucle', g(T, 'c:boucle_calculs') ? (g(T, 'c:boucle_second
     return `<div class="dim"><b>${l}</b>${arr.map(([v, c]) => `<span>${esc(v)} <i>${Math.round(c / devDays * 100)} %</i></span>`).join('')}</div>`; }).join('');
   const known = new Set(Object.keys(ST_LABELS).map(x => 'c:' + x));
   const others = Object.entries(T).filter(([key]) => key.startsWith('c:') && !known.has(key) && !key.startsWith('c:err:') && !key.startsWith('c:carte_') && !key.startsWith('c:fond_')).map(([key, v]) => [key.slice(2), v]);
-  const pers = ['7', '30', 'all'].map(x => `<a class="${x === per ? 'on' : ''}" href="?key=${k}&tab=stats&p=${x}">${x === 'all' ? 'Tout' : x + ' jours'}</a>`).join('');
+  const pers = ['7', '30', 'all'].map(x => `<a class="${x === per ? 'on' : ''}" href="?key=${k}&tab=stats&p=${x}">${x === 'all' ? 'Tout' : x + ' jours'}</a>`).join('')
+    + `<a style="margin-left:auto" href="?key=${k}&tab=stats&p=${per}&csv=1">⬇ Excel</a>`;
   return nav + `<main><style>.per{display:flex;gap:6px}.per a{background:var(--chip);border-radius:999px;padding:5px 12px;font-weight:600;font-size:13px;color:var(--ink);text-decoration:none}.per a.on{background:var(--go);color:#fff}
 .kpis{display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:8px}.k{background:var(--card);border-radius:14px;padding:10px 12px}.k b{display:block;font-size:24px}.k small{color:var(--mut);display:block}.k i{font-style:normal;font-size:12px;font-weight:700}.k i.up{color:#3A9A6A}.k i.dn{color:#C8412F}
 .scard{display:block;background:var(--card);border-radius:14px;padding:12px;margin-top:10px}.scard h3{margin:0 0 8px;font-size:13px;color:var(--mut);text-transform:uppercase;letter-spacing:.05em}
@@ -414,4 +416,21 @@ ${barList('Fonds de carte choisis', pref('c:fond_'), '#2F5E45')}
 ${barList('Erreurs de l’appli', pref('c:err:'), '#C8412F')}
 ${barList('Autres compteurs', others, '#8a959e')}
 <p class="note">Anonyme : chaque appareil envoie une fois par jour les compteurs de la veille, additionnés ici par jour (aucune ligne par appareil, aucune position). Les chiffres arrivent avec un jour de décalage.</p></main>`;
+}
+
+// export pour Excel : une ligne par jour, une colonne par compteur (séparateur « ; », virgule décimale, UTF-8 avec BOM)
+async function statsCsv(env, url) {
+  if (!env.STATS) return new Response('Base STATS non reliée', { status: 503 });
+  await stInit(env);
+  const per = url.searchParams.get('p') || '30', n = per === 'all' ? 3650 : +per || 30;
+  const since = new Date(Date.now() - n * 864e5).toISOString().slice(0, 10);
+  const rows = (await env.STATS.prepare('SELECT day, k, v FROM daily WHERE day >= ?1 ORDER BY day').bind(since).all()).results;
+  const keys = [...new Set(rows.map(r => r.k))].sort((a, b) => (a === 'dev' ? -1 : b === 'dev' ? 1 : a.localeCompare(b)));
+  const byDay = {}; for (const r of rows) (byDay[r.day] = byDay[r.day] || {})[r.k] = r.v;
+  const name = k => k === 'dev' ? 'appareils actifs' : k.startsWith('c:') ? (ST_LABELS[k.slice(2)] || k.slice(2)) : k.startsWith('d:') ? k.slice(2).replace(':', ' = ') : k;
+  const cell = v => { const t = String(v).replace(/"/g, '""'); return /[;"\n]/.test(t) ? `"${t}"` : t; };
+  const num = v => v == null ? '' : String(Math.round(v * 10) / 10).replace('.', ',');
+  const lines = [['Jour', ...keys.map(name)].map(cell).join(';')];
+  for (const d of Object.keys(byDay).sort()) lines.push([d, ...keys.map(k => num(byDay[d][k]))].join(';'));
+  return new Response('﻿' + lines.join('\r\n'), { headers: { 'Content-Type': 'text/csv; charset=utf-8', 'Content-Disposition': `attachment; filename="pisteo-statistiques-${per === 'all' ? 'tout' : per + 'j'}-${new Date().toISOString().slice(0, 10)}.csv"`, 'Cache-Control': 'no-store' } });
 }
