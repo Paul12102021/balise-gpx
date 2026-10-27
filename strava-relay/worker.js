@@ -487,6 +487,65 @@ const ETAT = [
   ['geofabrik', 'Geofabrik (mise à jour des données)', 'https://download.geofabrik.de/europe/france-updates/state.txt', t => /sequenceNumber/.test(t), 0, 'openstreetmap.fr'],
 ];
 // un échec est retesté une fois 5 s plus tard (évite les fausses alertes sur un raté passager)
+// Pour juger une panne : ce que voient les utilisateurs, ce que Paul doit faire, et au bout de combien d'heures prévenir Claude
+// (tell : 0 = tout de suite ; null = jamais, ça se règle tout seul)
+const ETAT_GUIDE = {
+  site: { impact: 'Les personnes qui ont déjà ouvert Pisteo continuent normalement (copie sur le téléphone). Les nouveaux ne peuvent pas l\'ouvrir.', todo: 'Regarde cloudflarestatus.com. Si Cloudflare annonce une panne : attendre. Sinon, ouvre Cloudflare › Workers & Pages › pisteo › Deployments et regarde si le dernier déploiement a échoué.', tell: 1 },
+  brouter: { impact: 'Les itinéraires passent par le secours OSRM : un peu moins fins, sans la variante « Balade » ni l\'option rues éclairées.', todo: 'Rien, attendre : BRouter est tenu par un bénévole et revient en général dans la journée.', tell: 72 },
+  osrm: { impact: 'Aucun pour l\'instant : c\'est le secours de BRouter, qui marche. Mais si BRouter tombe, il n\'y aura plus de calcul d\'itinéraire en ligne.', todo: 'Rien.', tell: 168 },
+  ign: { impact: 'En France, la carte Monde s\'affiche à la place du Plan IGN. Les cartes IGN téléchargées restent utilisables.', todo: 'Rien, attendre. L\'IGN annonce ses maintenances sur geoservices.ign.fr.', tell: 48 },
+  ortho: { impact: 'Les photos aériennes ne s\'affichent plus : l\'appli revient sur la carte IGN.', todo: 'Rien.', tell: 168 },
+  ofm: { impact: 'La carte Monde est remplacée par la carte officielle du pays. Les zones Monde déjà téléchargées restent utilisables.', todo: 'Rien, attendre.', tell: 72 },
+  topo: { impact: 'Fond optionnel remplacé automatiquement par IGN ou Monde.', todo: 'Rien : service bénévole, il revient en général tout seul.', tell: null },
+  cyclosm: { impact: 'Fond optionnel remplacé automatiquement par IGN ou Monde.', todo: 'Rien : service bénévole.', tell: null },
+  alti: { impact: 'Les altitudes viennent d\'Open-Meteo : un peu moins précises, sans conséquence pour la navigation.', todo: 'Rien.', tell: 168 },
+  adresses: { impact: 'La recherche d\'adresses en France ne répond plus ; les noms de lieux restent cherchables.', todo: 'Rien, attendre.', tell: 72 },
+  photon: { impact: 'La recherche de lieux passe par l\'index de l\'IGN : France seulement.', todo: 'Rien, attendre.', tell: 168 },
+  overpass: { impact: 'Téléchargement des chemins hors ligne et recherche « autour de moi » un peu plus lents : les miroirs prennent le relais.', todo: 'Rien : panne fréquente, ça revient seul.', tell: null },
+  overpass2: { impact: 'Un des deux miroirs d\'Overpass ne répond pas. Si le serveur principal est aussi en panne, il reste le troisième.', todo: 'Rien.', tell: null },
+  meteo: { impact: 'La météo du parcours vient de MET Norway (yr.no) : même affichage.', todo: 'Rien.', tell: 168 },
+  met: { impact: 'Aucun tant qu\'Open-Meteo marche : c\'est le secours de la météo.', todo: 'Rien.', tell: null },
+  altisecours: { impact: 'Aucun tant que l\'altitude IGN marche (c\'est son secours). Open-Meteo sert aussi la météo : à surveiller.', todo: 'Rien.', tell: 168 },
+  data: { impact: 'Les parcours balisés et points utiles sont lus directement sur GitHub (secours) ; ceux déjà vus restent sur le téléphone.', todo: 'Regarde githubstatus.com.', tell: 48 },
+  dataraw: { impact: 'Aucun tant que GitHub Pages marche : c\'est le secours des parcours balisés.', todo: 'Rien.', tell: 168 },
+  wmt: { impact: 'Le calque des parcours balisés hors France peut manquer ; le tracé passe par Overpass.', todo: 'Rien.', tell: null },
+  communes: { impact: 'Lors d\'un téléchargement de carte, les communes pour la recherche hors ligne ne sont pas récupérées.', todo: 'Rien, retélécharger la zone plus tard si besoin.', tell: null },
+  strava: { impact: 'Les sorties ne partent plus sur Strava. Elles restent dans « Mes sorties » et peuvent être envoyées plus tard (ou importées à la main).', todo: 'Regarde status.strava.com. Pense aussi à l\'abonnement développeur Strava (essai jusqu\'au ~24 nov.).', tell: 24 },
+  drive: { impact: 'La sauvegarde Google Drive échoue ; elle reprendra seule. L\'export en fichier marche toujours.', todo: 'Regarde google.com/appsstatus.', tell: 48 },
+  geofabrik: { impact: 'Aucun pour les utilisateurs. La mise à jour des données du 1er et du 15 utilise le serveur de secours.', todo: 'Rien.', tell: null },
+};
+const ETAT_NAT = { es: 1, at: 1, be: 1, ch: 1, gb: 1, de: 1, ca: 1, us: 1 };
+function etatGuide(r) {
+  if (ETAT_GUIDE[r.id]) return ETAT_GUIDE[r.id];
+  if (ETAT_NAT[r.id]) return { impact: 'Dans ce pays, la carte Monde s\'affiche à la place de la carte officielle. Les zones déjà téléchargées restent utilisables.', todo: r.id === 'gb' && (r.code === 401 || r.code === 403) ? 'Code ' + r.code + ' : la clé Ordnance Survey est peut-être expirée → vérifie sur osdatahub.os.uk, puis préviens-moi.' : 'Rien, attendre.', tell: r.id === 'gb' && (r.code === 401 || r.code === 403) ? 0 : 168 };
+  return { impact: '', todo: '', tell: 72 };
+}
+// verdict d'ensemble : act (agir / me prévenir), watch (secours actifs, rien à faire), ok
+function etatVerdict(e) {
+  const now = Date.now(), down = e.res.filter(r => !r.ok), is = id => down.some(r => r.id === id);
+  const items = down.map(r => {
+    const g = etatGuide(r), h = r.since ? (now - Date.parse(r.since)) / 36e5 : 0;
+    return { id: r.id, name: r.name, hours: Math.round(h * 10) / 10, impact: g.impact, todo: g.todo, tell: g.tell, overdue: g.tell != null && h >= g.tell };
+  });
+  const blocking = [];
+  if (is('site')) blocking.push('le site est injoignable pour les nouveaux utilisateurs');
+  if (is('brouter') && is('osrm')) blocking.push('plus aucun calcul d\'itinéraire en ligne (BRouter et son secours sont en panne)');
+  if (is('ign') && is('ofm')) blocking.push('la carte IGN et la carte Monde sont toutes les deux en panne');
+  if (is('data') && is('dataraw')) blocking.push('les parcours balisés ne se chargent plus (GitHub Pages et son secours)');
+  const overdue = items.filter(i => i.overdue);
+  let level = 'ok', title = 'Tout fonctionne', text = 'Rien à faire.';
+  if (blocking.length || overdue.length) {
+    level = 'act'; title = blocking.length ? 'Panne gênante' : 'Panne qui dure';
+    text = (blocking.length ? 'Les utilisateurs sont gênés : ' + blocking.join(' ; ') + '. ' : '') + (overdue.length ? 'Préviens Claude (bouton ci-dessous) : ' + overdue.map(i => i.name).join(', ') + '.' : 'Préviens Claude si ça dure plus d\'une heure.');
+  } else if (items.length) {
+    level = 'watch'; title = 'Secours en place, rien à faire';
+    text = 'L\'appli contourne ' + (items.length > 1 ? 'ces pannes' : 'cette panne') + ' toute seule. Je te dirai quand me prévenir si ça dure.';
+  }
+  return { level, title, text, items };
+}
+function etatMessage(e, v) {
+  return `Pisteo – état des services du ${etatDate(e.t)} : ${v.title}.\n` + v.items.map(i => `- ${i.name} : en panne depuis ${i.hours} h (code ${(e.res.find(r => r.id === i.id) || {}).code || 'aucune réponse'})`).join('\n') + '\nPeux-tu regarder ce qu\'il faut faire ?';
+}
 async function etatOne(e) { const r = await etatTry(e); if (r.ok) return r; await new Promise(ok => setTimeout(ok, 5000)); return etatTry(e); }
 async function etatTry([id, name, u, test, crit, backup]) {
   const t0 = Date.now();
@@ -529,14 +588,27 @@ function etatResume(e) {
 }
 async function etatAdmin(env, url, k) {
   const nav = `<header><h1>🛰️ État des services</h1><nav><a href="?key=${k}">⭐ Catalogue</a><a href="?key=${k}&tab=stats">📊 Statistiques</a><a class="on" href="?key=${k}&tab=etat">🛰️ Services</a></nav></header>`;
-  const e = await etatLoad(env, url);
-  return nav + `<main><p>${etatResume(e)} · <a href="?key=${k}&tab=etat&maintenant=1">Revérifier maintenant</a></p>
-<p style="font-size:13px;opacity:.75">🔴 la navigation en dépend · 🟠 fonction annexe ou secours actif. Une panne isolée de moins de 2 h est souvent passagère. Détails : fiche « plan de secours » du projet.</p>${etatTable(e)}</main>`;
+  const e = await etatLoad(env, url), v = etatVerdict(e);
+  const col = { ok: '#22c55e', watch: '#f59e0b', act: '#ef4444' }[v.level], ic = { ok: '✅', watch: '🟠', act: '🔴' }[v.level];
+  const esc = t => String(t).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+  const dur = h => h < 1 ? 'moins d\'1 h' : h < 48 ? Math.round(h) + ' h' : Math.round(h / 24) + ' jours';
+  const tellTxt = i => i.tell == null ? 'Inutile : ça se règle tout seul.' : i.overdue ? '<b>Oui, maintenant.</b>' : i.tell === 0 ? '<b>Oui, tout de suite.</b>' : 'Seulement si ça dure plus de ' + dur(i.tell) + '.';
+  const cards = v.items.map(i => `<div class="ecard${i.overdue ? ' over' : ''}"><div class="eh"><b>${esc(i.name)}</b><span>en panne depuis ${dur(i.hours)}</span></div>
+<p><span class="el">Pour les utilisateurs</span>${esc(i.impact)}</p><p><span class="el">Ce que tu fais</span>${esc(i.todo)}</p><p><span class="el">Me prévenir ?</span>${tellTxt(i)}</p></div>`).join('');
+  return nav + `<main class="emain"><style>.emain a{color:#7cc4ff}.everd{border-left:5px solid ${col};background:#ffffff0d;padding:12px 16px;border-radius:8px;max-width:860px;margin:8px 0 18px}
+.everd h2{margin:0 0 6px;font-size:18px}.everd p{margin:0}.ecard{background:#ffffff0a;border:1px solid #8884;border-radius:8px;padding:10px 14px;margin:0 0 10px;max-width:830px}.ecard.over{border-color:#ef4444}
+.eh{display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap;margin-bottom:4px}.eh span{opacity:.75;font-size:13px}.ecard p{margin:4px 0;font-size:14px}.el{display:inline-block;min-width:185px;margin-right:6px;opacity:.65;font-size:12px;text-transform:uppercase;letter-spacing:.03em}
+.ebtn{background:#2f6b4f;color:#fff;border:0;border-radius:6px;padding:8px 14px;font:inherit;cursor:pointer;margin:4px 0 20px}</style>
+<p>${etatResume(e)} · <a href="?key=${k}&tab=etat&maintenant=1">Revérifier maintenant</a></p>
+<div class="everd"><h2>${ic} ${v.title}</h2><p>${esc(v.text)}</p></div>
+${cards}${v.items.length ? `<button class="ebtn" id="ecopy">📋 Copier le message pour Claude</button><textarea id="emsg" hidden>${esc(etatMessage(e, v))}</textarea>
+<script>document.getElementById('ecopy').onclick=async function(){const t=document.getElementById('emsg').value;try{await navigator.clipboard.writeText(t);this.textContent='✓ Copié : colle-le dans la conversation Pisteo'}catch(_){const a=document.getElementById('emsg');a.hidden=false;a.select();this.textContent='Sélectionné : Ctrl+C'}}</script>` : ''}
+<h2 style="font-size:16px;margin:10px 0 6px">Tous les services</h2>${etatTable(e)}</main>`;
 }
 async function etatGet(env, url, ctx) {
   const e = await etatLoad(env, url);
-  // https://api.pisteo.app/etat : données brutes ; …/etat?format=page : tableau lisible
-  if (url.searchParams.get('format') !== 'page') return new Response(JSON.stringify(e, null, 1), { headers: { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store', 'Access-Control-Allow-Origin': '*' } });
+  // https://api.pisteo.app/etat : données brutes (+ verdict) ; …/etat?format=page : tableau lisible
+  if (url.searchParams.get('format') !== 'page') return new Response(JSON.stringify(Object.assign({ verdict: etatVerdict(e) }, e), null, 1), { headers: { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store', 'Access-Control-Allow-Origin': '*' } });
   return new Response(`<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Pisteo · état des services</title>
 <style>body{font:15px system-ui;margin:16px;background:#f6f7f5;color:#1d2a24}</style><h1>État des services</h1><p>${etatResume(e)} · <a href="?format=page&maintenant=1">revérifier</a></p>${etatTable(e)}`, { headers: { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store' } });
 }
