@@ -242,7 +242,12 @@ button{font:600 13px system-ui,sans-serif;border:0;border-radius:9px;padding:8px
 .empty{text-align:center;color:var(--mut);padding:40px 10px}
 #zoom{position:fixed;inset:0;background:rgba(0,0,0,.88);display:none;align-items:center;justify-content:center;z-index:9}#zoom img{max-width:96%;max-height:92%}
 @media (max-width:560px){.card{grid-template-columns:1fr}.map svg{min-height:130px;max-height:170px}}
-</style><body>${body}<div id="zoom" onclick="this.style.display='none'"><img alt=""></div><script>document.querySelectorAll('.ph img').forEach(i=>i.onclick=()=>{const z=document.getElementById('zoom');z.querySelector('img').src=i.src;z.style.display='flex'})</script></body></html>`, { status, headers: { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store' } });
+</style><body>${body}<div id="zoom" onclick="this.style.display='none'"><img alt=""></div><script>document.querySelectorAll('.ph img').forEach(i=>i.onclick=()=>{const z=document.getElementById('zoom');z.querySelector('img').src=i.src;z.style.display='flex'});
+// actions sans nouvelle page dans l'historique : « Retour » ne réaffiche plus un parcours supprimé
+document.querySelectorAll('form').forEach(f=>f.addEventListener('submit',async e=>{e.preventDefault();const b=e.submitter,d=new FormData(f);if(b&&b.name)d.set(b.name,b.value);f.querySelectorAll('button').forEach(x=>x.disabled=true);
+try{await fetch(f.action,{method:'POST',body:d,redirect:'manual'})}catch(_){}location.replace(location.href)}));
+// page ressortie de la mémoire du navigateur (bouton Retour) : on la recharge pour voir l'état réel
+addEventListener('pageshow',e=>{if(e.persisted)location.reload()})</script></body></html>`, { status, headers: { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store' } });
   const esc = t => String(t).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
   const key = url.searchParams.get('key') || '';
   if (!env.ADMIN_KEY || key !== env.ADMIN_KEY || !env.CATALOGUE) return page('<main><p class="empty">Accès refusé.</p></main>', 403);
