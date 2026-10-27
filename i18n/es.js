@@ -163,6 +163,7 @@ const exact = {
   'non renseigné': 'sin datos',
   'sans éclairage': 'sin iluminación', 'Aucune portion sombre connue': 'Ningún tramo oscuro conocido', 'confirmé éclairé': 'iluminado confirmado',
   '✓ Sur Strava': '✓ En Strava',
+  'Partager des statistiques anonymes': 'Compartir estadísticas anónimas', "Compteurs d'utilisation, une fois par jour, pour améliorer Pisteo · sans position, sans tracé, sans identifiant": 'Contadores de uso, una vez al día, para mejorar Pisteo · sin ubicación, sin recorrido, sin identificador',
   'Hors ligne': 'Sin conexión', 'Sorties et traces': 'Salidas y tracks', 'Navigation': 'Navegación', 'Voix et vibrations': 'Voz y vibración', 'Affichage': 'Pantalla', 'Import manuel': 'Importación manual', 'Envoi automatique': 'Envío automático',
   'Je me déplace': 'Me desplazo', 'Pour les itinéraires et le temps estimé': 'Para las rutas y el tiempo estimado', 'À pied': 'A pie', 'À vélo': 'En bici',
   'Cartes hors ligne': 'Mapas sin conexión', 'Trace, département ou zone': 'Track, región o zona', 'Mes cartes': 'Mis mapas',

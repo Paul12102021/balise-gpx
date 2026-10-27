@@ -10,6 +10,9 @@
 // Catalogue « Parcours Pisteo » (routes /catalogue…) : propositions vérifiées automatiquement et publiées aussitôt.
 //   CATALOGUE  (espace KV lié au worker, Settings → Bindings → KV namespace, nom de variable CATALOGUE)
 //   ADMIN_KEY  (secret)  mot de passe de la page d'administration : https://api.pisteo.app/catalogue/admin?key=…
+//
+// Statistiques anonymes (route /stats, onglet « Statistiques » de la page d'administration) :
+//   STATS  (base D1 liée au worker, Settings → Bindings → D1 database, nom de variable STATS) — la table se crée toute seule
 
 const API = 'https://www.strava.com/api/v3';
 
@@ -33,6 +36,9 @@ export default {
     // photos du catalogue : affichées par de simples balises <img> (sans origine)
     if (path.startsWith('/catalogue/img/') && req.method === 'GET') return catImg(env, url, path);
     if (!okOrigin) return new Response('Origine refusée', { status: 403, headers: cors });
+    if (path === '/stats' && req.method === 'POST') {
+      try { return await statsIn(req, env, json); } catch (e) { return json({ ok: false }, 500); }
+    }
     if (path.startsWith('/catalogue')) {
       try { return await catalogue(req, env, path, json); }
       catch (e) { return json({ ok: false, message: 'Erreur du serveur, réessaie plus tard.' }, 500); }
@@ -266,6 +272,7 @@ addEventListener('pageshow',e=>{if(e.persisted)location.reload()})</script></bod
   const esc = t => String(t).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
   const key = url.searchParams.get('key') || '';
   if (!env.ADMIN_KEY || key !== env.ADMIN_KEY || !env.CATALOGUE) return page('<main><p class="empty">Accès refusé.</p></main>', 403);
+  if (url.searchParams.get('tab') === 'stats') return page(await statsHtml(env, url, encodeURIComponent(key), esc));
   const idx = await loadIndex(env);
   if (req.method === 'POST') {
     const f = await req.formData(), id = f.get('id'), act = f.get('act'), i = idx.findIndex(x => x.id === id);
@@ -308,7 +315,7 @@ ${(it.ph || []).length ? `<div class="phs">${it.ph.map(p => `<div class="ph${p.o
   // athlètes connectés à Strava via Pisteo (capacité de l'appli Strava : 10 avant validation)
   let nStv = 0; try { let cur; do { const l = await env.CATALOGUE.list({ prefix: 'stv:ath:', cursor: cur }); nStv += l.keys.length; cur = l.list_complete ? null : l.cursor; } while (cur); } catch {}
   const head = `<header><h1>⭐ Catalogue Pisteo</h1><div class="stats"><div class="st"><b>${idx.filter(x => !x.hidden).length}</b>en ligne</div><div class="st"><b>${nPh}</b>photo${nPh > 1 ? 's' : ''} à valider</div><div class="st"><b>${idx.filter(x => x.rep || x.hidden).length}</b>signalé${idx.filter(x => x.rep || x.hidden).length > 1 ? 's' : ''} ou masqué${idx.filter(x => x.rep || x.hidden).length > 1 ? 's' : ''}</div><div class="st"><b>${idx.filter(x => x.date === new Date().toISOString().slice(0, 10)).length}</b>aujourd'hui</div><div class="st"><b>${nStv}</b>connecté${nStv > 1 ? 's' : ''} Strava</div></div>
-<nav>${tabs.map(([id, l, arr]) => `<a href="?key=${k}&f=${id}" class="${id === f ? 'on' : ''}">${l} (${arr.length})</a>`).join('')}</nav></header>`;
+<nav>${tabs.map(([id, l, arr]) => `<a href="?key=${k}&f=${id}" class="${id === f ? 'on' : ''}">${l} (${arr.length})</a>`).join('')}<a href="?key=${k}&tab=stats">📊 Statistiques</a></nav></header>`;
   const empty = { wait: 'Aucune photo à valider. 👌', rep: 'Aucun parcours signalé.', all: 'Aucun parcours pour l’instant.' }[f] || '';
   return page(`${head}<main>${cards.join('') || `<p class="empty">${empty}</p>`}</main>`);
 }
@@ -322,4 +329,89 @@ async function catImg(env, url, path) {
   const buf = await env.CATALOGUE.get(`img:${m[1]}:${m[2]}`, 'arrayBuffer');
   if (!buf) return new Response('introuvable', { status: 404 });
   return new Response(buf, { headers: { 'Content-Type': 'image/jpeg', 'Cache-Control': admin ? 'no-store' : 'public, max-age=600', 'Access-Control-Allow-Origin': '*' } });
+}
+
+// =====================================================================
+// Statistiques anonymes
+// =====================================================================
+// Chaque appareil envoie le résumé d'une journée finie : { d: 'AAAA-MM-JJ', c: { compteur: n }, dims: { plat: 'android', … } }.
+// Tout est additionné par jour (aucune ligne par appareil) : « dev » = nombre d'appareils actifs ce jour-là.
+const ST_SQL = 'CREATE TABLE IF NOT EXISTS daily (day TEXT NOT NULL, k TEXT NOT NULL, v REAL NOT NULL DEFAULT 0, PRIMARY KEY (day, k))';
+let stReady = false;
+async function stInit(env) { if (!stReady) { await env.STATS.prepare(ST_SQL).run(); stReady = true; } }
+async function statsIn(req, env, json) {
+  if (!env.STATS) return json({ ok: false, message: 'statistiques non configurées' }, 503);
+  const b = await req.json().catch(() => null);
+  const day = b && typeof b.d === 'string' && /^\d{4}-\d\d-\d\d$/.test(b.d) ? b.d : null;
+  const now = Date.now(), t = day ? Date.parse(day + 'T12:00:00Z') : NaN;
+  if (!day || !(t > now - 10 * 864e5 && t < now + 2 * 864e5)) return json({ ok: false }, 400);
+  const rows = [['dev', 1]];
+  for (const [k, v] of Object.entries(b.c || {}).slice(0, 160)) if (/^[\w:.\-]{1,60}$/.test(k) && typeof v === 'number' && isFinite(v) && v > 0 && v < 1e5) rows.push(['c:' + k, v]);
+  for (const [k, v] of Object.entries(b.dims || {}).slice(0, 20)) if (/^\w{1,12}$/.test(k) && v != null) rows.push([`d:${k}:${String(v).replace(/[^\w.\-]/g, '_').slice(0, 30)}`, 1]);
+  await stInit(env);
+  const st = env.STATS.prepare('INSERT INTO daily (day, k, v) VALUES (?1, ?2, ?3) ON CONFLICT (day, k) DO UPDATE SET v = v + excluded.v');
+  await env.STATS.batch(rows.map(([k, v]) => st.bind(day, k, v)));
+  return json({ ok: true });
+}
+const ST_LABELS = {
+  nav: 'Navigations', nav_trace: 'Navigation sur une trace', nav_vers_lieu: 'Navigation vers un lieu', nav_libre: 'Balade libre', boucle_pied: 'Boucles à pied', boucle_velo: 'Boucles à vélo', boucle_nuit: 'Boucles de nuit (éclairé)',
+  boucle_autre: '« Autre » boucle', boucle_garder: 'Boucle gardée', point_par_point: 'Tracé point par point', choisir_carte: 'Choisir sur la carte', vers_lieu: 'Trajet vers un lieu', balises_ouvrir: 'Parcours balisés ouverts', balise_naviguer: 'Parcours balisé suivi',
+  balises_recommandes: 'Filtre « Recommandés »', catalogue_proposer: 'Proposer au catalogue', meteo: 'Météo affichée', meteo_depart_ok: 'Heure de départ choisie', meteo_legende: 'Légende météo', eclairage: 'Éclairage affiché', inverser: 'Sens inversé',
+  envoyer_parcours: '« Envoyer le parcours »', lien_partage: 'Lien de partage', qr_code: 'QR code', gpx_ouvrir: 'GPX ouvert', gpx_partage: 'GPX partagé / exporté', trace_enregistrer: 'Trace enregistrée (Mes traces)',
+  strava_envoi_ok: 'Envois Strava réussis', strava_envoi_echec: 'Envois Strava échoués', strava_manuel: 'Import Strava manuel', strava_connecter: 'Connexion Strava', drive_ok: 'Sauvegardes Drive', drive_echec: 'Sauvegardes Drive échouées', drive_restaurer: 'Restaurations Drive',
+  photo_ajouter: 'Photos ajoutées (bouton)', photo_camera: 'Photo prise', retour_trace_manuel: 'Retour à la trace (bouton)', retour_trace_auto: 'Retour à la trace (auto)', recalcul: 'Itinéraire recalculé', retour_depart: 'Ramène-moi au départ', reprendre_parcours: 'Reprendre le parcours',
+  signaler_osm: 'Signalement OSM', pip: 'Image dans l’image', eco_bouton: 'Économie de batterie', avis: '« Mon avis »', sortie_supprimee: 'Sorties jetées', terminer: '« Terminer »'
+};
+async function statsHtml(env, url, k, esc) {
+  const nav = `<header><h1>📊 Statistiques Pisteo</h1><nav><a href="?key=${k}">⭐ Catalogue</a><a class="on" href="?key=${k}&tab=stats">📊 Statistiques</a></nav></header>`;
+  if (!env.STATS) return nav + '<main><p class="empty">Base D1 « STATS » pas encore reliée au worker (Settings → Bindings → D1 database, nom STATS).</p></main>';
+  await stInit(env);
+  const per = url.searchParams.get('p') || '30', n = per === 'all' ? 3650 : +per || 30;
+  const iso = d => new Date(d).toISOString().slice(0, 10), today = Date.now();
+  const since = iso(today - n * 864e5), prev = iso(today - 2 * n * 864e5);
+  const q = async (a, b) => Object.fromEntries((await env.STATS.prepare('SELECT k, SUM(v) s FROM daily WHERE day >= ?1 AND day < ?2 GROUP BY k').bind(a, b).all()).results.map(r => [r.k, r.s]));
+  const T = await q(since, '9999'), P = per === 'all' ? {} : await q(prev, since);
+  const days = (await env.STATS.prepare("SELECT day, k, v FROM daily WHERE day >= ?1 AND k IN ('dev','c:sortie_pied','c:sortie_velo','c:nav') ORDER BY day").bind(since).all()).results;
+  const g = (o, key) => o[key] || 0, fmt = v => Math.round(v).toLocaleString('fr-FR');
+  const nDays = new Set(days.map(r => r.day)).size || 1;
+  const delta = (a, b) => !b ? '' : `<i class="${a >= b ? 'up' : 'dn'}">${a >= b ? '▲' : '▼'} ${Math.round((a / b - 1) * 100)} %</i>`;
+  const out = g(T, 'c:sortie_pied') + g(T, 'c:sortie_velo'), outP = g(P, 'c:sortie_pied') + g(P, 'c:sortie_velo');
+  const kpi = (l, v, sub) => `<div class="k"><small>${l}</small><b>${v}</b>${sub || ''}</div>`;
+  const kpis = `<div class="kpis">${kpi('Appareils actifs / jour', fmt(g(T, 'dev') / nDays), delta(g(T, 'dev'), g(P, 'dev')))}${kpi('Sorties enregistrées', fmt(out), delta(out, outP))}
+${kpi('Kilomètres parcourus', fmt(g(T, 'c:km_pied') + g(T, 'c:km_velo')), `<small>🥾 ${fmt(g(T, 'c:km_pied'))} · 🚴 ${fmt(g(T, 'c:km_velo'))}</small>`)}${kpi('Navigations lancées', fmt(g(T, 'c:nav')), delta(g(T, 'c:nav'), g(P, 'c:nav')))}
+${kpi('Ouvertures de l’appli', fmt(g(T, 'c:open') + g(T, 'c:resume')), '')}${kpi('Sorties avec coupure GPS', out ? Math.round(g(T, 'c:sortie_coupee') / out * 100) + ' %' : '–', `<small>${fmt(g(T, 'c:coupure_min'))} min sans position</small>`)}
+${kpi('Calcul d’une boucle', g(T, 'c:boucle_calculs') ? (g(T, 'c:boucle_secondes') / g(T, 'c:boucle_calculs')).toFixed(1) + ' s' : '–', '<small>en moyenne</small>')}${kpi('Envois Strava', fmt(g(T, 'c:strava_envoi_ok')), g(T, 'c:strava_envoi_echec') ? `<small>${fmt(g(T, 'c:strava_envoi_echec'))} échec(s)</small>` : '')}</div>`;
+  // courbe par jour
+  const byDay = {}; for (const r of days) (byDay[r.day] = byDay[r.day] || {})[r.k] = r.v;
+  const ds = Object.keys(byDay).sort(), W = 340, H = 110, maxD = Math.max(1, ...ds.map(d => byDay[d].dev || 0)), maxS = Math.max(1, ...ds.map(d => (byDay[d]['c:sortie_pied'] || 0) + (byDay[d]['c:sortie_velo'] || 0)));
+  const X = i => 10 + (ds.length > 1 ? i * (W - 20) / (ds.length - 1) : (W - 20) / 2);
+  const line = ds.map((d, i) => `${i ? 'L' : 'M'}${X(i).toFixed(1)} ${(H - (byDay[d].dev || 0) / maxD * (H - 10)).toFixed(1)}`).join('');
+  const bars = ds.map((d, i) => { const v = (byDay[d]['c:sortie_pied'] || 0) + (byDay[d]['c:sortie_velo'] || 0), h = v / maxS * (H - 50); return `<rect x="${(X(i) - 3).toFixed(1)}" y="${(H - h).toFixed(1)}" width="6" height="${h.toFixed(1)}" rx="2" fill="#E8742A" opacity=".85"/>`; }).join('');
+  const chart = ds.length ? `<div class="card"><h3>Activité par jour</h3><svg viewBox="0 0 ${W} ${H + 4}" width="100%">${bars}<path d="${line}" fill="none" stroke="#2F5E45" stroke-width="2.5"/></svg><div class="leg"><span><i style="background:#2F5E45"></i>Appareils actifs (max ${fmt(maxD)})</span><span><i style="background:#E8742A"></i>Sorties</span></div></div>` : '';
+  const barList = (title, arr, col) => { arr = arr.filter(x => x[1] > 0).sort((a, b) => b[1] - a[1]); if (!arr.length) return ''; const m = arr[0][1];
+    return `<div class="card"><h3>${title}</h3><div class="bars">${arr.map(([l, v]) => `<div><span>${esc(l)}</span><em><u style="width:${Math.max(2, v / m * 100)}%;background:${col || '#3A9A6A'}"></u></em><b>${fmt(v)}</b></div>`).join('')}</div></div>`; };
+  const pref = p => Object.entries(T).filter(([key]) => key.startsWith(p)).map(([key, v]) => [key.slice(p.length), v]);
+  const feats = Object.entries(ST_LABELS).map(([key, l]) => [l, g(T, 'c:' + key)]);
+  const dimNames = { plat: 'Appli / navigateur', lang: 'Langue', ver: 'Version', mode: 'Mode', screen: 'Écran', strava: 'Strava connecté', drive: 'Sauvegarde Drive', theme: 'Thème', voice: 'Voix', eco: 'Économie batterie', poi: 'Points utiles', night: 'Alerte nuit', lit: 'De nuit : éclairé', units: 'Unités', layer: 'Fond de carte' };
+  const devDays = g(T, 'dev') || 1;
+  const dims = Object.entries(dimNames).map(([d, l]) => { const arr = pref(`d:${d}:`); if (!arr.length) return ''; arr.sort((a, b) => b[1] - a[1]);
+    return `<div class="dim"><b>${l}</b>${arr.map(([v, c]) => `<span>${esc(v)} <i>${Math.round(c / devDays * 100)} %</i></span>`).join('')}</div>`; }).join('');
+  const known = new Set(Object.keys(ST_LABELS).map(x => 'c:' + x));
+  const others = Object.entries(T).filter(([key]) => key.startsWith('c:') && !known.has(key) && !key.startsWith('c:err:') && !key.startsWith('c:carte_') && !key.startsWith('c:fond_')).map(([key, v]) => [key.slice(2), v]);
+  const pers = ['7', '30', 'all'].map(x => `<a class="${x === per ? 'on' : ''}" href="?key=${k}&tab=stats&p=${x}">${x === 'all' ? 'Tout' : x + ' jours'}</a>`).join('');
+  return nav + `<main><style>.per{display:flex;gap:6px}.per a{background:var(--chip);border-radius:999px;padding:5px 12px;font-weight:600;font-size:13px;color:var(--ink);text-decoration:none}.per a.on{background:var(--go);color:#fff}
+.kpis{display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:8px}.k{background:var(--card);border-radius:14px;padding:10px 12px}.k b{display:block;font-size:24px}.k small{color:var(--mut);display:block}.k i{font-style:normal;font-size:12px;font-weight:700}.k i.up{color:#3A9A6A}.k i.dn{color:#C8412F}
+.card{background:var(--card);border-radius:14px;padding:12px;margin-top:10px}.card h3{margin:0 0 8px;font-size:13px;color:var(--mut);text-transform:uppercase;letter-spacing:.05em}
+.bars div{display:grid;grid-template-columns:minmax(120px,40%) 1fr auto;gap:8px;align-items:center;font-size:13px;margin:4px 0}.bars em{display:block;height:10px}.bars u{display:block;height:10px;border-radius:5px}.bars b{font-size:12px;color:var(--mut)}
+.leg{display:flex;gap:12px;font-size:12px;color:var(--mut)}.leg i{display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:4px}
+.dim{margin:6px 0;font-size:13px;display:flex;flex-wrap:wrap;gap:6px;align-items:center}.dim b{width:100%;font-size:12px;color:var(--mut)}.dim span{background:var(--chip);border-radius:8px;padding:2px 8px}.dim i{font-style:normal;color:var(--mut)}
+.note{font-size:12px;color:var(--mut)}</style>
+<div class="per">${pers}</div>${kpis}${chart}
+${barList('Fonctions utilisées', feats)}
+${barList('Cartes hors ligne téléchargées', pref('c:carte_').map(([c, v]) => [({ fr: 'France', es: 'Espagne', at: 'Autriche', be: 'Belgique', ch: 'Suisse', gb: 'Royaume-Uni', de: 'Allemagne', ca: 'Canada', us: 'États-Unis', zone: 'Zone libre' })[c] || c, v]))}
+${barList('Fonds de carte choisis', pref('c:fond_'), '#2F5E45')}
+<div class="card"><h3>Appareils et réglages (part des jours-appareils)</h3>${dims || '<p class="note">Pas encore de données.</p>'}</div>
+${barList('Erreurs de l’appli', pref('c:err:'), '#C8412F')}
+${barList('Autres compteurs', others, '#8a959e')}
+<p class="note">Anonyme : chaque appareil envoie une fois par jour les compteurs de la veille, additionnés ici par jour (aucune ligne par appareil, aucune position). Les chiffres arrivent avec un jour de décalage.</p></main>`;
 }

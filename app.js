@@ -5,7 +5,7 @@
 
 // La page et le code doivent être de la même version. Sinon (page gardée en cache
 // par le téléphone ou par GitHub), on recharge une page fraîche, au plus 3 fois.
-const APP_VERSION = 250;
+const APP_VERSION = 251;
 try {
   const meta = document.querySelector('meta[name="balise-version"]');
   const pageV = meta ? +meta.content : 0;
@@ -1358,7 +1358,7 @@ function stvUI() {
 }
 // ---------- Sauvegarde : sorties, traces et réglages dans un fichier, et restauration ----------
 // réglages choisis par l'utilisateur (pas l'état en cours, ni les caches, ni la connexion Strava)
-const BK_KEYS = ['thr', 'voice', 'vib', 'autoRec', 'alertNight', 'litNight', 'soBilan', 'poi', 'gdAuto', 'eco', 'ecoSeen', 'banner', 'theme', 'profile', 'layerId', 'soLayer',
+const BK_KEYS = ['thr', 'voice', 'vib', 'autoRec', 'alertNight', 'litNight', 'statsOff', 'soBilan', 'poi', 'gdAuto', 'eco', 'ecoSeen', 'banner', 'theme', 'profile', 'layerId', 'soLayer',
   'rtFilt', 'npProfOnly', 'showPacks', 'stvAuto', 'recHint'];
 const bkCount = items => {
   const r = items.filter(isRec).length;
@@ -7363,6 +7363,101 @@ async function gdAuto(now) {
   gdBusy = false;
 }
 setTimeout(() => gdAuto(false), 15000);
+
+// =====================================================================
+// Statistiques anonymes d'utilisation (réglage « Partager des statistiques anonymes », activé par défaut)
+// Des compteurs du jour, gardés sur le téléphone ; le résumé d'une journée finie est envoyé une fois au relais.
+// Aucun identifiant, aucune position, aucun tracé.
+// =====================================================================
+const STATS_ON = () => store.get('statsOff') !== '1';
+function statDay() { const d = new Date(); return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); }
+function statLoad() { try { return JSON.parse(store.get('stats') || '{}') || {}; } catch { return {}; } }
+function stat(name, n = 1) {
+  if (!STATS_ON()) return;
+  try {
+    const all = statLoad(), d = statDay(), day = all[d] || (all[d] = {});
+    const k = String(name).replace(/[^\w:.\-]/g, '_').slice(0, 60);
+    if (Object.keys(day).length > 150 && !(k in day)) return;
+    day[k] = Math.round(((day[k] || 0) + n) * 10) / 10;
+    store.set('stats', JSON.stringify(all));
+  } catch {}
+}
+// contexte de la journée : appli ou navigateur, langue, version, réglages principaux
+function statDims() {
+  const ua = navigator.userAgent, w = innerWidth;
+  return {
+    plat: AND ? 'android' : /Android/i.test(ua) ? 'web-android' : /iPhone|iPad/i.test(ua) ? 'web-ios' : 'web-pc',
+    lang: LANG, ver: String(APP_VERSION), mode: profile === 'trekking' ? 'velo' : 'pied', units: IMP ? 'mi' : 'km',
+    theme: store.get('theme') || 'auto', screen: w < 500 ? 'tel' : w < 1000 ? 'tablette' : 'grand',
+    voice: store.get('voice') === '0' ? 'off' : 'on', eco: store.get('eco') || 'off', poi: store.get('poi') === '0' ? 'off' : 'on',
+    night: store.get('alertNight') === '1' ? 'on' : 'off', lit: store.get('litNight') === '1' ? 'on' : 'off',
+    strava: (() => { try { return stvOn() ? 'oui' : 'non'; } catch { return 'non'; } })(), drive: store.get('gdAuto') === '1' ? 'auto' : 'non',
+    layer: (LAYERS[layerIdx] || {}).id || '?'
+  };
+}
+let statSending = false;
+async function statFlush() {
+  if (statSending || !STATS_ON() || navigator.onLine === false) return;
+  const all = statLoad(), today = statDay(), days = Object.keys(all).filter(d => d < today).sort();
+  if (!days.length) return;
+  statSending = true;
+  try {
+    for (const d of days) {
+      if (d < new Date(Date.now() - 8 * 864e5).toISOString().slice(0, 10)) { delete all[d]; continue; } // trop vieux : oublié
+      const r = await fetch(STRAVA_RELAY + '/stats', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ d, c: all[d], dims: statDims() }) });
+      if (!r.ok && r.status !== 400) break;
+      delete all[d];
+    }
+    const cur = statLoad(); for (const d of Object.keys(cur)) if (!(d in all) && d < today) delete cur[d];
+    store.set('stats', JSON.stringify(cur));
+  } catch {} finally { statSending = false; }
+}
+stat('open');
+setTimeout(statFlush, 8000); setInterval(statFlush, 3600e3);
+document.addEventListener('visibilitychange', () => { if (!document.hidden) { stat('resume'); statFlush(); } });
+// boutons touchés (un compteur par bouton utile)
+const STAT_BTN = {
+  btnNav: 'nav_btn', btnNew: 'autre_trajet', destLoop: 'boucle_ouvrir', lpGo: 'boucle', lbAgain: 'boucle_autre', lbEdit: 'boucle_modifier', lbKeep: 'boucle_garder', lbGo: 'boucle_naviguer',
+  destPlan: 'point_par_point', ptView: 'pp_apercu', ptDone: 'pp_naviguer', destPick: 'choisir_carte', destFree: 'balade_libre', destRoutes: 'balises_ouvrir', rtpGo: 'balise_naviguer', rtpKeep: 'balise_garder',
+  btnWx: 'meteo', wxDepBtn: 'meteo_depart', depOk: 'meteo_depart_ok', wxInfo: 'meteo_legende', btnLit: 'eclairage', btnReverse: 'inverser', btnWatch: 'envoyer_parcours', wtLink: 'lien_partage', wtQr: 'qr_code', wtPropose: 'catalogue_proposer',
+  btnSaveTr: 'trace_enregistrer', btnOpen: 'gpx_ouvrir', btnSorties: 'mes_sorties', btnMaps: 'mes_cartes', btnStrava: 'strava_ouvrir', btnBackup: 'sauvegarde_ouvrir', btnFeedback: 'avis',
+  stvConnect: 'strava_connecter', sdStrava: 'sortie_strava', sdStvView: 'strava_voir', sdShare: 'sortie_partager', sdExport: 'sortie_export', sdFollow: 'sortie_refaire', sdPhAdd: 'photo_ajouter', phCam: 'photo_camera',
+  gdNow: 'drive_maintenant', gdRestore: 'drive_restaurer', btnRejoin: 'retour_trace', btnOverview: 'vue_ensemble', npHome: 'retour_depart', npResume: 'reprendre_parcours', btnLayer: 'fond_changer',
+  btnPip: 'pip', btnEcoFab: 'eco_bouton', btnRecFab: 'rec_bouton', npRec: 'rec_panneau', npReport: 'signaler_osm', npProfOnly: 'profil_seul', btnExit: 'terminer', finSave: 'sortie_garder', finDelete: 'sortie_jeter', finContinue: 'sortie_continuer',
+  rtFoot: 'balises_pied', rtBike: 'balises_velo', rtFiltT: 'balises_tous', rtFiltD: 'balises_balises', rtFiltU: 'balises_recommandes'
+};
+document.addEventListener('click', e => { const b = e.target.closest('[id]'); if (b && STAT_BTN[b.id]) stat(STAT_BTN[b.id]); }, true);
+// évènements internes
+const _st = (name, fn, before) => function (...a) { try { before ? before.apply(this, a) : stat(name); } catch {} return fn.apply(this, a); };
+startNav = _st('nav', startNav, free => { stat('nav'); stat(free ? 'nav_libre' : track && track.route ? 'nav_vers_lieu' : 'nav_trace'); });
+endActivity = (fn => async function (keep) {
+  try {
+    if (keep && rec.length > 1) {
+      const km = recDist() / 1000, bike = profile === 'trekking', min = (act.ms || 0) / 60000, g = recGaps(rec);
+      stat(bike ? 'sortie_velo' : 'sortie_pied'); stat(bike ? 'km_velo' : 'km_pied', Math.round(km * 10) / 10); stat('minutes_sortie', Math.round(min));
+      if (g.n) { stat('sortie_coupee'); stat('coupure_min', Math.round(g.ms / 60000)); }
+    } else if (!keep) stat('sortie_supprimee');
+  } catch {}
+  return fn.apply(this, arguments);
+})(endActivity);
+makeLoop = (fn => async function () {
+  const t0 = Date.now(); stat(profile === 'trekking' ? 'boucle_velo' : 'boucle_pied'); try { if (profile !== 'trekking' && routeLitOn()) stat('boucle_nuit'); } catch {}
+  const r = await fn.apply(this, arguments); stat('boucle_secondes', Math.round((Date.now() - t0) / 1000)); stat('boucle_calculs'); return r;
+})(makeLoop);
+goTo = _st('vers_lieu', goTo);
+requestRejoin = _st('', requestRejoin, manual => stat(manual ? 'retour_trace_manuel' : 'retour_trace_auto'));
+reroute = _st('recalcul', reroute);
+stvUploadNow = (fn => async function () { try { const r = await fn.apply(this, arguments); stat('strava_envoi_ok'); return r; } catch (e) { stat('strava_envoi_echec'); throw e; } })(stvUploadNow);
+openStvManual = _st('strava_manuel', openStvManual);
+gdSave = (fn => async function () { try { const r = await fn.apply(this, arguments); stat('drive_ok'); return r; } catch (e) { stat('drive_echec'); throw e; } })(gdSave);
+downloadPack = _st('', downloadPack, pack => stat('carte_' + (pack.cc || (pack.kind === 'dep' ? 'fr' : pack.kind || 'zone'))));
+setLayer = _st('', setLayer, (i, remember) => { if (remember !== false && LAYERS[i]) stat('fond_' + LAYERS[i].id); });
+shareGPX = _st('gpx_partage', shareGPX);
+// erreurs de l'appli (message court) : pour repérer les bugs
+addEventListener('error', e => { if (e && e.message) stat('err:' + String(e.message).replace(/^Uncaught\s*/, '').slice(0, 50)); });
+addEventListener('unhandledrejection', e => { const m = e && e.reason && (e.reason.message || String(e.reason)); if (m && !/abort|Failed to fetch|NetworkError|Load failed/i.test(m)) stat('err:' + String(m).slice(0, 50)); });
+$('optStats').checked = STATS_ON();
+$('optStats').onchange = e => { store.set('statsOff', e.target.checked ? '' : '1'); if (!e.target.checked) store.set('stats', ''); };
 })();
 
 // au doigt, une liste ou une case garde le cadre bleu de sélection après le choix : on le retire une fois la valeur choisie
