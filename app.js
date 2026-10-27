@@ -5,7 +5,7 @@
 
 // La page et le code doivent être de la même version. Sinon (page gardée en cache
 // par le téléphone ou par GitHub), on recharge une page fraîche, au plus 3 fois.
-const APP_VERSION = 244;
+const APP_VERSION = 245;
 try {
   const meta = document.querySelector('meta[name="balise-version"]');
   const pageV = meta ? +meta.content : 0;
@@ -4342,14 +4342,14 @@ function rtShowOnMap() {
   };
   if (!me && !rt.fromMap && startGPS()) {
     // GPS pas encore prêt : on part tout de suite de ta dernière position connue, puis on corrige si besoin
+    // sans position connue (ordinateur, GPS lent) : recherche tout de suite autour de la carte affichée
     rt.prov = rtLastPos();
-    if (rt.prov) go(); else { $('rtStatus').textContent = 'Recherche de ta position…'; rtSetCollapsed(true); }
-    const prov = rt.prov;
+    const c0 = map.getCenter(), prov = rt.prov || { lat: c0.lat, lon: c0.lng };
+    go(!!rt.prov);
     waitFix(20000).then(pos => {
       rt.prov = null;
-      if ($('routes').hidden || rt.fromMap) return;
-      if (!pos) { if (!prov) { $('rtStatus').textContent = 'Position GPS introuvable : déplace la carte ou cherche un lieu.'; } return; }
-      if (!prov || hav(pos, prov) > 1500) go();
+      if ($('routes').hidden || rt.fromMap || !pos) return;
+      if (hav(pos, prov) > 1500) go();
     });
   } else go();
 }
