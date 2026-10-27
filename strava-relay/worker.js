@@ -17,7 +17,9 @@
 const API = 'https://www.strava.com/api/v3';
 
 export default {
-  async fetch(req, env) {
+  // vérification des services extérieurs (déclencheur Cron du worker, toutes les heures) → https://api.pisteo.app/etat
+  async scheduled(ev, env, ctx) { ctx.waitUntil(etatCheck(env)); },
+  async fetch(req, env, ctx) {
     const origin = req.headers.get('Origin') || '';
     const allowed = (env.ALLOWED_ORIGIN || '').split(',').map(s => s.trim()).filter(Boolean);
     const okOrigin = allowed.includes(origin);
@@ -33,6 +35,8 @@ export default {
     const json = (o, status = 200) => new Response(JSON.stringify(o), { status, headers: { ...cors, 'Content-Type': 'application/json' } });
     // page d'administration du catalogue : ouverte depuis un navigateur (pas d'origine), protégée par ADMIN_KEY
     if (path === '/catalogue/admin') return catAdmin(req, env, url);
+    // état des services extérieurs (lu par la vérification quotidienne de Claude et par toi dans un navigateur)
+    if (path === '/etat' && req.method === 'GET') return etatGet(env, url, ctx);
     // photos du catalogue : affichées par de simples balises <img> (sans origine)
     if (path.startsWith('/catalogue/img/') && req.method === 'GET') return catImg(env, url, path);
     if (!okOrigin) return new Response('Origine refusée', { status: 403, headers: cors });
@@ -433,4 +437,85 @@ async function statsCsv(env, url) {
   const lines = [['Jour', ...keys.map(name)].map(cell).join(';')];
   for (const d of Object.keys(byDay).sort()) lines.push([d, ...keys.map(k => num(byDay[d][k]))].join(';'));
   return new Response('﻿' + lines.join('\r\n'), { headers: { 'Content-Type': 'text/csv; charset=utf-8', 'Content-Disposition': `attachment; filename="pisteo-statistiques-${per === 'all' ? 'tout' : per + 'j'}-${new Date().toISOString().slice(0, 10)}.csv"`, 'Cache-Control': 'no-store' } });
+}
+
+// ---------- Plan de secours : état des services extérieurs ----------
+// Chaque service est testé comme l'appli s'en sert (une tuile, un itinéraire, une recherche…).
+// crit : la navigation en dépend ; backup : nom du secours automatique de l'appli.
+const ETAT_UA = 'Pisteo/1.0 (+https://pisteo.app; pisteo.app@gmail.com)';
+function tileXY(lon, lat, z) {
+  const n = 2 ** z, x = Math.floor((lon + 180) / 360 * n), r = lat * Math.PI / 180;
+  return { z, x, y: Math.floor((1 - Math.log(Math.tan(r) + 1 / Math.cos(r)) / Math.PI) / 2 * n) };
+}
+function tileUrl(tpl, lon, lat, z) {
+  const t = tileXY(lon, lat, z), o = 20037508.342789244, s = 2 * o / 2 ** z;
+  const bbox = [-o + t.x * s, o - (t.y + 1) * s, -o + (t.x + 1) * s, o - t.y * s].join(',');
+  return tpl.replace('{z}', t.z).replace('{x}', t.x).replace('{y}', t.y).replace('{bbox-epsg-3857}', bbox);
+}
+const ETAT = [
+  ['site', 'Site pisteo.app (Cloudflare Pages)', 'https://pisteo.app/', t => /balise-version/.test(t), 1, 'copie du téléphone'],
+  ['brouter', 'Itinéraires BRouter', 'https://brouter.de/brouter?lonlats=-0.3700,49.1800|-0.3500,49.1900&profile=trekking&alternativeidx=0&format=geojson', t => /FeatureCollection/.test(t), 1, 'OSRM FOSSGIS'],
+  ['osrm', 'Itinéraires de secours OSRM (FOSSGIS)', 'https://routing.openstreetmap.de/routed-foot/route/v1/driving/-0.37,49.18;-0.35,49.19?overview=false', t => /"Ok"/.test(t), 0, ''],
+  ['ign', 'Carte IGN (Géoplateforme)', tileUrl('https://data.geopf.fr/wmts?SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0&LAYER=GEOGRAPHICALGRIDSYSTEMS.PLANIGNV2&STYLE=normal&TILEMATRIXSET=PM_0_19&TILEMATRIX={z}&TILEROW={y}&TILECOL={x}&FORMAT=image/png', -0.37, 49.18, 12), 'img', 1, 'carte Monde'],
+  ['ortho', 'Photos aériennes IGN', tileUrl('https://data.geopf.fr/wmts?SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0&LAYER=ORTHOIMAGERY.ORTHOPHOTOS&STYLE=normal&TILEMATRIXSET=PM_0_19&TILEMATRIX={z}&TILEROW={y}&TILECOL={x}&FORMAT=image/jpeg', -0.37, 49.18, 12), 'img', 0, 'carte IGN'],
+  ['ofm', 'Carte Monde (OpenFreeMap)', 'https://tiles.openfreemap.org/planet', t => /"tiles"/.test(t), 1, 'carte officielle du pays'],
+  ['topo', 'Carte Topo (OpenTopoMap)', tileUrl('https://a.tile.opentopomap.org/{z}/{x}/{y}.png', -0.37, 49.18, 12), 'img', 0, 'IGN ou Monde'],
+  ['cyclosm', 'Carte CyclOSM', tileUrl('https://a.tile-cyclosm.openstreetmap.fr/cyclosm/{z}/{x}/{y}.png', -0.37, 49.18, 12), 'img', 0, 'IGN ou Monde'],
+  ['es', 'Carte Espagne (IGN España)', tileUrl('https://www.ign.es/wmts/mapa-raster?layer=MTN&style=default&tilematrixset=GoogleMapsCompatible&Service=WMTS&Request=GetTile&Version=1.0.0&Format=image/jpeg&TileMatrix={z}&TileCol={x}&TileRow={y}', -3.7, 40.4, 12), 'img', 0, 'carte Monde'],
+  ['at', 'Carte Autriche (basemap.at)', tileUrl('https://mapsneu.wien.gv.at/basemap/geolandbasemap/normal/google3857/{z}/{y}/{x}.png', 16.37, 48.21, 12), 'img', 0, 'carte Monde'],
+  ['be', 'Carte Belgique (IGN-NGI)', tileUrl('https://cartoweb.wmts.ngi.be/1.0.0/topo/default/3857/{z}/{y}/{x}.png', 4.35, 50.85, 12), 'img', 0, 'carte Monde'],
+  ['ch', 'Carte Suisse (swisstopo)', tileUrl('https://wmts.geo.admin.ch/1.0.0/ch.swisstopo.pixelkarte-farbe/default/current/3857/{z}/{x}/{y}.jpeg', 7.45, 46.95, 12), 'img', 0, 'carte Monde'],
+  ['gb', 'Carte Royaume-Uni (Ordnance Survey)', tileUrl('https://api.os.uk/maps/raster/v1/zxy/Outdoor_3857/{z}/{x}/{y}.png?key=nrlrimaly1yk6su7XFpdMCAtA5r6DQPs', -3.1, 54.45, 12), 'img', 0, 'carte Monde'],
+  ['de', 'Carte Allemagne (BKG)', tileUrl('https://sgx.geodatenzentrum.de/wmts_topplus_open/tile/1.0.0/web/default/WEBMERCATOR/{z}/{y}/{x}.png', 13.4, 52.5, 12), 'img', 0, 'carte Monde'],
+  ['ca', 'Carte Canada (Toporama)', tileUrl('https://maps.geogratis.gc.ca/wms/toporama_fr?SERVICE=WMS&VERSION=1.3.0&REQUEST=GetMap&LAYERS=SCW-Toporama&STYLES=&CRS=EPSG:3857&BBOX={bbox-epsg-3857}&WIDTH=256&HEIGHT=256&FORMAT=image/jpeg', -75.7, 45.4, 12), 'img', 0, 'carte Monde'],
+  ['us', 'Carte USA (USGS)', tileUrl('https://basemap.nationalmap.gov/arcgis/rest/services/USGSTopo/MapServer/tile/{z}/{y}/{x}', -105, 39.7, 12), 'img', 0, 'carte Monde'],
+  ['alti', 'Altitude IGN', 'https://data.geopf.fr/altimetrie/1.0/calcul/alti/rest/elevation.json?resource=ign_rge_alti_wld&delimiter=%7C&zonly=true&lon=-0.37&lat=49.18', t => /elevations/.test(t), 0, 'Open-Meteo'],
+  ['adresses', 'Recherche d\'adresses IGN', 'https://data.geopf.fr/geocodage/search?q=caen&limit=1', t => /features/.test(t), 0, 'communes téléchargées'],
+  ['photon', 'Recherche de lieux (Photon, Komoot)', 'https://photon.komoot.io/api/?q=caen&limit=1', t => /features/.test(t), 0, 'lieux IGN'],
+  ['overpass', 'Overpass (serveur principal)', 'https://overpass-api.de/api/status', t => /Connected as/.test(t), 0, '2 serveurs miroirs'],
+  ['overpass2', 'Overpass (miroir private.coffee)', 'https://overpass.private.coffee/api/status', t => /Connected as/.test(t), 0, ''],
+  ['meteo', 'Météo Open-Meteo', 'https://api.open-meteo.com/v1/forecast?latitude=49.18&longitude=-0.37&hourly=temperature_2m&forecast_days=1', t => /hourly/.test(t), 0, 'MET Norway'],
+  ['met', 'Météo de secours MET Norway', 'https://api.met.no/weatherapi/locationforecast/2.0/compact?lat=49.18&lon=-0.37', t => /timeseries/.test(t), 0, ''],
+  ['altisecours', 'Altitude de secours Open-Meteo', 'https://api.open-meteo.com/v1/elevation?latitude=49.18&longitude=-0.37', t => /elevation/.test(t), 0, ''],
+  ['data', 'Parcours balisés (GitHub Pages)', 'https://paul12102021.github.io/pisteo-data/manifest.json', t => /"tiles"/.test(t), 0, 'raw GitHub'],
+  ['dataraw', 'Parcours balisés, secours raw GitHub', 'https://raw.githubusercontent.com/Paul12102021/pisteo-data/gh-pages/manifest.json', t => /"tiles"/.test(t), 0, ''],
+  ['wmt', 'Waymarked Trails', tileUrl('https://tile.waymarkedtrails.org/hiking/{z}/{x}/{y}.png', -0.37, 49.18, 12), 'img', 0, 'Overpass'],
+  ['communes', 'Communes (geo.api.gouv.fr)', 'https://geo.api.gouv.fr/communes?codeDepartement=14&fields=nom&format=json', t => /nom/.test(t), 0, ''],
+  ['strava', 'Strava (API)', 'https://www.strava.com/api/v3/athlete', (t, r) => r.status === 401, 0, 'import manuel'],
+  ['drive', 'Google Drive (API)', 'https://www.googleapis.com/drive/v3/about', (t, r) => r.status === 401 || r.status === 403, 0, 'export en fichier'],
+  ['geofabrik', 'Geofabrik (mise à jour des données)', 'https://download.geofabrik.de/europe/france-updates/state.txt', t => /sequenceNumber/.test(t), 0, 'openstreetmap.fr'],
+];
+async function etatOne([id, name, u, test, crit, backup]) {
+  const t0 = Date.now();
+  try {
+    const r = await fetch(u, { headers: { 'User-Agent': ETAT_UA, 'Referer': 'https://pisteo.app/' }, signal: AbortSignal.timeout(15000), redirect: 'follow' });
+    let ok;
+    if (test === 'img') ok = r.ok && /image|octet/.test(r.headers.get('content-type') || '') && (await r.arrayBuffer()).byteLength > 100;
+    else ok = test(await r.text(), r) && (r.ok || r.status === 401 || r.status === 403);
+    return { id, name, ok, code: r.status, ms: Date.now() - t0, crit: !!crit, backup };
+  } catch (e) { return { id, name, ok: false, code: 0, err: String(e.message || e).slice(0, 80), ms: Date.now() - t0, crit: !!crit, backup }; }
+}
+async function etatCheck(env) {
+  const res = await Promise.all(ETAT.map(etatOne));
+  const prev = (env.CATALOGUE && await env.CATALOGUE.get('etat', 'json')) || { res: [] };
+  const now = new Date().toISOString();
+  for (const r of res) { // depuis quand un service est en panne
+    const p = prev.res.find(x => x.id === r.id);
+    if (!r.ok) r.since = p && !p.ok && p.since ? p.since : now;
+  }
+  const out = { t: now, down: res.filter(r => !r.ok).map(r => r.id), res };
+  if (env.CATALOGUE) await env.CATALOGUE.put('etat', JSON.stringify(out));
+  return out;
+}
+async function etatGet(env, url, ctx) {
+  let e = env.CATALOGUE && await env.CATALOGUE.get('etat', 'json');
+  // pas de vérification depuis plus d'1 h 30 (déclencheur absent) : on vérifie maintenant
+  if (!e || Date.now() - Date.parse(e.t) > 90 * 6e4 || (url.searchParams.get('maintenant') === '1' && Date.now() - Date.parse(e.t) > 5 * 6e4)) e = await etatCheck(env);
+  // https://api.pisteo.app/etat : données brutes ; …/etat?format=page : tableau lisible
+  if (url.searchParams.get('format') !== 'page') return new Response(JSON.stringify(e, null, 1), { headers: { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store', 'Access-Control-Allow-Origin': '*' } });
+  const row = r => `<tr class="${r.ok ? 'ok' : 'ko'}"><td>${r.ok ? '✅' : r.crit ? '🔴' : '🟠'}</td><td>${r.name}</td><td>${r.ok ? r.ms + ' ms' : 'en panne' + (r.since ? ' depuis ' + new Date(r.since).toLocaleString('fr-FR', { timeZone: 'Europe/Paris' }) : '')}</td><td>${r.backup || ''}</td></tr>`;
+  return new Response(`<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Pisteo · état des services</title>
+<style>body{font:15px system-ui;margin:16px;background:#f6f7f5;color:#1d2a24}table{border-collapse:collapse;width:100%;max-width:820px}td,th{padding:6px 8px;border-bottom:1px solid #dde;text-align:left}tr.ko{background:#fdecea}th{font-size:13px;color:#667}</style>
+<h1>État des services</h1><p>Vérifié le ${new Date(e.t).toLocaleString('fr-FR', { timeZone: 'Europe/Paris' })} · ${e.down.length ? e.down.length + ' en panne' : 'tout fonctionne'} · <a href="?format=page&maintenant=1">revérifier</a></p>
+<table><tr><th></th><th>Service</th><th>État</th><th>Secours dans l'appli</th></tr>${e.res.map(row).join('')}</table>`, { headers: { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store' } });
 }
