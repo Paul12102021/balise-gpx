@@ -277,6 +277,7 @@ addEventListener('pageshow',e=>{if(e.persisted)location.reload()})</script></bod
   const key = url.searchParams.get('key') || '';
   if (!env.ADMIN_KEY || key !== env.ADMIN_KEY || !env.CATALOGUE) return page('<main><p class="empty">Accès refusé.</p></main>', 403);
   if (url.searchParams.get('tab') === 'stats' && url.searchParams.get('csv')) return statsCsv(env, url);
+  if (url.searchParams.get('tab') === 'etat') return page(await etatAdmin(env, url, encodeURIComponent(key)));
   if (url.searchParams.get('tab') === 'stats') return page(await statsHtml(env, url, encodeURIComponent(key), esc));
   const idx = await loadIndex(env);
   if (req.method === 'POST') {
@@ -320,7 +321,7 @@ ${(it.ph || []).length ? `<div class="phs">${it.ph.map(p => `<div class="ph${p.o
   // athlètes connectés à Strava via Pisteo (capacité de l'appli Strava : 10 avant validation)
   let nStv = 0; try { let cur; do { const l = await env.CATALOGUE.list({ prefix: 'stv:ath:', cursor: cur }); nStv += l.keys.length; cur = l.list_complete ? null : l.cursor; } while (cur); } catch {}
   const head = `<header><h1>⭐ Catalogue Pisteo</h1><div class="stats"><div class="st"><b>${idx.filter(x => !x.hidden).length}</b>en ligne</div><div class="st"><b>${nPh}</b>photo${nPh > 1 ? 's' : ''} à valider</div><div class="st"><b>${idx.filter(x => x.rep || x.hidden).length}</b>signalé${idx.filter(x => x.rep || x.hidden).length > 1 ? 's' : ''} ou masqué${idx.filter(x => x.rep || x.hidden).length > 1 ? 's' : ''}</div><div class="st"><b>${idx.filter(x => x.date === new Date().toISOString().slice(0, 10)).length}</b>aujourd'hui</div><div class="st"><b>${nStv}</b>connecté${nStv > 1 ? 's' : ''} Strava</div></div>
-<nav>${tabs.map(([id, l, arr]) => `<a href="?key=${k}&f=${id}" class="${id === f ? 'on' : ''}">${l} (${arr.length})</a>`).join('')}<a href="?key=${k}&tab=stats">📊 Statistiques</a></nav></header>`;
+<nav>${tabs.map(([id, l, arr]) => `<a href="?key=${k}&f=${id}" class="${id === f ? 'on' : ''}">${l} (${arr.length})</a>`).join('')}<a href="?key=${k}&tab=stats">📊 Statistiques</a><a href="?key=${k}&tab=etat">🛰️ Services</a></nav></header>`;
   const empty = { wait: 'Aucune photo à valider. 👌', rep: 'Aucun parcours signalé.', all: 'Aucun parcours pour l’instant.' }[f] || '';
   return page(`${head}<main>${cards.join('') || `<p class="empty">${empty}</p>`}</main>`);
 }
@@ -368,7 +369,7 @@ const ST_LABELS = {
   signaler_osm: 'Signalement OSM', pip: 'Image dans l’image', eco_bouton: 'Économie de batterie', avis: '« Mon avis »', sortie_supprimee: 'Sorties jetées', terminer: '« Terminer »'
 };
 async function statsHtml(env, url, k, esc) {
-  const nav = `<header><h1>📊 Statistiques Pisteo</h1><nav><a href="?key=${k}">⭐ Catalogue</a><a class="on" href="?key=${k}&tab=stats">📊 Statistiques</a></nav></header>`;
+  const nav = `<header><h1>📊 Statistiques Pisteo</h1><nav><a href="?key=${k}">⭐ Catalogue</a><a class="on" href="?key=${k}&tab=stats">📊 Statistiques</a><a href="?key=${k}&tab=etat">🛰️ Services</a></nav></header>`;
   if (!env.STATS) return nav + '<main><p class="empty">Base D1 « STATS » pas encore reliée au worker (Settings → Bindings → D1 database, nom STATS).</p></main>';
   await stInit(env);
   const per = url.searchParams.get('p') || '30', n = per === 'all' ? 3650 : +per || 30;
@@ -509,15 +510,33 @@ async function etatCheck(env) {
   if (env.CATALOGUE) await env.CATALOGUE.put('etat', JSON.stringify(out));
   return out;
 }
-async function etatGet(env, url, ctx) {
+async function etatLoad(env, url) {
   let e = env.CATALOGUE && await env.CATALOGUE.get('etat', 'json');
-  // pas de vérification depuis plus d'1 h 30 (déclencheur absent) : on vérifie maintenant
+  // pas de vérification depuis plus d'1 h 30 (déclencheur absent) : on vérifie maintenant ; « revérifier » : 5 min au plus souvent
   if (!e || Date.now() - Date.parse(e.t) > 90 * 6e4 || (url.searchParams.get('maintenant') === '1' && Date.now() - Date.parse(e.t) > 5 * 6e4)) e = await etatCheck(env);
+  return e;
+}
+const etatDate = d => new Date(d).toLocaleString('fr-FR', { timeZone: 'Europe/Paris', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
+function etatTable(e) {
+  const order = r => r.ok ? 2 : r.crit ? 0 : 1;
+  const row = r => `<tr class="${r.ok ? 'ok' : r.crit ? 'crit' : 'ko'}"><td>${r.ok ? '✅' : r.crit ? '🔴' : '🟠'}</td><td>${r.name}</td><td>${r.ok ? r.ms + ' ms' : 'en panne' + (r.since ? ' depuis le ' + etatDate(r.since) : '') + (r.code ? ' (' + r.code + ')' : '')}</td><td>${r.backup || ''}</td></tr>`;
+  return `<style>.etat{border-collapse:collapse;width:100%;max-width:860px;font-size:14px}.etat td,.etat th{padding:7px 8px;border-bottom:1px solid #8883;text-align:left}.etat tr.ko{background:#f59e0b22}.etat tr.crit{background:#ef444433}.etat th{font-size:12px;opacity:.7}</style>
+<table class="etat"><tr><th></th><th>Service</th><th>État</th><th>Secours dans l'appli</th></tr>${e.res.slice().sort((a, b) => order(a) - order(b)).map(row).join('')}</table>`;
+}
+function etatResume(e) {
+  const crit = e.res.filter(r => !r.ok && r.crit).length;
+  return `Vérifié le ${etatDate(e.t)} · ${e.down.length ? `<b>${e.down.length} en panne</b>${crit ? ' dont ' + crit + ' critique' + (crit > 1 ? 's' : '') : ''}` : '<b>tout fonctionne</b>'} · vérification automatique toutes les heures`;
+}
+async function etatAdmin(env, url, k) {
+  const nav = `<header><h1>🛰️ État des services</h1><nav><a href="?key=${k}">⭐ Catalogue</a><a href="?key=${k}&tab=stats">📊 Statistiques</a><a class="on" href="?key=${k}&tab=etat">🛰️ Services</a></nav></header>`;
+  const e = await etatLoad(env, url);
+  return nav + `<main><p>${etatResume(e)} · <a href="?key=${k}&tab=etat&maintenant=1">Revérifier maintenant</a></p>
+<p style="font-size:13px;opacity:.75">🔴 la navigation en dépend · 🟠 fonction annexe ou secours actif. Une panne isolée de moins de 2 h est souvent passagère. Détails : fiche « plan de secours » du projet.</p>${etatTable(e)}</main>`;
+}
+async function etatGet(env, url, ctx) {
+  const e = await etatLoad(env, url);
   // https://api.pisteo.app/etat : données brutes ; …/etat?format=page : tableau lisible
   if (url.searchParams.get('format') !== 'page') return new Response(JSON.stringify(e, null, 1), { headers: { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store', 'Access-Control-Allow-Origin': '*' } });
-  const row = r => `<tr class="${r.ok ? 'ok' : 'ko'}"><td>${r.ok ? '✅' : r.crit ? '🔴' : '🟠'}</td><td>${r.name}</td><td>${r.ok ? r.ms + ' ms' : 'en panne' + (r.since ? ' depuis ' + new Date(r.since).toLocaleString('fr-FR', { timeZone: 'Europe/Paris' }) : '')}</td><td>${r.backup || ''}</td></tr>`;
   return new Response(`<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Pisteo · état des services</title>
-<style>body{font:15px system-ui;margin:16px;background:#f6f7f5;color:#1d2a24}table{border-collapse:collapse;width:100%;max-width:820px}td,th{padding:6px 8px;border-bottom:1px solid #dde;text-align:left}tr.ko{background:#fdecea}th{font-size:13px;color:#667}</style>
-<h1>État des services</h1><p>Vérifié le ${new Date(e.t).toLocaleString('fr-FR', { timeZone: 'Europe/Paris' })} · ${e.down.length ? e.down.length + ' en panne' : 'tout fonctionne'} · <a href="?format=page&maintenant=1">revérifier</a></p>
-<table><tr><th></th><th>Service</th><th>État</th><th>Secours dans l'appli</th></tr>${e.res.map(row).join('')}</table>`, { headers: { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store' } });
+<style>body{font:15px system-ui;margin:16px;background:#f6f7f5;color:#1d2a24}</style><h1>État des services</h1><p>${etatResume(e)} · <a href="?format=page&maintenant=1">revérifier</a></p>${etatTable(e)}`, { headers: { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store' } });
 }
