@@ -5,7 +5,7 @@
 
 // La page et le code doivent être de la même version. Sinon (page gardée en cache
 // par le téléphone ou par GitHub), on recharge une page fraîche, au plus 3 fois.
-const APP_VERSION = 245;
+const APP_VERSION = 246;
 try {
   const meta = document.querySelector('meta[name="balise-version"]');
   const pageV = meta ? +meta.content : 0;
@@ -1034,7 +1034,7 @@ async function renderLib() {
     open.querySelector('span').textContent = `${fmtDist(it.dist)}${it.up != null ? ' · D+ ' + fmtM(it.up) : ''} · ouverte le ${fmtDate(it.date)}`;
     open.onclick = () => { closeLib(); loadText(it.text); };
     const share = document.createElement('button'); share.className = 'lib-del'; share.setAttribute('aria-label', 'Envoyer ' + it.name);
-    share.innerHTML = ICON_SHARE; share.onclick = () => { try { const t = parseGPX(it.text); openSend({ name: it.name, pts: t.pts, wpts: t.wpts, desc: t.desc }); } catch { shareGPX(it.text, it.name); } };
+    share.innerHTML = ICON_SHARE; share.onclick = () => { try { const t = parseGPX(it.text); openSend({ name: it.name, pts: t.pts, wpts: t.wpts, desc: t.desc, text: it.text }); } catch { shareGPX(it.text, it.name); } };
     const del = document.createElement('button'); del.className = 'lib-del'; del.setAttribute('aria-label', 'Retirer ' + it.name);
     del.innerHTML = ICON_DEL; del.onclick = async () => { await idb('readwrite', st => st.delete(it.id)).catch(() => {}); renderLib(); };
     li.append(open, share, del); list.appendChild(li);
@@ -3701,7 +3701,7 @@ async function rtAddCat(list, at) {
     let near = Infinity; for (const p of r.pts) { const d = hav(at, p); if (d < near) near = d; }
     if (near > R) continue;
     add.push({ id: 'c:' + c.id, cid: c.id, tags: {}, cat: 'cp', name: c.name, dist: c.dist, near: near < 300 ? 0 : near, big: false, at, src: 'c', h: c.h,
-      bounds: { minlat: c.bb[0], minlon: c.bb[1], maxlat: c.bb[2], maxlon: c.bb[3] }, notes: { desc: r.desc || c.desc || '', wpts: r.wpts || [] }, cdesc: c.desc || r.desc || '', ph: Array.isArray(c.ph) ? c.ph : [], date: c.date });
+      bounds: { minlat: c.bb[0], minlon: c.bb[1], maxlat: c.bb[2], maxlon: c.bb[3] }, notes: { desc: r.desc || c.desc || '', wpts: r.wpts || [] }, cdesc: c.desc || r.desc || '', ph: Array.isArray(c.ph) ? c.ph : [], date: c.date, done: c.done, dms: c.ms });
   }
   if (!add.length || rt.list !== list) return;
   const score = it => it.near / 1000 - 1.5 * Math.min(it.ph.length, 3) + (Date.now() - Date.parse(it.date || 0)) / 864e5 / 365;
@@ -4205,7 +4205,8 @@ async function rtSelect(it) {
   $('rtpDot').style.background = rtColor(it); $('rtpTitle').textContent = it.name;
   $('rtpSub').textContent = 'Chargement du tracé…'; rtMiniProfile($('rtpProf'), null);
   $('rtpGo').disabled = $('rtpKeep').disabled = $('rtpView').disabled = true; $('rtpKeep').textContent = 'Garder';
-  $('rtpDesc').textContent = it.cdesc || ''; $('rtpDesc').hidden = !it.cdesc; $('rtpReport').hidden = it.src !== 'c';
+  const doneTxt = it.done && it.dms ? tr(`Parcouru le ${new Date(it.done).toLocaleDateString(LOC, { day: 'numeric', month: 'long', year: 'numeric' })} en ${fmtDur(it.dms / 1000)}`) : '';
+  $('rtpDesc').textContent = [doneTxt, it.cdesc || ''].filter(Boolean).join('\n'); $('rtpDesc').hidden = !doneTxt && !it.cdesc; $('rtpReport').hidden = it.src !== 'c';
   const phs = (it.ph || []).map(n => `${CAT_API}/img/${it.cid}/${n}?d=${it.date || ''}`), strip = $('rtpPhotos'); strip.innerHTML = ''; strip.hidden = !phs.length;
   phs.forEach((u, i) => { const b = document.createElement('button'); b.className = 'ph-th'; b.style.backgroundImage = `url("${u}")`; b.setAttribute('aria-label', tr('Voir la photo')); b.onclick = () => catPhView(phs, i); strip.appendChild(b); });
   rtCardMode('prev');
@@ -5011,12 +5012,50 @@ function openSend(src) {
 $('wtDesc').addEventListener('change', () => wtNotes());
 $('wtAddNote').onclick = () => { wtNotes(); $('watch').hidden = true; addNote('send'); };
 // sortie : on l'ouvre sur la carte comme une trace, liée à la sortie pour que les notes y soient enregistrées
+// ---------- preuve qu'un parcours a été fait : une sortie enregistrée, ou un GPX d'activité (heures de passage) ----------
+const CP_SPEED = { foot: [1, 20], bike: [4, 50] }; // vitesse moyenne en mouvement plausible (km/h) : marche à course, balade à route
+function cpProofText() {
+  if (!wtSrc) return '';
+  if (wtSrc.rec) return wtSrc.rec.text || '';
+  if (wtSrc.cur && track) return (track.recItem && track.recItem.text) || store.get('gpx') || '';
+  return wtSrc.text || '';
+}
+// renvoie { done, ms, dist, avg } ou { err } ; null si le fichier n'a pas d'heures (tracé dessiné ou calculé)
+function cpProof() {
+  let pts = []; try { pts = parseRec(cpProofText()).filter(p => isFinite(p.t)); } catch {}
+  if (pts.length < 20) return null;
+  let ms = 0, dist = 0, gapD = 0; const sp = [];
+  let wd = 0, wt = 0;
+  for (let i = 1; i < pts.length; i++) {
+    const a = pts[i - 1], b = pts[i], dt = (b.t - a.t) / 1000, d = hav(a, b);
+    if (dt <= 0) continue;
+    dist += d;
+    if ((a.s || 0) !== (b.s || 0)) continue; // pause volontaire
+    if (dt > 600 && d > 1000) { gapD += d; continue; } // coupure d'enregistrement
+    if (dt < 300 && d / dt > 0.3) {
+      ms += dt * 1000; wd += d; wt += dt;
+      if (wt >= 60) { sp.push(wd / wt); wd = 0; wt = 0; } // vitesse par tranche d'une minute
+    }
+  }
+  if (!dist || ms < 5 * 6e4) return { err: 'Sortie trop courte pour être proposée.' };
+  if (gapD > dist * 0.3) return { err: 'L\'enregistrement de cette sortie a trop de coupures pour être proposé.' };
+  // heures inventées par un logiciel de préparation (vitesse parfaitement constante) : pas une vraie sortie
+  if (sp.length >= 10) { const m = sp.reduce((x, y) => x + y, 0) / sp.length, sd = Math.sqrt(sp.reduce((x, y) => x + (y - m) ** 2, 0) / sp.length); if (sd / m < 0.04) return null; }
+  return { done: pts[0].t, ms, dist, avg: dist / 1000 / (ms / 36e5) };
+}
+const cpNoProof = () => toast('Seuls les parcours que tu as faits peuvent être proposés : enregistre ta sortie avec Pisteo, ou importe le GPX de ton activité (Strava, Garmin…).', 7000);
+let cpPf = null;
 $('wtPropose').onclick = () => {
   if (!wtSrc) return;
+  cpPf = cpProof();
+  if (!cpPf) { cpNoProof(); return; }
+  if (cpPf.err) { toast(cpPf.err, 5000); return; }
   const n = wtNotes(), nm = wtSrc.name || '';
   $('cpName').value = CP_AUTO_NAME.test(nm) ? '' : nm.replace(/ \(sens inverse\)$/, '').slice(0, 60);
-  $('cpDesc').value = n.desc || ''; cpSport = profile === 'trekking' ? 'bike' : 'foot'; cpSportUI();
-  $('cpOk').checked = false; $('cpMsg').hidden = true; $('cpSend').disabled = false;
+  $('cpDesc').value = n.desc || '';
+  cpSport = wtSrc.rec && wtSrc.rec.mode ? wtSrc.rec.mode : cpPf.avg > 18 ? 'bike' : profile === 'trekking' ? 'bike' : 'foot'; cpSportUI();
+  $('cpDone').textContent = tr(`Parcouru le ${new Date(cpPf.done).toLocaleDateString(LOC, { day: 'numeric', month: 'long', year: 'numeric' })} en ${fmtDur(cpPf.ms / 1000)} (${kmh(cpPf.avg)} de moyenne)`);
+  $('cpMsg').hidden = true; $('cpSend').disabled = false;
   // proposé depuis une sortie : ses photos sont reprises (on peut en retirer)
   cpFiles = wtSrc.rec && soPhotos.length ? soPhotos.slice(0, 3).map(p => p.full) : []; cpThumbs();
   $('watch').hidden = true; $('propose').hidden = false;
@@ -5059,14 +5098,15 @@ $('cpSend').onclick = async () => {
   const name = $('cpName').value.trim(), desc = $('cpDesc').value.trim();
   if (name.length < 4 || CP_AUTO_NAME.test(name)) { say('Donne un nom au parcours (lieu, sommet, lac…).'); return; }
   if (desc.length < 30) { say('Ajoute une description d\'au moins 30 caractères : difficulté, départ, ce qu\'on y voit…'); return; }
-  if (!$('cpOk').checked) { say('Coche la case pour confirmer que tu as fait ce parcours.'); return; }
+  const [lo, hi] = CP_SPEED[cpSport];
+  if (cpPf.avg > hi || cpPf.avg < lo) { say(cpSport === 'foot' && cpPf.avg > hi ? `Vitesse moyenne de ${Math.round(cpPf.avg)} km/h : ce parcours a-t-il été fait à vélo ?` : cpSport === 'bike' && cpPf.avg < lo ? `Vitesse moyenne de ${cpPf.avg.toFixed(1)} km/h : ce parcours a-t-il été fait à pied ?` : `Vitesse moyenne de ${Math.round(cpPf.avg)} km/h : trop rapide pour un parcours à vélo.`); return; }
   // la description sert aussi au parcours ouvert (et au lien partagé)
   if (wtSrc.cur && track) { $('wtDesc').value = desc.slice(0, NOTE_DESC_MAX); track.desc = $('wtDesc').value; commitNotes(); }
   const n = wtNotes(), notes = { desc, wpts: n.wpts };
   const url = await routeLink(name, wtSrc.pts, notes), h = url.slice(url.indexOf('#'));
   $('cpSend').disabled = true;
   try {
-    const r = await fetch(CAT_API + '/propose', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ h, name, sport: cpSport }) });
+    const r = await fetch(CAT_API + '/propose', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ h, name, sport: cpSport, done: cpPf.done, ms: Math.round(cpPf.ms) }) });
     const j = await r.json().catch(() => ({}));
     if (j.ok) {
       let sent = 0;

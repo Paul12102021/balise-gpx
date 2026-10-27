@@ -113,7 +113,7 @@ async function ipKey(req, env) {
 }
 async function loadIndex(env) { return (await env.CATALOGUE.get('index', 'json')) || []; }
 async function saveIndex(env, idx) { await env.CATALOGUE.put('index', JSON.stringify(idx)); }
-const publicItem = it => ({ id: it.id, name: it.name, sport: it.sport, dist: it.dist, up: it.up, start: it.start, bb: it.bb, desc: it.desc, h: it.h, date: it.date, ph: (it.ph || []).filter(p => p.ok).map(p => p.n) });
+const publicItem = it => ({ id: it.id, name: it.name, sport: it.sport, dist: it.dist, up: it.up, start: it.start, bb: it.bb, desc: it.desc, h: it.h, date: it.date, done: it.done, ms: it.ms, ph: (it.ph || []).filter(p => p.ok).map(p => p.n) });
 const CAT_PHOTOS = 3, CAT_PHOTO_MAX = 700 * 1024;
 
 // vérifications automatiques d'une proposition : renvoie un message d'erreur, ou '' si tout va bien
@@ -158,6 +158,10 @@ async function catalogue(req, env, path, json) {
     const idx = await loadIndex(env);
     const res = await checkProposal(b, r, idx);
     if (typeof res === 'string') return json({ ok: false, message: res }, 422);
+    // preuve que le parcours a été fait : date et durée en mouvement, vitesse moyenne plausible pour le sport
+    const done = +b.done, ms = +b.ms, avg = res.dist / 1000 / (ms / 36e5), [lo, hi] = b.sport === 'bike' ? [4, 50] : [1, 20];
+    if (!(done > Date.UTC(2000, 0, 1) && done < Date.now() + 864e5) || !(ms >= 3e5 && ms < 7 * 864e5)) return json({ ok: false, message: 'Seuls les parcours que tu as faits peuvent être proposés.' }, 422);
+    if (!(avg >= lo * 0.9 && avg <= hi * 1.1)) return json({ ok: false, message: `Vitesse moyenne de ${Math.round(avg)} km/h : vérifie le sport choisi (à pied ou à vélo).` }, 422);
     let up = 0; for (let i = 1; i < r.pts.length; i++) if (r.pts[i].ele != null && r.pts[i - 1].ele != null && r.pts[i].ele > r.pts[i - 1].ele) up += r.pts[i].ele - r.pts[i - 1].ele;
     const lats = r.pts.map(p => p.lat), lons = r.pts.map(p => p.lon);
     const tok = crypto.randomUUID(); // jeton qui permet d'ajouter les photos de ce parcours, juste après
@@ -165,7 +169,7 @@ async function catalogue(req, env, path, json) {
       tok,
       id: crypto.randomUUID().slice(0, 8), name: String(b.name).trim().slice(0, 60), sport: b.sport, dist: Math.round(res.dist), up: r.pts[0].ele != null ? Math.round(up) : null,
       start: [r.pts[0].lat, r.pts[0].lon], bb: [Math.min(...lats), Math.min(...lons), Math.max(...lats), Math.max(...lons)],
-      desc: r.desc.trim().slice(0, 500), h: b.h, date: day, by: ik, rep: 0, hidden: false
+      desc: r.desc.trim().slice(0, 500), h: b.h, date: day, done, ms: Math.round(ms), by: ik, rep: 0, hidden: false
     };
     idx.push(it); await saveIndex(env, idx);
     await env.CATALOGUE.put(lk, String(n + 1), { expirationTtl: 2 * 86400 });
@@ -258,7 +262,7 @@ button{font:600 13px system-ui,sans-serif;border:0;border-radius:9px;padding:8px
   const form = (id, inner) => `<form method="post" action="?key=${k}&f=${f}"><input type="hidden" name="id" value="${esc(id)}">${inner}</form>`;
   const cards = await Promise.all(list.map(async it => `<article class="card${it.hidden ? ' hid' : ''}"><div class="map">${await svg(it)}</div><div class="body">
 <div class="t">${esc(it.name)}</div>
-<div class="meta">${it.sport === 'bike' ? '🚴 vélo' : '🥾 à pied'} · ${(it.dist / 1000).toFixed(1)} km${it.up != null ? ' · D+ ' + it.up + ' m' : ''} · proposé le ${new Date(it.date + 'T12:00:00Z').toLocaleDateString('fr-FR', { day: 'numeric', month: 'short', year: 'numeric' })}</div>
+<div class="meta">${it.sport === 'bike' ? '🚴 vélo' : '🥾 à pied'} · ${(it.dist / 1000).toFixed(1)} km${it.up != null ? ' · D+ ' + it.up + ' m' : ''} · proposé le ${new Date(it.date + 'T12:00:00Z').toLocaleDateString('fr-FR', { day: 'numeric', month: 'short', year: 'numeric' })}${it.done ? ` · parcouru le ${new Date(it.done).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' })} en ${Math.floor(it.ms / 36e5) ? Math.floor(it.ms / 36e5) + ' h ' : ''}${String(Math.round(it.ms % 36e5 / 6e4)).padStart(2, '0')} min (${(it.dist / 1000 / (it.ms / 36e5)).toFixed(1)} km/h)` : ''}</div>
 ${it.hidden ? '<span class="tag b">Masqué</span>' : ''}${it.rep ? `<span class="tag b">${it.rep} signalement${it.rep > 1 ? 's' : ''}</span>` : ''}${waitN(it) ? `<span class="tag w">${waitN(it)} photo${waitN(it) > 1 ? 's' : ''} à valider</span>` : ''}
 <p class="desc">${esc(it.desc)}</p>
 ${it.why && it.why.filter(Boolean).length ? `<p class="why">Motifs : ${esc(it.why.filter(Boolean).join(' · '))}</p>` : ''}
