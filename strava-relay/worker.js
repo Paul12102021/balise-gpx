@@ -278,7 +278,17 @@ addEventListener('pageshow',e=>{if(e.persisted)location.reload()})</script></bod
   const key = url.searchParams.get('key') || '';
   if (!env.ADMIN_KEY || key !== env.ADMIN_KEY || !env.CATALOGUE) return page('<main><p class="empty">Accès refusé.</p></main>', 403);
   if (url.searchParams.get('tab') === 'stats' && url.searchParams.get('csv')) return statsCsv(env, url);
-  if (url.searchParams.get('tab') === 'etat') return page(await etatAdmin(env, url, encodeURIComponent(key)));
+  if (url.searchParams.get('tab') === 'etat') {
+    // vérification manuelle avec progression : la page teste les services un par un (?un=id), puis enregistre le tout (POST)
+    const jr = o => new Response(JSON.stringify(o), { headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' } });
+    const one = url.searchParams.get('un');
+    if (one) { const it = ETAT.find(x => x[0] === one); return it ? jr(await etatOne(it)) : jr({ ok: false, err: 'inconnu' }); }
+    if (req.method === 'POST') {
+      try { const res = (await req.json()).res; if (!Array.isArray(res)) throw 0; return jr(await etatStore(env, res.filter(r => ETAT.some(x => x[0] === r.id)))); }
+      catch { return jr({ ok: false }); }
+    }
+    return page(await etatAdmin(env, url, encodeURIComponent(key)));
+  }
   if (url.searchParams.get('tab') === 'stats') return page(await statsHtml(env, url, encodeURIComponent(key), esc));
   const idx = await loadIndex(env);
   if (req.method === 'POST') {
@@ -563,8 +573,8 @@ async function etatTry([id, name, u, test, crit, backup]) {
     return { id, name, ok, code: r.status, ms: Date.now() - t0, crit: !!crit, backup };
   } catch (e) { return { id, name, ok: false, code: 0, err: String(e.message || e).slice(0, 80), ms: Date.now() - t0, crit: !!crit, backup }; }
 }
-async function etatCheck(env) {
-  const res = await Promise.all(ETAT.map(etatOne));
+async function etatCheck(env) { return etatStore(env, await Promise.all(ETAT.map(etatOne))); }
+async function etatStore(env, res) {
   const prev = (env.CATALOGUE && await env.CATALOGUE.get('etat', 'json')) || { res: [] };
   const now = new Date().toISOString();
   for (const r of res) { // depuis quand un service est en panne
@@ -584,7 +594,7 @@ async function etatLoad(env, url) {
 const etatDate = d => new Date(d).toLocaleString('fr-FR', { timeZone: 'Europe/Paris', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
 function etatTable(e) {
   const order = r => r.ok ? 2 : r.crit ? 0 : 1;
-  const row = r => `<tr class="${r.ok ? 'ok' : r.crit ? 'crit' : 'ko'}"><td>${r.ok ? '✅' : r.crit ? '🔴' : '🟠'}</td><td>${r.name}</td><td>${r.ok ? r.ms + ' ms' : 'en panne' + (r.since ? ' depuis le ' + etatDate(r.since) : '') + (r.code ? ' (' + r.code + ')' : '')}</td><td>${r.backup || ''}</td></tr>`;
+  const row = r => `<tr data-id="${r.id}" class="${r.ok ? 'ok' : r.crit ? 'crit' : 'ko'}"><td>${r.ok ? '✅' : r.crit ? '🔴' : '🟠'}</td><td>${r.name}</td><td>${r.ok ? r.ms + ' ms' : 'en panne' + (r.since ? ' depuis le ' + etatDate(r.since) : '') + (r.code ? ' (' + r.code + ')' : '')}</td><td>${r.backup || ''}</td></tr>`;
   return `<style>.etat{border-collapse:collapse;width:100%;max-width:860px;font-size:14px}.etat td,.etat th{padding:7px 8px;border-bottom:1px solid #8883;text-align:left}.etat tr.ko{background:#f59e0b22}.etat tr.crit{background:#ef444433}.etat th{font-size:12px;opacity:.7}</style>
 <table class="etat"><tr><th></th><th>Service</th><th>État</th><th>Secours dans l'appli</th></tr>${e.res.slice().sort((a, b) => order(a) - order(b)).map(row).join('')}</table>`;
 }
@@ -605,7 +615,22 @@ async function etatAdmin(env, url, k) {
 .everd h2{margin:0 0 6px;font-size:18px}.everd p{margin:0}.ecard{background:#ffffff0a;border:1px solid #8884;border-radius:8px;padding:10px 14px;margin:0 0 10px;max-width:830px}.ecard.over{border-color:#ef4444}
 .eh{display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap;margin-bottom:4px}.eh span{opacity:.75;font-size:13px}.ecard p{margin:4px 0;font-size:14px}.el{display:inline-block;min-width:185px;margin-right:6px;opacity:.65;font-size:12px;text-transform:uppercase;letter-spacing:.03em}
 .ebtn{background:#2f6b4f;color:#fff;border:0;border-radius:6px;padding:8px 14px;font:inherit;cursor:pointer;margin:4px 0 20px}</style>
-<p>${etatResume(e)} · <a href="?key=${k}&tab=etat&maintenant=1">Revérifier maintenant</a></p>
+<p>${etatResume(e)}</p>
+<button class="ebtn" id="erun" style="margin:0 0 6px">🔄 Revérifier maintenant</button>
+<div id="eprog" hidden style="max-width:860px;margin:0 0 14px"><div style="height:10px;background:#8883;border-radius:99px;overflow:hidden"><div id="ebar" style="height:100%;width:0;background:var(--go,#2F5E45);transition:width .3s"></div></div>
+<p id="etxt" style="margin:6px 0 0;font-size:14px"></p><div id="echips" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:6px;margin-top:10px"></div></div>
+<script>(()=>{const ids=${JSON.stringify(ETAT.map(x => x[0]))},names=${JSON.stringify(Object.fromEntries(ETAT.map(x => [x[0], x[1]])))},key=${JSON.stringify(decodeURIComponent(k))};
+const b=document.getElementById('erun');b.onclick=async()=>{b.disabled=true;b.textContent='⏳ Vérification en cours…';document.getElementById('eprog').hidden=false;
+const bar=document.getElementById('ebar'),txt=document.getElementById('etxt'),res=[];let done=0,bad=0;
+document.querySelectorAll('.etat tr[data-id]').forEach(tr=>{tr.className='';tr.cells[0].textContent='⏳';tr.cells[2].textContent='en cours…'});
+const chips=document.getElementById('echips'),chip={};ids.forEach(id=>{const c=document.createElement('div');c.style.cssText='background:#ffffff0d;border:1px solid #8884;border-radius:8px;padding:6px 10px;font-size:13px;transition:background .3s';c.textContent='⏳ '+names[id];chips.appendChild(c);chip[id]=c});
+const show=()=>{bar.style.width=(100*done/ids.length)+'%';txt.textContent=done+' / '+ids.length+' services vérifiés'+(bad?' · '+bad+' en échec pour l’instant':'')};show();
+const u=id=>'?key='+encodeURIComponent(key)+'&tab=etat&un='+encodeURIComponent(id);let next=0;
+const worker=async()=>{while(next<ids.length){const id=ids[next++];if(chip[id])chip[id].textContent='🔎 '+names[id]+' · en cours';let r;try{r=await fetch(u(id),{cache:'no-store'}).then(x=>x.json())}catch(_){r={id,name:names[id],ok:false,code:0,err:'réseau'}}
+res.push(r);done++;if(!r.ok)bad++;const c=chip[id];if(c){c.textContent=(r.ok?'✅ ':r.crit?'🔴 ':'🟠 ')+names[id]+(r.ok?' · '+r.ms+' ms':' · en panne');c.style.background=r.ok?'#22c55e1a':r.crit?'#ef444440':'#f59e0b33'}const tr=document.querySelector('.etat tr[data-id="'+id+'"]');if(tr){tr.className=r.ok?'ok':r.crit?'crit':'ko';tr.cells[0].textContent=r.ok?'✅':r.crit?'🔴':'🟠';tr.cells[2].textContent=r.ok?r.ms+' ms':'en panne'+(r.code?' ('+r.code+')':'')}show()}};
+await Promise.all(Array.from({length:8},worker));txt.textContent='Enregistrement…';
+try{await fetch('?key='+encodeURIComponent(key)+'&tab=etat',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({res})})}catch(_){}
+location.replace('?key='+encodeURIComponent(key)+'&tab=etat')}})()</script>
 <div class="everd"><h2>${ic} ${v.title}</h2><p>${esc(v.text)}</p></div>
 ${cards}${v.items.length ? `<button class="ebtn" id="ecopy">📋 Copier le message pour Claude</button><textarea id="emsg" hidden>${esc(etatMessage(e, v))}</textarea>
 <script>document.getElementById('ecopy').onclick=async function(){const t=document.getElementById('emsg').value;try{await navigator.clipboard.writeText(t);this.textContent='✓ Copié : colle-le dans la conversation Pisteo'}catch(_){const a=document.getElementById('emsg');a.hidden=false;a.select();this.textContent='Sélectionné : Ctrl+C'}}</script>` : ''}
