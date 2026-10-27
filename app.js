@@ -5,7 +5,7 @@
 
 // La page et le code doivent être de la même version. Sinon (page gardée en cache
 // par le téléphone ou par GitHub), on recharge une page fraîche, au plus 3 fois.
-const APP_VERSION = 242;
+const APP_VERSION = 243;
 try {
   const meta = document.querySelector('meta[name="balise-version"]');
   const pageV = meta ? +meta.content : 0;
@@ -3698,10 +3698,13 @@ async function rtAddCat(list, at) {
     let near = Infinity; for (const p of r.pts) { const d = hav(at, p); if (d < near) near = d; }
     if (near > R) continue;
     add.push({ id: 'c:' + c.id, cid: c.id, tags: {}, cat: 'cp', name: c.name, dist: c.dist, near: near < 300 ? 0 : near, big: false, at, src: 'c', h: c.h,
-      bounds: { minlat: c.bb[0], minlon: c.bb[1], maxlat: c.bb[2], maxlon: c.bb[3] }, notes: { desc: r.desc || c.desc || '', wpts: r.wpts || [] }, cdesc: c.desc || r.desc || '', ph: Array.isArray(c.ph) ? c.ph : [] });
+      bounds: { minlat: c.bb[0], minlon: c.bb[1], maxlat: c.bb[2], maxlon: c.bb[3] }, notes: { desc: r.desc || c.desc || '', wpts: r.wpts || [] }, cdesc: c.desc || r.desc || '', ph: Array.isArray(c.ph) ? c.ph : [], date: c.date });
   }
   if (!add.length || rt.list !== list) return;
-  list.unshift(...add.sort((a, b) => a.near - b.near));
+  const score = it => it.near / 1000 - 1.5 * Math.min(it.ph.length, 3) + (Date.now() - Date.parse(it.date || 0)) / 864e5 / 365;
+  add.sort((a, b) => score(a) - score(b)).forEach((it, i) => { it.top = i < CAT_SHOW; });
+  list.unshift(...add);
+  rtFiltUI();
   rtRender(); rtDraw(); rtBarText(); rtEnrich();
 }
 async function rtSearch() {
@@ -3745,7 +3748,7 @@ function rtRender() {
   if (rt.tapped) st = `${all.length} parcours passent à l'endroit touché. Lequel veux-tu voir ?`;
   else if (!all.length) st = `Aucun parcours ${rtBike() ? 'vélo' : 'à pied'} balisé recensé ici. Essaie l'autre mode, déplace la carte ou cherche un lieu.`;
   else if (rtFiltOn()) st = `${items.length} parcours sur ${all.length} ${where} correspondent au filtre.` + (pr.done < pr.n ? ` Calcul des distances et dénivelés : ${pr.done}/${pr.n}…` : '');
-  else st = `${all.length} parcours balisé${all.length > 1 ? 's' : ''} ${where}. Touche une ligne sur la carte, ou glisse vers le haut pour la liste.` + (pr.done < pr.n ? ` (calcul ${pr.done}/${pr.n})` : '');
+  else st = `${items.length} parcours ${where}. Touche une ligne sur la carte, ou glisse vers le haut pour la liste.` + (pr.done < pr.n ? ` (calcul ${pr.done}/${pr.n})` : '');
   $('rtStatus').textContent = st;
   if (rtSheet.collapsed && !$('routes').hidden) rtSetCollapsed(true);
   for (const it of items.slice(0, 80)) {
@@ -3938,12 +3941,18 @@ function rtChanged() {
 // ---------- Filtres : distance et dénivelé positif ----------
 const RT_DF = [['', 'Toutes'], ['0-10', '< 10 km'], ['10-30', '10–30 km'], ['30-60', '30–60 km'], ['60-', '> 60 km']];
 const RT_UF = [['', 'Tout'], ['0-200', '< 200 m'], ['200-500', '200–500 m'], ['500-', '> 500 m']];
-rt.filt = (() => { try { return JSON.parse(store.get('rtFilt') || '') || { d: '', u: '' }; } catch { return { d: '', u: '' }; } })();
-const rtFiltOn = () => !!(rt.filt.d || rt.filt.u);
+const RT_TF = [['', 'Tous'], ['b', 'Balisés'], ['c', '⭐ Recommandés']];
+const CAT_SHOW = 5; // parcours recommandés mêlés aux balisés en mode « Tous » ; les autres avec « ⭐ Recommandés »
+rt.filt = (() => { try { return Object.assign({ d: '', u: '', t: '' }, JSON.parse(store.get('rtFilt') || '') || {}); } catch { return { d: '', u: '', t: '' }; } })();
+const rtFiltOn = () => !!(rt.filt.d || rt.filt.u || rt.filt.t);
 const rtIn = (v, spec) => { const [a, b] = spec.split('-'); return v >= +a && (b === '' || v < +b); };
 // true : correspond, false : écarté, null : pas encore calculé
 function rtPass(it) {
-  if (!rtFiltOn()) return true;
+  const cp = it.cat === 'cp';
+  if (rt.filt.t === 'b' && cp) return false;
+  if (rt.filt.t === 'c' && !cp) return false;
+  if (!rt.filt.t && cp && !it.top) return false;
+  if (!rt.filt.d && !rt.filt.u) return true;
   const g = rt.geo.get(rtKey(it));
   if (!g) return it.fail ? false : null;
   if (rt.filt.d && !rtIn(g.len / 1000, rt.filt.d)) return false;
@@ -3963,7 +3972,9 @@ function rtFiltUI() {
       el.appendChild(b);
     }
   };
-  row($('rtFiltD'), RT_DF, 'd'); row($('rtFiltU'), RT_UF, 'u');
+  row($('rtFiltD'), RT_DF, 'd'); row($('rtFiltU'), RT_UF, 'u'); row($('rtFiltT'), RT_TF, 't');
+  const nc = (rt.list || []).filter(it => it.cat === 'cp').length, bt = $('rtFiltT').lastChild;
+  if (bt) bt.textContent = '⭐ ' + tr('Recommandés') + (nc ? ` (${nc})` : '');
 }
 function rtProgress() {
   const items = rt.list || [], done = items.filter(it => it.fail || (rt.geo.get(rtKey(it)) || {}).hasEle).length;

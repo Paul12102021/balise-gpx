@@ -201,12 +201,32 @@ async function catalogue(req, env, path, json) {
   return json({ ok: false, message: 'inconnu' }, 404);
 }
 
-// page d'administration : liste des parcours, masquer / remettre / supprimer
+// page d'administration : photos à valider, parcours signalés, tous les parcours (masquer / remettre / supprimer)
 async function catAdmin(req, env, url) {
-  const html = (body, status = 200) => new Response(`<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Catalogue Pisteo</title><style>body{font:15px system-ui,sans-serif;margin:16px;color:#17201c}li{margin:10px 0;padding:10px;border:1px solid #ccc;border-radius:10px;list-style:none}.h{opacity:.55}button{margin:4px 6px 0 0;padding:6px 10px}small{color:#666}</style>${body}`, { status, headers: { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store' } });
+  const page = (body, status = 200) => new Response(`<!doctype html><html lang="fr"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Catalogue Pisteo</title><style>
+:root{--bg:#EEF1E8;--card:#fff;--ink:#17201c;--mut:#5d6963;--line:#dde3d8;--go:#2F5E45;--warn:#E8833A;--bad:#C8412F;--chip:#E4EADF}
+@media (prefers-color-scheme:dark){:root{--bg:#141a17;--card:#1d2621;--ink:#eef2ec;--mut:#9aa69f;--line:#2e3a33;--chip:#26312b}}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.45 system-ui,-apple-system,Segoe UI,sans-serif}
+header{position:sticky;top:0;z-index:2;background:var(--go);color:#fff;padding:14px 16px 0}header h1{margin:0 0 10px;font-size:19px}
+.stats{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px}.st{background:rgba(255,255,255,.14);border-radius:10px;padding:6px 10px;font-size:13px}.st b{font-size:17px;display:block}
+nav{display:flex;gap:4px;overflow-x:auto}nav a{color:#fff;opacity:.75;text-decoration:none;padding:9px 12px;border-radius:10px 10px 0 0;white-space:nowrap;font-weight:600;font-size:14px}nav a.on{opacity:1;background:var(--bg);color:var(--ink)}
+main{max-width:860px;margin:0 auto;padding:16px;display:grid;gap:14px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:14px;overflow:hidden;display:grid;grid-template-columns:150px 1fr}
+.card.hid{opacity:.6}.map{background:var(--chip);display:flex;align-items:center;justify-content:center}.map svg{width:100%;height:100%;min-height:150px}
+.body{padding:12px 14px;min-width:0}.t{font-weight:700;font-size:16px}.meta{color:var(--mut);font-size:13px;margin:2px 0 6px}.desc{margin:0 0 8px}
+.tag{display:inline-block;font-size:12px;font-weight:700;padding:2px 8px;border-radius:20px;margin-right:4px;background:var(--chip)}.tag.w{background:var(--warn);color:#fff}.tag.b{background:var(--bad);color:#fff}
+.why{font-size:13px;color:var(--bad);margin:0 0 8px}
+.phs{display:flex;gap:10px;flex-wrap:wrap;margin:6px 0 10px}.ph{width:132px}.ph img{width:132px;height:132px;object-fit:cover;border-radius:10px;display:block;cursor:zoom-in;border:3px solid transparent}.ph.wait img{border-color:var(--warn)}
+.ph form{display:flex;gap:4px;margin-top:4px}
+button{font:600 13px system-ui,sans-serif;border:0;border-radius:9px;padding:8px 11px;cursor:pointer;background:var(--chip);color:var(--ink)}button.ok{background:var(--go);color:#fff}button.no{background:var(--bad);color:#fff}
+.acts{display:flex;gap:6px;flex-wrap:wrap;align-items:center}.acts a{color:var(--go);font-weight:600;font-size:13px;margin-right:auto}
+.empty{text-align:center;color:var(--mut);padding:40px 10px}
+#zoom{position:fixed;inset:0;background:rgba(0,0,0,.88);display:none;align-items:center;justify-content:center;z-index:9}#zoom img{max-width:96%;max-height:92%}
+@media (max-width:560px){.card{grid-template-columns:1fr}.map svg{min-height:130px;max-height:170px}}
+</style><body>${body}<div id="zoom" onclick="this.style.display='none'"><img alt=""></div><script>document.querySelectorAll('.ph img').forEach(i=>i.onclick=()=>{const z=document.getElementById('zoom');z.querySelector('img').src=i.src;z.style.display='flex'})</script></body></html>`, { status, headers: { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store' } });
   const esc = t => String(t).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
   const key = url.searchParams.get('key') || '';
-  if (!env.ADMIN_KEY || key !== env.ADMIN_KEY || !env.CATALOGUE) return html('<p>Accès refusé.</p>', 403);
+  if (!env.ADMIN_KEY || key !== env.ADMIN_KEY || !env.CATALOGUE) return page('<main><p class="empty">Accès refusé.</p></main>', 403);
   const idx = await loadIndex(env);
   if (req.method === 'POST') {
     const f = await req.formData(), id = f.get('id'), act = f.get('act'), i = idx.findIndex(x => x.id === id);
@@ -217,14 +237,39 @@ async function catAdmin(req, env, url) {
         const p = (it.ph || []).find(x => x.n === n);
         if (p && act === 'phok') p.ok = true;
         if (p && act === 'phno') { it.ph = it.ph.filter(x => x !== p); await env.CATALOGUE.delete(`img:${id}:${n}`); }
-      } else { it.hidden = act === 'hide'; if (act === 'show') it.rep = 0; }
+      } else { it.hidden = act === 'hide'; if (act === 'show') { it.rep = 0; it.why = []; } }
       await saveIndex(env, idx);
     }
     return Response.redirect(url.toString(), 303);
   }
-  const k = encodeURIComponent(key), rows = idx.slice().reverse().map(it => `<li class="${it.hidden ? 'h' : ''}"><b>${esc(it.name)}</b> <small>${it.sport === 'bike' ? 'vélo' : 'à pied'} · ${(it.dist / 1000).toFixed(1)} km${it.up != null ? ' · D+ ' + it.up + ' m' : ''} · ${it.date}${it.rep ? ` · <b>${it.rep} signalement(s)</b>` : ''}${it.hidden ? ' · MASQUÉ' : ''}</small><br>${esc(it.desc)}${it.why && it.why.length ? `<br><small>Motifs : ${esc(it.why.filter(Boolean).join(' / '))}</small>` : ''}<br>${(it.ph || []).map(p => `<span style="display:inline-block;margin:6px 6px 0 0;text-align:center"><img src="/catalogue/img/${esc(it.id)}/${p.n}?key=${k}" style="width:110px;height:110px;object-fit:cover;border-radius:8px;${p.ok ? '' : 'outline:3px solid #e8833a'}"><br><form method="post" action="?key=${k}" style="display:inline"><input type="hidden" name="id" value="${esc(it.id)}"><input type="hidden" name="n" value="${p.n}">${p.ok ? '' : '<button name="act" value="phok">Accepter</button>'}<button name="act" value="phno">${p.ok ? 'Retirer' : 'Refuser'}</button></form></span>`).join('')}<br><a href="https://pisteo.app/p/${esc(it.h)}" target="_blank">Ouvrir dans Pisteo</a><form method="post" action="?key=${k}"><input type="hidden" name="id" value="${esc(it.id)}">${it.hidden ? '<button name="act" value="show">Remettre</button>' : '<button name="act" value="hide">Masquer</button>'}<button name="act" value="del" onclick="return confirm('Supprimer définitivement ?')">Supprimer</button></form></li>`).join('');
-  const wait = idx.reduce((a, it) => a + (it.ph || []).filter(p => !p.ok).length, 0);
-  return html(`<h1>Catalogue Pisteo</h1><p>${idx.filter(x => !x.hidden).length} parcours publiés, ${idx.filter(x => x.hidden).length} masqués${wait ? `, <b>${wait} photo(s) à valider</b> (entourées en orange)` : ''}.</p><ul style="padding:0">${rows || '<li>Aucun parcours pour l\'instant.</li>'}</ul>`);
+  const k = encodeURIComponent(key), waitN = it => (it.ph || []).filter(p => !p.ok).length;
+  const tabs = [['wait', 'Photos à valider', idx.filter(waitN)], ['rep', 'Signalés', idx.filter(it => it.rep || it.hidden)], ['all', 'Tous', idx]];
+  const f = url.searchParams.get('f') || (tabs[0][2].length ? 'wait' : tabs[1][2].length ? 'rep' : 'all');
+  const list = (tabs.find(t => t[0] === f) || tabs[2])[2].slice().reverse();
+  // petite carte du tracé, dessinée à partir du lien du parcours
+  const svg = async it => {
+    let pts = []; try { pts = (await readLink(it.h)).pts; } catch {}
+    if (pts.length < 2) return '';
+    const k2 = Math.cos(pts[0].lat * Math.PI / 180), xs = pts.map(p => p.lon * k2), ys = pts.map(p => -p.lat);
+    const x0 = Math.min(...xs), y0 = Math.min(...ys), w = Math.max(...xs) - x0 || 1e-6, h = Math.max(...ys) - y0 || 1e-6, sc = 130 / Math.max(w, h);
+    const ox = (150 - w * sc) / 2, oy = (150 - h * sc) / 2, P = pts.map((p, i) => `${(ox + (xs[i] - x0) * sc).toFixed(1)},${(oy + (ys[i] - y0) * sc).toFixed(1)}`);
+    return `<svg viewBox="0 0 150 150"><polyline points="${P.join(' ')}" fill="none" stroke="#fff" stroke-width="6" stroke-linejoin="round" stroke-linecap="round" opacity=".7"/><polyline points="${P.join(' ')}" fill="none" stroke="#0f9d76" stroke-width="3" stroke-linejoin="round" stroke-linecap="round"/><circle cx="${P[0].split(',')[0]}" cy="${P[0].split(',')[1]}" r="5" fill="#2F5E45" stroke="#fff" stroke-width="2"/></svg>`;
+  };
+  const form = (id, inner) => `<form method="post" action="?key=${k}&f=${f}"><input type="hidden" name="id" value="${esc(id)}">${inner}</form>`;
+  const cards = await Promise.all(list.map(async it => `<article class="card${it.hidden ? ' hid' : ''}"><div class="map">${await svg(it)}</div><div class="body">
+<div class="t">${esc(it.name)}</div>
+<div class="meta">${it.sport === 'bike' ? '🚴 vélo' : '🥾 à pied'} · ${(it.dist / 1000).toFixed(1)} km${it.up != null ? ' · D+ ' + it.up + ' m' : ''} · proposé le ${new Date(it.date + 'T12:00:00Z').toLocaleDateString('fr-FR', { day: 'numeric', month: 'short', year: 'numeric' })}</div>
+${it.hidden ? '<span class="tag b">Masqué</span>' : ''}${it.rep ? `<span class="tag b">${it.rep} signalement${it.rep > 1 ? 's' : ''}</span>` : ''}${waitN(it) ? `<span class="tag w">${waitN(it)} photo${waitN(it) > 1 ? 's' : ''} à valider</span>` : ''}
+<p class="desc">${esc(it.desc)}</p>
+${it.why && it.why.filter(Boolean).length ? `<p class="why">Motifs : ${esc(it.why.filter(Boolean).join(' · '))}</p>` : ''}
+${(it.ph || []).length ? `<div class="phs">${it.ph.map(p => `<div class="ph${p.ok ? '' : ' wait'}"><img src="/catalogue/img/${esc(it.id)}/${p.n}?key=${k}" alt="" loading="lazy">${form(it.id, `<input type="hidden" name="n" value="${p.n}">${p.ok ? '<button name="act" value="phno">Retirer</button>' : '<button class="ok" name="act" value="phok">✓ Accepter</button><button class="no" name="act" value="phno">✕</button>'}`)}</div>`).join('')}</div>` : ''}
+<div class="acts"><a href="https://pisteo.app/p/${esc(it.h)}" target="_blank" rel="noopener">Ouvrir dans Pisteo ↗</a>${form(it.id, it.hidden ? '<button class="ok" name="act" value="show">Remettre en ligne</button>' : '<button name="act" value="hide">Masquer</button>')}${form(it.id, `<button class="no" name="act" value="del" onclick="return confirm('Supprimer définitivement « ${esc(it.name).replace(/'/g, '’')} » ?')">Supprimer</button>`)}</div>
+</div></article>`));
+  const nPh = idx.reduce((a, it) => a + waitN(it), 0);
+  const head = `<header><h1>⭐ Catalogue Pisteo</h1><div class="stats"><div class="st"><b>${idx.filter(x => !x.hidden).length}</b>en ligne</div><div class="st"><b>${nPh}</b>photo${nPh > 1 ? 's' : ''} à valider</div><div class="st"><b>${idx.filter(x => x.rep || x.hidden).length}</b>signalé${idx.filter(x => x.rep || x.hidden).length > 1 ? 's' : ''} ou masqué${idx.filter(x => x.rep || x.hidden).length > 1 ? 's' : ''}</div><div class="st"><b>${idx.filter(x => x.date === new Date().toISOString().slice(0, 10)).length}</b>aujourd'hui</div></div>
+<nav>${tabs.map(([id, l, arr]) => `<a href="?key=${k}&f=${id}" class="${id === f ? 'on' : ''}">${l} (${arr.length})</a>`).join('')}</nav></header>`;
+  const empty = { wait: 'Aucune photo à valider. 👌', rep: 'Aucun parcours signalé.', all: 'Aucun parcours pour l’instant.' }[f] || '';
+  return page(`${head}<main>${cards.join('') || `<p class="empty">${empty}</p>`}</main>`);
 }
 
 // photo d'un parcours : publique si tu l'as acceptée, visible aussi sur la page d'administration
