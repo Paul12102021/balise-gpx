@@ -387,9 +387,9 @@ ${kpi('Calcul d’une boucle', g(T, 'c:boucle_calculs') ? (g(T, 'c:boucle_second
   const X = i => 10 + (ds.length > 1 ? i * (W - 20) / (ds.length - 1) : (W - 20) / 2);
   const line = ds.map((d, i) => `${i ? 'L' : 'M'}${X(i).toFixed(1)} ${(H - (byDay[d].dev || 0) / maxD * (H - 10)).toFixed(1)}`).join('');
   const bars = ds.map((d, i) => { const v = (byDay[d]['c:sortie_pied'] || 0) + (byDay[d]['c:sortie_velo'] || 0), h = v / maxS * (H - 50); return `<rect x="${(X(i) - 3).toFixed(1)}" y="${(H - h).toFixed(1)}" width="6" height="${h.toFixed(1)}" rx="2" fill="#E8742A" opacity=".85"/>`; }).join('');
-  const chart = ds.length ? `<div class="card"><h3>Activité par jour</h3><svg viewBox="0 0 ${W} ${H + 4}" width="100%">${bars}<path d="${line}" fill="none" stroke="#2F5E45" stroke-width="2.5"/></svg><div class="leg"><span><i style="background:#2F5E45"></i>Appareils actifs (max ${fmt(maxD)})</span><span><i style="background:#E8742A"></i>Sorties</span></div></div>` : '';
+  const chart = ds.length ? `<div class="scard"><h3>Activité par jour</h3><svg viewBox="0 0 ${W} ${H + 4}" width="100%">${bars}<path d="${line}" fill="none" stroke="#2F5E45" stroke-width="2.5"/></svg><div class="leg"><span><i style="background:#2F5E45"></i>Appareils actifs (max ${fmt(maxD)})</span><span><i style="background:#E8742A"></i>Sorties</span></div></div>` : '';
   const barList = (title, arr, col) => { arr = arr.filter(x => x[1] > 0).sort((a, b) => b[1] - a[1]); if (!arr.length) return ''; const m = arr[0][1];
-    return `<div class="card"><h3>${title}</h3><div class="bars">${arr.map(([l, v]) => `<div><span>${esc(l)}</span><em><u style="width:${Math.max(2, v / m * 100)}%;background:${col || '#3A9A6A'}"></u></em><b>${fmt(v)}</b></div>`).join('')}</div></div>`; };
+    return `<div class="scard"><h3>${title}</h3><div class="bars">${arr.map(([l, v]) => `<div><span>${esc(l)}</span><em><u style="width:${Math.max(2, v / m * 100)}%;background:${col || '#3A9A6A'}"></u></em><b>${fmt(v)}</b></div>`).join('')}</div></div>`; };
   const pref = p => Object.entries(T).filter(([key]) => key.startsWith(p)).map(([key, v]) => [key.slice(p.length), v]);
   const feats = Object.entries(ST_LABELS).map(([key, l]) => [l, g(T, 'c:' + key)]);
   const dimNames = { plat: 'Appli / navigateur', lang: 'Langue', ver: 'Version', mode: 'Mode', screen: 'Écran', strava: 'Strava connecté', drive: 'Sauvegarde Drive', theme: 'Thème', voice: 'Voix', eco: 'Économie batterie', poi: 'Points utiles', night: 'Alerte nuit', lit: 'De nuit : éclairé', units: 'Unités', layer: 'Fond de carte' };
@@ -401,7 +401,7 @@ ${kpi('Calcul d’une boucle', g(T, 'c:boucle_calculs') ? (g(T, 'c:boucle_second
   const pers = ['7', '30', 'all'].map(x => `<a class="${x === per ? 'on' : ''}" href="?key=${k}&tab=stats&p=${x}">${x === 'all' ? 'Tout' : x + ' jours'}</a>`).join('');
   return nav + `<main><style>.per{display:flex;gap:6px}.per a{background:var(--chip);border-radius:999px;padding:5px 12px;font-weight:600;font-size:13px;color:var(--ink);text-decoration:none}.per a.on{background:var(--go);color:#fff}
 .kpis{display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:8px}.k{background:var(--card);border-radius:14px;padding:10px 12px}.k b{display:block;font-size:24px}.k small{color:var(--mut);display:block}.k i{font-style:normal;font-size:12px;font-weight:700}.k i.up{color:#3A9A6A}.k i.dn{color:#C8412F}
-.card{background:var(--card);border-radius:14px;padding:12px;margin-top:10px}.card h3{margin:0 0 8px;font-size:13px;color:var(--mut);text-transform:uppercase;letter-spacing:.05em}
+.scard{display:block;background:var(--card);border-radius:14px;padding:12px;margin-top:10px}.scard h3{margin:0 0 8px;font-size:13px;color:var(--mut);text-transform:uppercase;letter-spacing:.05em}
 .bars div{display:grid;grid-template-columns:minmax(120px,40%) 1fr auto;gap:8px;align-items:center;font-size:13px;margin:4px 0}.bars em{display:block;height:10px}.bars u{display:block;height:10px;border-radius:5px}.bars b{font-size:12px;color:var(--mut)}
 .leg{display:flex;gap:12px;font-size:12px;color:var(--mut)}.leg i{display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:4px}
 .dim{margin:6px 0;font-size:13px;display:flex;flex-wrap:wrap;gap:6px;align-items:center}.dim b{width:100%;font-size:12px;color:var(--mut)}.dim span{background:var(--chip);border-radius:8px;padding:2px 8px}.dim i{font-style:normal;color:var(--mut)}
@@ -410,7 +410,7 @@ ${kpi('Calcul d’une boucle', g(T, 'c:boucle_calculs') ? (g(T, 'c:boucle_second
 ${barList('Fonctions utilisées', feats)}
 ${barList('Cartes hors ligne téléchargées', pref('c:carte_').map(([c, v]) => [({ fr: 'France', es: 'Espagne', at: 'Autriche', be: 'Belgique', ch: 'Suisse', gb: 'Royaume-Uni', de: 'Allemagne', ca: 'Canada', us: 'États-Unis', zone: 'Zone libre' })[c] || c, v]))}
 ${barList('Fonds de carte choisis', pref('c:fond_'), '#2F5E45')}
-<div class="card"><h3>Appareils et réglages (part des jours-appareils)</h3>${dims || '<p class="note">Pas encore de données.</p>'}</div>
+<div class="scard"><h3>Appareils et réglages (part des jours-appareils)</h3>${dims || '<p class="note">Pas encore de données.</p>'}</div>
 ${barList('Erreurs de l’appli', pref('c:err:'), '#C8412F')}
 ${barList('Autres compteurs', others, '#8a959e')}
 <p class="note">Anonyme : chaque appareil envoie une fois par jour les compteurs de la veille, additionnés ici par jour (aucune ligne par appareil, aucune position). Les chiffres arrivent avec un jour de décalage.</p></main>`;
