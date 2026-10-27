@@ -247,12 +247,13 @@ async function catalogue(req, env, path, json) {
 
 // page d'administration : photos à valider, parcours signalés, tous les parcours (masquer / remettre / supprimer)
 async function catAdmin(req, env, url) {
-  const page = (body, status = 200) => new Response(`<!doctype html><html lang="fr"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Catalogue Pisteo</title><style>
+  const page = (body, status = 200) => new Response(`<!doctype html><html lang="fr"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Administration Pisteo</title><style>
 :root{--bg:#EEF1E8;--card:#fff;--ink:#17201c;--mut:#5d6963;--line:#dde3d8;--go:#2F5E45;--warn:#E8833A;--bad:#C8412F;--chip:#E4EADF}
 @media (prefers-color-scheme:dark){:root{--bg:#141a17;--card:#1d2621;--ink:#eef2ec;--mut:#9aa69f;--line:#2e3a33;--chip:#26312b}}
 *{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.45 system-ui,-apple-system,Segoe UI,sans-serif}
 header{position:sticky;top:0;z-index:2;background:var(--go);color:#fff;padding:14px 16px 0}header h1{margin:0 0 10px;font-size:19px}
-.stats{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px}.st{background:rgba(255,255,255,.14);border-radius:10px;padding:6px 10px;font-size:13px}.st b{font-size:17px;display:block}
+.stats{display:flex;gap:8px;flex-wrap:wrap}.st{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:6px 10px;font-size:13px;color:var(--mut)}.st b{font-size:17px;display:block;color:var(--ink)}
+main.top{padding-bottom:0}.per{display:flex;gap:6px;flex-wrap:wrap}.per a{background:var(--chip);border-radius:999px;padding:5px 12px;font-weight:600;font-size:13px;color:var(--ink);text-decoration:none}.per a.on{background:var(--go);color:#fff}
 nav{display:flex;gap:4px;overflow-x:auto}nav a{color:#fff;opacity:.75;text-decoration:none;padding:9px 12px;border-radius:10px 10px 0 0;white-space:nowrap;font-weight:600;font-size:14px}nav a.on{opacity:1;background:var(--bg);color:var(--ink)}
 main{max-width:860px;margin:0 auto;padding:16px;display:grid;gap:14px}
 .card{background:var(--card);border:1px solid var(--line);border-radius:14px;overflow:hidden;display:grid;grid-template-columns:150px 1fr}
@@ -320,8 +321,8 @@ ${(it.ph || []).length ? `<div class="phs">${it.ph.map(p => `<div class="ph${p.o
   const nPh = idx.reduce((a, it) => a + waitN(it), 0);
   // athlètes connectés à Strava via Pisteo (capacité de l'appli Strava : 10 avant validation)
   let nStv = 0; try { let cur; do { const l = await env.CATALOGUE.list({ prefix: 'stv:ath:', cursor: cur }); nStv += l.keys.length; cur = l.list_complete ? null : l.cursor; } while (cur); } catch {}
-  const head = `<header><h1>⭐ Catalogue Pisteo</h1><div class="stats"><div class="st"><b>${idx.filter(x => !x.hidden).length}</b>en ligne</div><div class="st"><b>${nPh}</b>photo${nPh > 1 ? 's' : ''} à valider</div><div class="st"><b>${idx.filter(x => x.rep || x.hidden).length}</b>signalé${idx.filter(x => x.rep || x.hidden).length > 1 ? 's' : ''} ou masqué${idx.filter(x => x.rep || x.hidden).length > 1 ? 's' : ''}</div><div class="st"><b>${idx.filter(x => x.date === new Date().toISOString().slice(0, 10)).length}</b>aujourd'hui</div><div class="st"><b>${nStv}</b>connecté${nStv > 1 ? 's' : ''} Strava</div></div>
-<nav>${tabs.map(([id, l, arr]) => `<a href="?key=${k}&f=${id}" class="${id === f ? 'on' : ''}">${l} (${arr.length})</a>`).join('')}<a href="?key=${k}&tab=stats">📊 Statistiques</a><a href="?key=${k}&tab=etat">🛰️ Services</a></nav></header>`;
+  const head = adminHead(k, 'cat') + `<main class="top"><div class="stats"><div class="st"><b>${idx.filter(x => !x.hidden).length}</b>en ligne</div><div class="st"><b>${nPh}</b>photo${nPh > 1 ? 's' : ''} à valider</div><div class="st"><b>${idx.filter(x => x.rep || x.hidden).length}</b>signalé${idx.filter(x => x.rep || x.hidden).length > 1 ? 's' : ''} ou masqué${idx.filter(x => x.rep || x.hidden).length > 1 ? 's' : ''}</div><div class="st"><b>${idx.filter(x => x.date === new Date().toISOString().slice(0, 10)).length}</b>aujourd'hui</div><div class="st"><b>${nStv}</b>connecté${nStv > 1 ? 's' : ''} Strava</div></div>
+<div class="per">${tabs.map(([id, l, arr]) => `<a href="?key=${k}&f=${id}" class="${id === f ? 'on' : ''}">${l} (${arr.length})</a>`).join('')}</div></main>`;
   const empty = { wait: 'Aucune photo à valider. 👌', rep: 'Aucun parcours signalé.', all: 'Aucun parcours pour l’instant.' }[f] || '';
   return page(`${head}<main>${cards.join('') || `<p class="empty">${empty}</p>`}</main>`);
 }
@@ -369,7 +370,7 @@ const ST_LABELS = {
   signaler_osm: 'Signalement OSM', pip: 'Image dans l’image', eco_bouton: 'Économie de batterie', avis: '« Mon avis »', sortie_supprimee: 'Sorties jetées', terminer: '« Terminer »'
 };
 async function statsHtml(env, url, k, esc) {
-  const nav = `<header><h1>📊 Statistiques Pisteo</h1><nav><a href="?key=${k}">⭐ Catalogue</a><a class="on" href="?key=${k}&tab=stats">📊 Statistiques</a><a href="?key=${k}&tab=etat">🛰️ Services</a></nav></header>`;
+  const nav = adminHead(k, 'stats');
   if (!env.STATS) return nav + '<main><p class="empty">Base D1 « STATS » pas encore reliée au worker (Settings → Bindings → D1 database, nom STATS).</p></main>';
   await stInit(env);
   const per = url.searchParams.get('p') || '30', n = per === 'all' ? 3650 : +per || 30;
@@ -487,6 +488,11 @@ const ETAT = [
   ['geofabrik', 'Geofabrik (mise à jour des données)', 'https://download.geofabrik.de/europe/france-updates/state.txt', t => /sequenceNumber/.test(t), 0, 'openstreetmap.fr'],
 ];
 // un échec est retesté une fois 5 s plus tard (évite les fausses alertes sur un raté passager)
+// En-tête commun de la page d'administration : même titre et mêmes onglets, au même endroit, sur chaque section
+function adminHead(k, sec) {
+  const T = [['cat', '⭐ Catalogue', ''], ['stats', '📊 Statistiques', '&tab=stats'], ['etat', '🛰️ Services', '&tab=etat']];
+  return `<header><h1>Administration Pisteo</h1><nav>${T.map(([id, l, q]) => `<a href="?key=${k}${q}"${id === sec ? ' class="on"' : ''}>${l}</a>`).join('')}</nav></header>`;
+}
 // Pour juger une panne : ce que voient les utilisateurs, ce que Paul doit faire, et au bout de combien d'heures prévenir Claude
 // (tell : 0 = tout de suite ; null = jamais, ça se règle tout seul)
 const ETAT_GUIDE = {
@@ -587,7 +593,7 @@ function etatResume(e) {
   return `Vérifié le ${etatDate(e.t)} · ${e.down.length ? `<b>${e.down.length} en panne</b>${crit ? ' dont ' + crit + ' critique' + (crit > 1 ? 's' : '') : ''}` : '<b>tout fonctionne</b>'} · vérification automatique toutes les heures`;
 }
 async function etatAdmin(env, url, k) {
-  const nav = `<header><h1>🛰️ État des services</h1><nav><a href="?key=${k}">⭐ Catalogue</a><a href="?key=${k}&tab=stats">📊 Statistiques</a><a class="on" href="?key=${k}&tab=etat">🛰️ Services</a></nav></header>`;
+  const nav = adminHead(k, 'etat');
   const e = await etatLoad(env, url), v = etatVerdict(e);
   const col = { ok: '#22c55e', watch: '#f59e0b', act: '#ef4444' }[v.level], ic = { ok: '✅', watch: '🟠', act: '🔴' }[v.level];
   const esc = t => String(t).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
