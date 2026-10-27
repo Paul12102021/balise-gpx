@@ -145,7 +145,7 @@ async function catalogue(req, env, path, json) {
   // liste publique (petite : quelques centaines de parcours au plus)
   if (path === '/catalogue' && req.method === 'GET') {
     const idx = await loadIndex(env);
-    return new Response(JSON.stringify({ v: 1, items: idx.filter(it => !it.hidden).map(publicItem) }), { headers: { ...Object.fromEntries(json({}).headers), 'Cache-Control': 'public, max-age=300' } });
+    return new Response(JSON.stringify({ v: 1, items: idx.filter(it => !it.hidden).map(publicItem) }), { headers: { ...Object.fromEntries(json({}).headers), 'Cache-Control': 'no-cache' } });
   }
   if (path === '/catalogue/propose' && req.method === 'POST') {
     const b = await req.json().catch(() => ({}));
@@ -280,5 +280,5 @@ async function catImg(env, url, path) {
   if (!admin) { const it = (await loadIndex(env)).find(x => x.id === m[1]); if (!it || it.hidden || !(it.ph || []).some(p => p.n === +m[2] && p.ok)) return new Response('introuvable', { status: 404 }); }
   const buf = await env.CATALOGUE.get(`img:${m[1]}:${m[2]}`, 'arrayBuffer');
   if (!buf) return new Response('introuvable', { status: 404 });
-  return new Response(buf, { headers: { 'Content-Type': 'image/jpeg', 'Cache-Control': admin ? 'no-store' : 'public, max-age=86400', 'Access-Control-Allow-Origin': '*' } });
+  return new Response(buf, { headers: { 'Content-Type': 'image/jpeg', 'Cache-Control': admin ? 'no-store' : 'public, max-age=600', 'Access-Control-Allow-Origin': '*' } });
 }

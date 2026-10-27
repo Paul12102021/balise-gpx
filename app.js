@@ -5,7 +5,7 @@
 
 // La page et le code doivent être de la même version. Sinon (page gardée en cache
 // par le téléphone ou par GitHub), on recharge une page fraîche, au plus 3 fois.
-const APP_VERSION = 243;
+const APP_VERSION = 244;
 try {
   const meta = document.querySelector('meta[name="balise-version"]');
   const pageV = meta ? +meta.content : 0;
@@ -3671,11 +3671,14 @@ function rtListReady() { rtRender(); rtDraw(); rtBarText(); rtEnrich(); rtAddCat
 // ---------- Catalogue « Parcours Pisteo » : parcours proposés par les utilisateurs, vérifiés par le relais ----------
 const CAT_API = 'https://api.pisteo.app/catalogue';
 let catP = null, catOn = false; // catOn : le catalogue a répondu (service activé sur le relais)
+let catPT = 0;
 function catLoad() {
-  if (!catP) catP = (async () => {
+  // appli restée ouverte : la liste est relue toutes les 10 min (parcours ajoutés ou retirés entre-temps)
+  if (catP && Date.now() - catPT > 10 * 6e4) { catP = null; rtCache.clear(); }
+  if (!catP) catPT = Date.now(), catP = (async () => {
     let c = null; try { c = JSON.parse(store.get('catCache') || 'null'); } catch {}
     if (c && c.on) catOn = true;
-    if (c && Date.now() - c.t < 6 * 36e5) return c.items;
+    if (c && Date.now() - c.t < 10 * 6e4) return c.items; // 10 min : un parcours retiré disparaît vite
     try {
       const r = await fetch(CAT_API, { cache: 'no-cache' }); if (!r.ok) throw new Error('HTTP ' + r.status);
       const j = await r.json(); const items = Array.isArray(j.items) ? j.items : [];
@@ -4203,7 +4206,7 @@ async function rtSelect(it) {
   $('rtpSub').textContent = 'Chargement du tracé…'; rtMiniProfile($('rtpProf'), null);
   $('rtpGo').disabled = $('rtpKeep').disabled = $('rtpView').disabled = true; $('rtpKeep').textContent = 'Garder';
   $('rtpDesc').textContent = it.cdesc || ''; $('rtpDesc').hidden = !it.cdesc; $('rtpReport').hidden = it.src !== 'c';
-  const phs = (it.ph || []).map(n => `${CAT_API}/img/${it.cid}/${n}`), strip = $('rtpPhotos'); strip.innerHTML = ''; strip.hidden = !phs.length;
+  const phs = (it.ph || []).map(n => `${CAT_API}/img/${it.cid}/${n}?d=${it.date || ''}`), strip = $('rtpPhotos'); strip.innerHTML = ''; strip.hidden = !phs.length;
   phs.forEach((u, i) => { const b = document.createElement('button'); b.className = 'ph-th'; b.style.backgroundImage = `url("${u}")`; b.setAttribute('aria-label', tr('Voir la photo')); b.onclick = () => catPhView(phs, i); strip.appendChild(b); });
   rtCardMode('prev');
   let g;
