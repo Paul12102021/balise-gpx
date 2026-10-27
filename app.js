@@ -5,7 +5,7 @@
 
 // La page et le code doivent être de la même version. Sinon (page gardée en cache
 // par le téléphone ou par GitHub), on recharge une page fraîche, au plus 3 fois.
-const APP_VERSION = 252;
+const APP_VERSION = 253;
 try {
   const meta = document.querySelector('meta[name="balise-version"]');
   const pageV = meta ? +meta.content : 0;
@@ -2529,7 +2529,21 @@ function riverProfile(renew) {
 }
 // de nuit, à pied : profil personnalisé « nuit.brf » (privilégie les voies éclairées) ; donne aussi l'éclairage de chaque voie
 // réglage « De nuit, privilégier l'éclairé » (désactivé par défaut) : seulement à pied, entre le coucher et le lever du soleil
-const routeLitOn = () => store.get('litNight') === '1' && isDarkNow();
+// actif s'il fait déjà nuit, ou si l'arrivée prévue (estSecs : durée estimée) tombe au moins 15 min après le coucher du soleil
+const routeLitOn = (estSecs = 0) => store.get('litNight') === '1' && (isDarkNow() || arrivesAfterDark(estSecs));
+function arrivesAfterDark(estSecs) {
+  if (!estSecs) return false;
+  const c = me || (map && map.getCenter && { lat: map.getCenter().lat, lon: map.getCenter().lng }); if (!c) return false;
+  const now = Date.now(), st = sunTimes(now, c.lat, c.lon); if (!st) return false;
+  return now + estSecs * 1000 > st.set + 15 * 60000;
+}
+// durée estimée d'après les points de passage (à vol d'oiseau × 1,3, à l'allure du mode)
+function estFromLonlats(lonlats) {
+  const q = lonlats.split('|').map(x => { const [lon, lat] = x.split(',').map(Number); return { lat, lon }; });
+  let d = 0; for (let i = 1; i < q.length; i++) d += hav(q[i - 1], q[i]);
+  return d * 1.3 / (lpSpeed().v / 3.6);
+}
+let litToastT = 0;
 let nightId = null, nightP = null;
 function nightProfile(renew) {
   if (renew) { nightId = null; nightP = null; }
@@ -2542,8 +2556,12 @@ function nightProfile(renew) {
   })().catch(e => { nightP = null; throw e; });
   return nightP;
 }
-async function brProf(style) {
-  if (profile !== 'trekking') return routeLitOn() ? nightProfile() : profile;
+async function brProf(style, estSecs = 0) {
+  if (profile !== 'trekking') {
+    if (!routeLitOn(estSecs)) return profile;
+    if (!isDarkNow() && Date.now() - litToastT > 60000) { litToastT = Date.now(); toast(tr('Arrivée après la tombée de la nuit : itinéraire par les rues éclairées'), 4500); }
+    return nightProfile();
+  }
   return style === 'river' ? riverProfile() : 'trekking';
 }
 // Plan de secours : si BRouter (serveur bénévole unique) ne répond pas, on calcule l'itinéraire sur le
@@ -2552,7 +2570,8 @@ async function brProf(style) {
 let brDownUntil = 0, osrmLast = 0, osrmToast = 0;
 async function brFetch(lonlats, style, signal) {
   if (Date.now() > brDownUntil) {
-    const ctrl = new AbortController(), timer = setTimeout(() => ctrl.abort(), 8000);
+    // profil « nuit » (plus de calcul côté serveur) : un peu plus de patience avant le plan de secours
+    const ctrl = new AbortController(), timer = setTimeout(() => ctrl.abort(), profile !== 'trekking' && routeLitOn(estFromLonlats(lonlats)) ? 15000 : 8000);
     const stop = () => ctrl.abort(); if (signal) signal.addEventListener('abort', stop);
     try { return await brFetchMain(lonlats, style, ctrl.signal); }
     catch (e) {
@@ -2582,7 +2601,7 @@ async function osrmFetch(lonlats, signal) {
 // requête BRouter ; un profil personnalisé expiré sur le serveur est renvoyé une fois
 async function brFetchMain(lonlats, style, signal) {
   for (let k = 0; ; k++) {
-    const prof = await brProf(style);
+    const prof = await brProf(style, estFromLonlats(lonlats));
     const r = await fetch(`https://brouter.de/brouter?lonlats=${lonlats}&profile=${prof}&alternativeidx=0&format=geojson`, { signal });
     if (r.ok) { const j = await r.json(); if (prof === nightId) j.lit = true; return j; }
     const m = (await r.text().catch(() => '')).slice(0, 200);
@@ -3284,7 +3303,7 @@ async function makeLoop() {
   try {
     // de nuit : trois directions essayées en même temps ; puis les points de passage sont posés sur des rues
     // éclairées trouvées par ces essais (les trajets entre eux restent ainsi dans l'éclairé)
-    if (profile !== 'trekking' && routeLitOn()) {
+    if (profile !== 'trekking' && routeLitOn(loopCfg.byTime ? loopCfg.val * 60 : target / (sp.v / 3.6))) {
       const pool = [], addPool = pts => { let last = null; for (const q of pts) if (q.lit === 'y' && (!last || hav(last, q) > 40)) { pool.push(q); last = q; } };
       const evalLoop = pts => { const p = makePath(pts, ''), m = measure(p), err = Math.abs(m - target) / target, sh = litShare(pts); return { pts, m, err, sh, score: sh - Math.max(0, err - 0.1) * 3 }; };
       const angs = [ang, (ang + 120) % 360, (ang + 240) % 360];
