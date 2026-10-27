@@ -485,7 +485,9 @@ const ETAT = [
   ['drive', 'Google Drive (API)', 'https://www.googleapis.com/drive/v3/about', (t, r) => r.status === 401 || r.status === 403, 0, 'export en fichier'],
   ['geofabrik', 'Geofabrik (mise à jour des données)', 'https://download.geofabrik.de/europe/france-updates/state.txt', t => /sequenceNumber/.test(t), 0, 'openstreetmap.fr'],
 ];
-async function etatOne([id, name, u, test, crit, backup]) {
+// un échec est retesté une fois 5 s plus tard (évite les fausses alertes sur un raté passager)
+async function etatOne(e) { const r = await etatTry(e); if (r.ok) return r; await new Promise(ok => setTimeout(ok, 5000)); return etatTry(e); }
+async function etatTry([id, name, u, test, crit, backup]) {
   const t0 = Date.now();
   try {
     const r = await fetch(u, { headers: { 'User-Agent': ETAT_UA, 'Referer': 'https://pisteo.app/' }, signal: AbortSignal.timeout(15000), redirect: 'follow' });
