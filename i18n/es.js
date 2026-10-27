@@ -428,8 +428,10 @@ const exact = {
   "Retirer la photo": "Quitar la foto", "3 au plus, visibles après validation": "3 como máximo, visibles tras la validación", "Le tracé, son nom, sa description, ses points notés et ses photos seront publics, sans ton nom. Évite les photos où l'on reconnaît des personnes ou des plaques d'immatriculation. Un parcours signalé plusieurs fois par d'autres est retiré.": "El trazado, su nombre, descripción, puntos y fotos serán públicos, sin tu nombre. Evita fotos donde se reconozcan personas o matrículas. Una ruta denunciada varias veces se retira.", "1 photo envoyée, visible après validation.": "1 foto enviada, visible tras la validación.",
   "Tous": "Todos", "Balisés": "Señalizados", "⭐ Recommandés": "⭐ Recomendados", "Recommandés": "Recomendados",
   "Sortie trop courte pour être proposée.": "Salida demasiado corta para proponerla.", "L'enregistrement de cette sortie a trop de coupures pour être proposé.": "La grabación de esta salida tiene demasiados cortes para proponerla.", "Seuls les parcours que tu as faits peuvent être proposés : enregistre ta sortie avec Pisteo, ou importe le GPX de ton activité (Strava, Garmin…).": "Solo se pueden proponer rutas que hayas hecho: graba tu salida con Pisteo o importa el GPX de tu actividad (Strava, Garmin…).",
+  "Écris une vraie description, en quelques phrases : difficulté, départ, ce qu'on y voit…": "Escribe una descripción real en unas frases: dificultad, salida, qué se ve…",
 };
 const patterns = [
+  [/^L'enregistrement de cette sortie a été coupé \((.+) tracés en ligne droite\) : le parcours n'est pas fiable pour être proposé\.$/, m => `La grabación de esta salida se cortó (${m[1]} trazados en línea recta): la ruta no es fiable para proponerla.`],
   [/^Parcouru le (.+) en (.+) \((.+) de moyenne\)$/, (m, t) => `Hecho el ${m[1]} en ${t(m[2])} (${m[3]} de media)`],
   [/^Parcouru le (.+) en (.+)$/, (m, t) => `Hecho el ${m[1]} en ${t(m[2])}`],
   [/^Vitesse moyenne de ([\d.,]+) km\/h : ce parcours a-t-il été fait à vélo \?$/, m => `Velocidad media de ${m[1]} km/h: ¿se hizo esta ruta en bici?`],

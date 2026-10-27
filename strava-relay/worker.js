@@ -98,6 +98,19 @@ async function readLink(hash) {
 const hav = (p, q) => { const r = Math.PI / 180, dl = (q.lat - p.lat) * r, dn = (q.lon - p.lon) * r, a = Math.sin(dl / 2) ** 2 + Math.cos(p.lat * r) * Math.cos(q.lat * r) * Math.sin(dn / 2) ** 2; return 12742000 * Math.asin(Math.sqrt(a)); };
 // textes publics : pas de lien, d'adresse e-mail, de téléphone ni de grossièretés
 const BAD = /\b(connard|connasse|salope|pute|encul\w*|batard|bâtard|merde|nique|fdp|ntm|pd|fuck\w*|shit|bitch|asshole|nazi\w*|hitler)\b/i;
+// texte écrit au hasard (« djzodbekzbdh », « qsdfgh », « blablabla ») : pas de vraies phrases
+const GIB_COMMON = new Set('le la les de des du un une et a au aux en pour sur avec par est sont dans ce cet cette qui que il elle on nous vous tres bien belle beau joli jolie tout tous plus pas peu sans vers apres avant entre chemin sentier route boucle parcours balade velo pied depart arrivee parking vue lac foret riviere village col montee descente facile difficile sympa the and of to in is with for on at from this very nice easy hard trail path road loop view el los las del con por para muy y un una der die das und mit von zu ist sehr'.split(' '));
+function gibberish(t, sentence) {
+  const s = String(t || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, ''), w = s.match(/[a-z]+/g) || [];
+  if (!w.length) return true;
+  if (w.some(x => x.length > 20)) return true;
+  if (/([a-z]{2,4})\1{2,}/.test(s.replace(/[^a-z]/g, ''))) return true;
+  if (w.some(x => /[bcdfghjklmnpqrstvwxz]{5,}/.test(x))) return true;
+  const letters = w.join(''), vow = (letters.match(/[aeiouy]/g) || []).length;
+  if (letters.length >= 8 && vow / letters.length < 0.22) return true;
+  if (sentence && (w.filter(x => x.length >= 2).length < 4 || !w.some(x => GIB_COMMON.has(x)))) return true;
+  return false;
+}
 function badText(t) {
   if (/https?:|www\.|\.(com|fr|net|org|io|be|ch|de|es|uk)\b/i.test(t)) return 'Pas de lien internet dans les textes.';
   if (/[\w.+-]+@[\w-]+\.\w+/.test(t)) return 'Pas d\'adresse e-mail dans les textes.';
@@ -131,6 +144,8 @@ async function checkProposal(b, r, idx) {
   if (/^((sortie|balade|course|course à pied|marche|randonnée|rando|vélo|sortie à vélo|sortie vélo|activité|entraînement)( (à pied|à vélo|vtt|gravel))? (du|de la|de l'|de l’|d'|d’|le|en) ?(matin|midi|après-midi|apres-midi|soir|soirée|nuit|\d)|sortie du|trace sans nom|parcours partagé|boucle (à pied|à vélo) de|vers |(morning|afternoon|evening|night|lunch) (ride|run|walk|hike))/i.test(name)) return 'Donne un vrai nom au parcours (lieu, sommet, lac…).';
   if (desc.length < 30) return 'Ajoute une description d\'au moins 30 caractères : difficulté, départ, ce qu\'on y voit…';
   for (const t of [name, desc, ...r.wpts.map(w => w.name + ' ' + w.desc)]) { const e = badText(t); if (e) return e; }
+  if (gibberish(name, false)) return 'Donne un vrai nom au parcours (lieu, sommet, lac…).';
+  if (gibberish(desc, true)) return 'Écris une vraie description, en quelques phrases : difficulté, départ, ce qu\'on y voit…';
   // doublon : même sport, départ à moins de 300 m et longueur proche, ou tracé presque identique
   for (const it of idx) {
     if (it.hidden || it.sport !== b.sport) continue;

@@ -5,7 +5,7 @@
 
 // La page et le code doivent être de la même version. Sinon (page gardée en cache
 // par le téléphone ou par GitHub), on recharge une page fraîche, au plus 3 fois.
-const APP_VERSION = 246;
+const APP_VERSION = 247;
 try {
   const meta = document.querySelector('meta[name="balise-version"]');
   const pageV = meta ? +meta.content : 0;
@@ -5013,6 +5013,19 @@ $('wtDesc').addEventListener('change', () => wtNotes());
 $('wtAddNote').onclick = () => { wtNotes(); $('watch').hidden = true; addNote('send'); };
 // sortie : on l'ouvre sur la carte comme une trace, liée à la sortie pour que les notes y soient enregistrées
 // ---------- preuve qu'un parcours a été fait : une sortie enregistrée, ou un GPX d'activité (heures de passage) ----------
+// texte écrit au hasard (« djzodbekzbdh », « qsdfgh », « blablabla ») : pas de vraies phrases
+const GIB_COMMON = new Set('le la les de des du un une et a au aux en pour sur avec par est sont dans ce cet cette qui que il elle on nous vous tres bien belle beau joli jolie tout tous plus pas peu sans vers apres avant entre chemin sentier route boucle parcours balade velo pied depart arrivee parking vue lac foret riviere village col montee descente facile difficile sympa the and of to in is with for on at from this very nice easy hard trail path road loop view el los las del con por para muy y un una der die das und mit von zu ist sehr'.split(' '));
+function gibberish(t, sentence) {
+  const s = String(t || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, ''), w = s.match(/[a-z]+/g) || [];
+  if (!w.length) return true;
+  if (w.some(x => x.length > 20)) return true;
+  if (/([a-z]{2,4})\1{2,}/.test(s.replace(/[^a-z]/g, ''))) return true;
+  if (w.some(x => /[bcdfghjklmnpqrstvwxz]{5,}/.test(x))) return true;
+  const letters = w.join(''), vow = (letters.match(/[aeiouy]/g) || []).length;
+  if (letters.length >= 8 && vow / letters.length < 0.22) return true;
+  if (sentence && (w.filter(x => x.length >= 2).length < 4 || !w.some(x => GIB_COMMON.has(x)))) return true;
+  return false;
+}
 const CP_SPEED = { foot: [1, 20], bike: [4, 50] }; // vitesse moyenne en mouvement plausible (km/h) : marche à course, balade à route
 function cpProofText() {
   if (!wtSrc) return '';
@@ -5024,23 +5037,24 @@ function cpProofText() {
 function cpProof() {
   let pts = []; try { pts = parseRec(cpProofText()).filter(p => isFinite(p.t)); } catch {}
   if (pts.length < 20) return null;
-  let ms = 0, dist = 0, gapD = 0; const sp = [];
+  let ms = 0, dist = 0, gapD = 0, gapMax = 0; const sp = [];
   let wd = 0, wt = 0;
   for (let i = 1; i < pts.length; i++) {
     const a = pts[i - 1], b = pts[i], dt = (b.t - a.t) / 1000, d = hav(a, b);
     if (dt <= 0) continue;
     dist += d;
     if ((a.s || 0) !== (b.s || 0)) continue; // pause volontaire
-    if (dt > 600 && d > 1000) { gapD += d; continue; } // coupure d'enregistrement
+    // coupure d'enregistrement : longue attente, ou bond de plus de 500 m entre deux positions (tracé en ligne droite)
+    if ((dt > 600 && d > 1000) || d > 500 || d / dt > 25) { gapD += d; gapMax = Math.max(gapMax, d); continue; }
     if (dt < 300 && d / dt > 0.3) {
       ms += dt * 1000; wd += d; wt += dt;
       if (wt >= 60) { sp.push(wd / wt); wd = 0; wt = 0; } // vitesse par tranche d'une minute
     }
   }
   if (!dist || ms < 5 * 6e4) return { err: 'Sortie trop courte pour être proposée.' };
-  if (gapD > dist * 0.3) return { err: 'L\'enregistrement de cette sortie a trop de coupures pour être proposé.' };
+  if (gapMax > 1000 || gapD > dist * 0.1) return { err: `L'enregistrement de cette sortie a été coupé (${fmtDist(gapD)} tracés en ligne droite) : le parcours n'est pas fiable pour être proposé.` };
   // heures inventées par un logiciel de préparation (vitesse parfaitement constante) : pas une vraie sortie
-  if (sp.length >= 10) { const m = sp.reduce((x, y) => x + y, 0) / sp.length, sd = Math.sqrt(sp.reduce((x, y) => x + (y - m) ** 2, 0) / sp.length); if (sd / m < 0.04) return null; }
+  if (sp.length >= 15) { const m = sp.reduce((x, y) => x + y, 0) / sp.length, sd = Math.sqrt(sp.reduce((x, y) => x + (y - m) ** 2, 0) / sp.length); if (sd / m < 0.02) return null; }
   return { done: pts[0].t, ms, dist, avg: dist / 1000 / (ms / 36e5) };
 }
 const cpNoProof = () => toast('Seuls les parcours que tu as faits peuvent être proposés : enregistre ta sortie avec Pisteo, ou importe le GPX de ton activité (Strava, Garmin…).', 7000);
@@ -5097,6 +5111,8 @@ $('cpSend').onclick = async () => {
   const say = (m, ok) => { $('cpMsg').textContent = tr(m); $('cpMsg').className = ok ? 'note cp-ok' : 'fin-msg'; $('cpMsg').hidden = false; };
   const name = $('cpName').value.trim(), desc = $('cpDesc').value.trim();
   if (name.length < 4 || CP_AUTO_NAME.test(name)) { say('Donne un nom au parcours (lieu, sommet, lac…).'); return; }
+  if (gibberish(name, false)) { say('Donne un nom au parcours (lieu, sommet, lac…).'); return; }
+  if (desc.length >= 30 && gibberish(desc, true)) { say('Écris une vraie description, en quelques phrases : difficulté, départ, ce qu\'on y voit…'); return; }
   if (desc.length < 30) { say('Ajoute une description d\'au moins 30 caractères : difficulté, départ, ce qu\'on y voit…'); return; }
   const [lo, hi] = CP_SPEED[cpSport];
   if (cpPf.avg > hi || cpPf.avg < lo) { say(cpSport === 'foot' && cpPf.avg > hi ? `Vitesse moyenne de ${Math.round(cpPf.avg)} km/h : ce parcours a-t-il été fait à vélo ?` : cpSport === 'bike' && cpPf.avg < lo ? `Vitesse moyenne de ${cpPf.avg.toFixed(1)} km/h : ce parcours a-t-il été fait à pied ?` : `Vitesse moyenne de ${Math.round(cpPf.avg)} km/h : trop rapide pour un parcours à vélo.`); return; }

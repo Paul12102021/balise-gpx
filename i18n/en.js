@@ -428,9 +428,11 @@ const exact = {
   "Retirer la photo": "Remove photo", "3 au plus, visibles après validation": "3 at most, visible after approval", "Le tracé, son nom, sa description, ses points notés et ses photos seront publics, sans ton nom. Évite les photos où l'on reconnaît des personnes ou des plaques d'immatriculation. Un parcours signalé plusieurs fois par d'autres est retiré.": "The route, its name, description, points and photos will be public, without your name. Avoid photos where people or number plates can be recognised. A route reported several times by others is removed.", "1 photo envoyée, visible après validation.": "1 photo sent, visible after approval.",
   "Tous": "All", "Balisés": "Waymarked", "⭐ Recommandés": "⭐ Recommended", "Recommandés": "Recommended",
   "Sortie trop courte pour être proposée.": "Outing too short to suggest.", "L'enregistrement de cette sortie a trop de coupures pour être proposé.": "This outing has too many recording gaps to be suggested.", "Seuls les parcours que tu as faits peuvent être proposés : enregistre ta sortie avec Pisteo, ou importe le GPX de ton activité (Strava, Garmin…).": "Only routes you have done can be suggested: record your outing with Pisteo, or import your activity GPX (Strava, Garmin…).",
+  "Écris une vraie description, en quelques phrases : difficulté, départ, ce qu'on y voit…": "Write a real description in a few sentences: difficulty, start, what you see…",
 };
 const D = '(\\d+(?:[.,]\\d+)?)';
 const patterns = [
+  [/^L'enregistrement de cette sortie a été coupé \((.+) tracés en ligne droite\) : le parcours n'est pas fiable pour être proposé\.$/, m => `This outing's recording was interrupted (${m[1]} drawn as a straight line): the route is not reliable enough to suggest.`],
   [/^Parcouru le (.+) en (.+) \((.+) de moyenne\)$/, (m, t) => `Done on ${m[1]} in ${t(m[2])} (${m[3]} average)`],
   [/^Parcouru le (.+) en (.+)$/, (m, t) => `Done on ${m[1]} in ${t(m[2])}`],
   [/^Vitesse moyenne de ([\d.,]+) km\/h : ce parcours a-t-il été fait à vélo \?$/, m => `Average speed ${m[1]} km/h: was this route done by bike?`],
