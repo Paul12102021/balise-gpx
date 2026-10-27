@@ -152,6 +152,7 @@ public class MainActivity extends Activity {
             }
 
             @Override
+            @android.annotation.SuppressLint({"NewApi", "WrongConstant"}) // sélecteur de photos : vérifié par photoPickerAvailable()
             public boolean onShowFileChooser(WebView view, ValueCallback<Uri[]> cb, FileChooserParams params) {
                 if (fileCb != null) fileCb.onReceiveValue(null);
                 fileCb = cb; camUri = null;
@@ -161,6 +162,14 @@ public class MainActivity extends Activity {
                 i.addCategory(Intent.CATEGORY_OPENABLE);
                 i.setType(img ? "image/*" : "*/*"); // les GPX n'ont pas toujours le bon type : on laisse tout choisir
                 if (params.getMode() == FileChooserParams.MODE_OPEN_MULTIPLE) i.putExtra(Intent.EXTRA_ALLOW_MULTIPLE, true);
+                // photos à choisir (pas le bouton « Photo ») : le sélecteur de photos d'Android, où l'on coche
+                // plusieurs photos d'un toucher (Android 11 et plus ; sinon la galerie classique ci-dessous)
+                if (img && !params.isCaptureEnabled() && photoPickerAvailable()) {
+                    Intent pick = new Intent(MediaStore.ACTION_PICK_IMAGES);
+                    if (params.getMode() == FileChooserParams.MODE_OPEN_MULTIPLE)
+                        pick.putExtra(MediaStore.EXTRA_PICK_IMAGES_MAX, Math.min(30, MediaStore.getPickImagesMaxLimit()));
+                    try { startActivityForResult(pick, REQ_FILE); return true; } catch (ActivityNotFoundException e) { /* galerie classique */ }
+                }
                 Intent chooser = Intent.createChooser(i, null);
                 // photos : l'appareil photo est proposé avec la galerie (ou directement, pour le bouton « Photo »)
                 if (img) {
@@ -287,6 +296,12 @@ public class MainActivity extends Activity {
             geoCb.invoke(geoOrigin, hasLocation(), false);
             geoCb = null;
         }
+    }
+
+    // sélecteur de photos d'Android : intégré à Android 13, ajouté par mise à jour système sur Android 11 et 12
+    private static boolean photoPickerAvailable() {
+        if (Build.VERSION.SDK_INT >= 33) return true;
+        return Build.VERSION.SDK_INT >= 30 && android.os.ext.SdkExtensions.getExtensionVersion(Build.VERSION_CODES.R) >= 2;
     }
 
     @Override
