@@ -8,6 +8,8 @@ const plural = (n, one, many) => n + ' ' + (+n > 1 ? many : one);
 const kmEs = (n, half) => half ? (n ? (n === 1 ? 'un kilómetro y medio' : n + ' kilómetros y medio') : 'medio kilómetro') : (n === 1 ? 'un kilómetro' : n + ' kilómetros');
 const lowFirst = s => s.charAt(0).toLowerCase() + s.slice(1);
 const exact = {
+  // ---- plan de secours
+  "Serveur d'itinéraires habituel indisponible : itinéraire de secours": "Servidor de rutas habitual no disponible: ruta de reserva",
   // ---- navegación y mapa
   'Carte': 'Mapa', 'Reste': 'Queda', 'D+ restant': 'D+ restante', 'Écart': 'Desvío', 'Altitude': 'Altitud',
   'Recherche du signal GPS…': 'Buscando señal GPS…',

@@ -8,6 +8,8 @@ const km = (n, half) => n === 1 && !half ? '1 kilometre' : (half ? n + '.5' : n)
 const nd = s => String(s).replace(/\.$/, '');
 const plural = (n, one, many) => n + ' ' + (+n > 1 ? many : one);
 const exact = {
+  // ---- plan de secours
+  "Serveur d'itinéraires habituel indisponible : itinéraire de secours": "Usual route server unavailable: backup route",
   // ---- navigation and map
   'Carte': 'Map', 'Reste': 'Left', 'D+ restant': 'Climb left', 'Écart': 'Off by', 'Altitude': 'Altitude',
   'Recherche du signal GPS…': 'Looking for GPS signal…',

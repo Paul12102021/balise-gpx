@@ -1,6 +1,6 @@
 /* Service worker : appli disponible hors ligne + tuiles de carte en cache */
-const APP = 'app-v251', TILES = 'tiles-v2';
-const SHELL = ['./', 'index.html', 'app.css?v=251', 'app.js?v=251', 'i18n/en.js?v=251', 'i18n/es.js?v=251', 'vendor/maplibre-gl.js', 'vendor/qrcode.js', 'vendor/maplibre-gl.css',
+const APP = 'app-v252', TILES = 'tiles-v2';
+const SHELL = ['./', 'index.html', 'app.css?v=252', 'app.js?v=252', 'i18n/en.js?v=252', 'i18n/es.js?v=252', 'vendor/maplibre-gl.js', 'vendor/qrcode.js', 'vendor/maplibre-gl.css',
   'departements.json', 'regions/countries.json', 'manifest.webmanifest', 'icon.svg', 'icon-192.png', 'icon-512.png', 'icon-maskable-512.png', 'apple-touch-icon.png'];
 
 // Clé de cache commune avec la page : https://tiles.balise/<fond>/<z>/<x>/<y>
@@ -136,14 +136,18 @@ self.addEventListener('fetch', e => {
     e.respondWith(caches.open('voice-v1').then(async c => (await c.match(req)) || fetch(req).then(r => { if (r.ok) c.put(req, r.clone()); return r; })));
     return;
   }
-  // Fichiers de l'appli : réseau d'abord (pour recevoir les mises à jour), cache si hors ligne
+  // Fichiers de l'appli : réseau d'abord (pour recevoir les mises à jour), cache si hors ligne.
+  // Plan de secours : si l'hébergeur (Cloudflare) est en panne (erreur 5xx) ou ne répond pas en 8 s,
+  // on sert la copie gardée sur le téléphone : l'appli s'ouvre et guide normalement.
   if (url.origin === location.origin) {
     // une page ouverte (navigation) est redemandée par son adresse : certains navigateurs refusent
     // de modifier directement une requête de navigation
     const fresh = req.mode === 'navigate' ? new Request(req.url, { cache: 'no-cache', credentials: 'same-origin' }) : new Request(req, { cache: 'no-cache' });
-    e.respondWith(fetch(fresh).then(unredirect).then(r => {
+    const cached = () => caches.match(req, { ignoreSearch: true }).then(r => r || (req.mode === 'navigate' || req.destination === 'document' ? caches.match('index.html') : null));
+    e.respondWith(fetchWithTimeout(fresh, 8000).then(unredirect).then(async r => {
       if (r.ok) { const copy = r.clone(); caches.open(APP).then(c => c.put(req, copy)); }
+      if (r.status >= 500) { const c = await cached(); if (c) return c; }
       return r;
-    }).catch(() => caches.match(req, { ignoreSearch: true }).then(r => r || caches.match('index.html'))));
+    }).catch(() => cached().then(r => r || new Response('', { status: 504 }))));
   }
 });

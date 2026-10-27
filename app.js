@@ -5,7 +5,7 @@
 
 // La page et le code doivent être de la même version. Sinon (page gardée en cache
 // par le téléphone ou par GitHub), on recharge une page fraîche, au plus 3 fois.
-const APP_VERSION = 251;
+const APP_VERSION = 252;
 try {
   const meta = document.querySelector('meta[name="balise-version"]');
   const pageV = meta ? +meta.content : 0;
@@ -531,17 +531,28 @@ $('btnLayer').onclick = () => {
   const N = LAYERS[next];
   setLayer(next); toast('Fond de carte : ' + N.name + (N.volunteer ? ' · service bénévole, parfois lent ou indisponible' : N.france ? ' · en ligne seulement' : ''), N.volunteer ? 4000 : 2800);
 };
-// Fond bénévole qui ne répond plus : on passe sur IGN (France) ou Monde, sans changer le choix enregistré
-let baseErrs = [];
+// Fond de carte qui ne répond plus (serveur en panne) : on passe sur un autre fond, sans changer le choix enregistré.
+// Bascule seulement si plusieurs tuiles échouent ET qu'aucune n'arrive depuis 20 s (une tuile manquante en bord
+// de pays ne suffit pas) ; une seule bascule automatique toutes les 3 min, jamais vers le fond qu'on vient de quitter.
+// Secours : carte officielle (IGN…) ↔ Monde (OpenFreeMap), et Topo si les deux tombent ; photos aériennes → IGN.
+let baseErrs = [], baseOk = 0, autoSwitch = { t: 0, from: -1 };
+map.on('data', e => { if (e.tile && (e.sourceId === 'base' || e.sourceId === 'ofm')) baseOk = Date.now(); });
 map.on('error', e => {
   const L = LAYERS[layerIdx];
-  if (!L || !(L.volunteer || L.france) || e.sourceId !== 'base' || navigator.onLine === false) return;
+  if (!L || (e.sourceId !== 'base' && e.sourceId !== 'ofm') || navigator.onLine === false) return;
   const now = Date.now(); baseErrs = baseErrs.filter(t => now - t < 20000); baseErrs.push(now);
-  if (baseErrs.length < 8) return;
+  if (baseErrs.length < 8 || now - baseOk < 20000 || now - autoSwitch.t < 3 * 6e4) return;
   baseErrs = [];
   const c = map.getCenter(), inFr = c.lng > -5.5 && c.lng < 9.8 && c.lat > 41.2 && c.lat < 51.2;
-  // photos aériennes hors de France : pas d'images → carte officielle du pays affiché (ou Monde)
-  const to = L.france ? (natCur !== 'ign' || inFr ? 0 : LAYERS.findIndex(l => l.id === 'monde')) : LAYERS.findIndex(l => l.id === (inFr ? 'ign' : 'monde'));
+  const idOf = id => LAYERS.findIndex(l => l.id === id);
+  let to;
+  if (L.france && !inFr) to = natCur !== 'ign' ? 0 : idOf('monde'); // photos aériennes hors de France
+  else if (L.vector) to = 0;                       // Monde en panne → carte officielle du pays
+  else if (L.id === 'ign') to = idOf('monde');      // carte officielle en panne → Monde
+  else to = inFr || natCur !== 'ign' ? 0 : idOf('monde');
+  if (to === autoSwitch.from || to === layerIdx) to = idOf('topo'); // le secours lui-même est tombé
+  if (to < 0 || to === layerIdx || to === autoSwitch.from) return;
+  autoSwitch = { t: now, from: layerIdx }; baseOk = now;
   setLayer(to, false);
   toast(L.france && !inFr ? 'Photos aériennes : France seulement' : `${L.name} ne répond pas : carte ${LAYERS[to].name} à la place`, 4500);
 });
@@ -2535,8 +2546,41 @@ async function brProf(style) {
   if (profile !== 'trekking') return routeLitOn() ? nightProfile() : profile;
   return style === 'river' ? riverProfile() : 'trekking';
 }
-// requête BRouter ; un profil personnalisé expiré sur le serveur est renvoyé une fois
+// Plan de secours : si BRouter (serveur bénévole unique) ne répond pas, on calcule l'itinéraire sur le
+// serveur OSRM de FOSSGIS (routing.openstreetmap.de, profils piéton et vélo, sans clé, 1 demande/s au plus).
+// Moins fin (pas de profil balade ni éclairage), mais l'appli continue de guider. BRouter est réessayé après 5 min.
+let brDownUntil = 0, osrmLast = 0, osrmToast = 0;
 async function brFetch(lonlats, style, signal) {
+  if (Date.now() > brDownUntil) {
+    const ctrl = new AbortController(), timer = setTimeout(() => ctrl.abort(), 8000);
+    const stop = () => ctrl.abort(); if (signal) signal.addEventListener('abort', stop);
+    try { return await brFetchMain(lonlats, style, ctrl.signal); }
+    catch (e) {
+      if (signal && signal.aborted) throw e;
+      if (navigator.onLine === false) throw e; // pas de réseau : les chemins téléchargés prennent le relais
+      brDownUntil = Date.now() + 5 * 6e4;
+    } finally { clearTimeout(timer); if (signal) signal.removeEventListener('abort', stop); }
+  }
+  // la variante « balade » n'existe que sur BRouter : on ne propose alors que l'itinéraire principal
+  if (style === 'river') { const e = new Error('variante indisponible'); e.server = true; throw e; }
+  return osrmFetch(lonlats, signal);
+}
+async function osrmFetch(lonlats, signal) {
+  const wait = osrmLast + 1100 - Date.now(); osrmLast = Math.max(Date.now(), osrmLast + 1100);
+  if (wait > 0) await new Promise(r => setTimeout(r, wait));
+  const kind = profile === 'trekking' ? 'bike' : 'foot';
+  const r = await fetch(`https://routing.openstreetmap.de/routed-${kind}/route/v1/driving/${lonlats.split('|').join(';')}?overview=full&geometries=geojson`, { signal })
+    .catch(e => { throw e; }); // réseau absent : l'appelant passe aux chemins téléchargés
+  const j = r.ok ? await r.json() : null, rt = j && j.code === 'Ok' && j.routes && j.routes[0];
+  if (!rt) { const e = new Error('serveurs d\'itinéraires indisponibles'); e.server = true; throw e; }
+  // altitude ajoutée après coup (OSRM n'en donne pas) : IGN, sinon Open-Meteo
+  const pts = await rtElevate(rt.geometry.coordinates.map(c => ({ lon: c[0], lat: c[1], ele: null })));
+  if (Date.now() - osrmToast > 10 * 6e4) { osrmToast = Date.now(); toast(tr('Serveur d\'itinéraires habituel indisponible : itinéraire de secours'), 4500); }
+  return { fallback: true, features: [{ type: 'Feature', geometry: { type: 'LineString', coordinates: pts.map(p => p.ele != null ? [p.lon, p.lat, p.ele] : [p.lon, p.lat]) },
+    properties: { 'track-length': String(Math.round(rt.distance)), messages: [] } }] };
+}
+// requête BRouter ; un profil personnalisé expiré sur le serveur est renvoyé une fois
+async function brFetchMain(lonlats, style, signal) {
   for (let k = 0; ; k++) {
     const prof = await brProf(style);
     const r = await fetch(`https://brouter.de/brouter?lonlats=${lonlats}&profile=${prof}&alternativeidx=0&format=geojson`, { signal });
@@ -2937,6 +2981,16 @@ async function searchPhoton(q, c, signal) {
     return { lat, lon, name: p.name, sub: [p.street ? (p.housenumber ? p.housenumber + ' ' : '') + p.street : '', p.city || p.county || ''].filter(Boolean).join(', ') };
   }).filter(p => hav(c, p) < 100000).sort((x, y) => hav(c, x) - hav(c, y)).slice(0, 6);
 }
+// secours de Photon (serveur de Komoot) : index des lieux de l'IGN (France seulement)
+async function searchIgnPoi(q, c, signal) {
+  const r = await fetch(`https://data.geopf.fr/geocodage/search?q=${encodeURIComponent(q)}&index=poi&limit=8&lat=${c.lat.toFixed(4)}&lon=${c.lon.toFixed(4)}`, { signal });
+  if (!r.ok) throw new Error('HTTP ' + r.status);
+  const one = v => Array.isArray(v) ? v[0] : v;
+  return ((await r.json()).features || []).map(f => {
+    const p = f.properties, [lon, lat] = f.geometry.coordinates;
+    return { lat, lon, name: p.toponym || one(p.name) || '', sub: one(p.city) || '' };
+  }).filter(p => p.name && hav(c, p) < 100000).sort((x, y) => hav(c, x) - hav(c, y)).slice(0, 6);
+}
 async function searchPlaces(q) {
   const seq = ++searchSeq, list = $('destList');
   const c = me || (() => { const m = map.getCenter(); return { lat: m.lat, lon: m.lng }; })();
@@ -2974,7 +3028,7 @@ async function searchPlaces(q) {
       fetch(`https://data.geopf.fr/geocodage/search?q=${encodeURIComponent(q)}&limit=6&lat=${c.lat.toFixed(4)}&lon=${c.lon.toFixed(4)}`, { signal: ctrl.signal }).then(r => r.json())
         .then(j => (j.features || []).map(f => { const p = f.properties, [lon, lat] = f.geometry.coordinates; return item(p.label, p.context || '', { lat, lon }, p.name || p.label); }))
         .catch(() => { ignErr = true; return []; }).then(v => { groups.addr = v; draw(); return v; }),
-      searchPhoton(q, c, ctrl.signal).then(v => v.map(p => item(p.name, p.sub, p, p.name))).catch(() => [])
+      searchPhoton(q, c, ctrl.signal).catch(() => searchIgnPoi(q, c, ctrl.signal)).then(v => v.map(p => item(p.name, p.sub, p, p.name))).catch(() => [])
         .then(v => { groups.name = v; draw(); return v; }),
     ];
     if (t) jobs.push(searchNearbyType(t, c, ctrl.signal).then(v => v.map(p => item(p.name, p.sub, p, p.name))).catch(() => [])
@@ -3423,7 +3477,19 @@ async function rtElevate(pts) {
   if (idx[idx.length - 1] !== n - 1) idx.push(n - 1);
   const z = new Array(n).fill(null);
   // toutes les demandes partent en même temps
-  const one = async part => {
+  // secours : Open-Meteo (modèle mondial ~90 m, 100 points par demande) si le service IGN ne répond pas
+  const omOne = async part => {
+    const ctrl = new AbortController(), timer = setTimeout(() => ctrl.abort(), 15000);
+    try {
+      const r = await fetch('https://api.open-meteo.com/v1/elevation?latitude=' + part.map(i => pts[i].lat.toFixed(5)).join(',') + '&longitude=' + part.map(i => pts[i].lon.toFixed(5)).join(','), { signal: ctrl.signal });
+      if (!r.ok) throw new Error('alti');
+      const els = ((await r.json()) || {}).elevation || [];
+      if (els.length !== part.length) throw new Error('alti');
+      part.forEach((i, q) => { z[i] = typeof els[q] === 'number' && els[q] > -1000 ? els[q] : null; });
+    } finally { clearTimeout(timer); }
+  };
+  const one = part => ignOne(part).catch(() => omOne(part));
+  const ignOne = async part => {
     const url = 'https://data.geopf.fr/altimetrie/1.0/calcul/alti/rest/elevation.json?resource=ign_rge_alti_wld&delimiter=%7C&zonly=true&indent=false'
       + '&lon=' + part.map(i => pts[i].lon.toFixed(6)).join('%7C') + '&lat=' + part.map(i => pts[i].lat.toFixed(6)).join('%7C');
     const ctrl = new AbortController(), timer = setTimeout(() => ctrl.abort(), 15000);
@@ -3485,6 +3551,8 @@ async function overpassFast(q, onWait, mirrorFirst, signal, fast) {
 // Tuiles de 0,25° publiées sur GitHub Pages : en France, la recherche et les tracés ne passent plus
 // par les serveurs OpenStreetMap. Les tuiles lues sont gardées sur le téléphone (hors ligne ensuite).
 const RT_DATA = 'https://paul12102021.github.io/pisteo-data/';
+const RT_SRC = [RT_DATA, 'https://raw.githubusercontent.com/Paul12102021/pisteo-data/gh-pages/'];
+let rtSrcOk = 0;
 const rtd = { man: null, manP: null, deps: null, tiles: new Map() };
 async function rtdCache() { try { return await caches.open('rt-tiles'); } catch { return null; } }
 async function rtdGet(path, maxAge) {
@@ -3492,10 +3560,18 @@ async function rtdGet(path, maxAge) {
   const old = c && await c.match(key).catch(() => null);
   if (old && (!maxAge || Date.now() - (+old.headers.get('x-t') || 0) < maxAge)) return old.json();
   try {
-    const ctrl = new AbortController(), timer = setTimeout(() => ctrl.abort(), 15000);
-    const r = await fetch(RT_DATA + path, { cache: 'no-cache', signal: ctrl.signal }).finally(() => clearTimeout(timer));
-    if (!r.ok) throw new Error('HTTP ' + r.status);
-    const txt = await r.text();
+    let txt = null, err = null;
+    // GitHub Pages d'abord, puis la même branche lue directement sur GitHub (secours) ; la source qui répond est gardée
+    for (let k = 0; k < RT_SRC.length && txt == null; k++) {
+      const src = RT_SRC[(rtSrcOk + k) % RT_SRC.length];
+      const ctrl = new AbortController(), timer = setTimeout(() => ctrl.abort(), k ? 15000 : 10000);
+      try {
+        const r = await fetch(src + path, { cache: 'no-cache', signal: ctrl.signal });
+        if (!r.ok) throw new Error('HTTP ' + r.status);
+        txt = await r.text(); rtSrcOk = (rtSrcOk + k) % RT_SRC.length;
+      } catch (e) { err = err || e; } finally { clearTimeout(timer); }
+    }
+    if (txt == null) throw err;
     if (c) c.put(key, new Response(txt, { headers: { 'content-type': 'application/json', 'x-t': String(Date.now()) } })).catch(() => {});
     return JSON.parse(txt);
   } catch (e) { if (old) return old.json(); throw e; }
@@ -6759,8 +6835,32 @@ async function loadWx() {
   const ctrl = new AbortController(), timer = setTimeout(() => ctrl.abort(), 15000);
   let js;
   try { const r = await fetch(url, { signal: ctrl.signal }); if (!r.ok) throw new Error('HTTP ' + r.status); js = await r.json(); }
+  catch (e) { clearTimeout(timer); js = await wxMet(pts).catch(() => { throw e; }); } // secours : MET Norway
   finally { clearTimeout(timer); }
   wxBuild(pts, Array.isArray(js) ? js : [js], a);
+}
+// Secours météo : MET Norway (yr.no, gratuit, sans clé, un point par demande), mis au format Open-Meteo
+const MET_CODE = { clearsky: 0, fair: 1, partlycloudy: 2, cloudy: 3, fog: 45, lightrain: 61, rain: 63, heavyrain: 65, lightrainshowers: 80, rainshowers: 81, heavyrainshowers: 82,
+  lightsleet: 66, sleet: 67, heavysleet: 67, lightsleetshowers: 85, sleetshowers: 85, heavysleetshowers: 86, lightsnow: 71, snow: 73, heavysnow: 75, lightsnowshowers: 85, snowshowers: 85, heavysnowshowers: 86 };
+async function wxMet(pts) {
+  const ctrl = new AbortController(), timer = setTimeout(() => ctrl.abort(), 15000);
+  try {
+    return await Promise.all(pts.map(async p => {
+      const r = await fetch(`https://api.met.no/weatherapi/locationforecast/2.0/compact?lat=${p.lat.toFixed(3)}&lon=${p.lon.toFixed(3)}`, { signal: ctrl.signal });
+      if (!r.ok) throw new Error('HTTP ' + r.status);
+      const h = { time: [], temperature_2m: [], precipitation_probability: [], weather_code: [], wind_speed_10m: [], wind_direction_10m: [], is_day: [] };
+      for (const ts of ((await r.json()).properties || {}).timeseries || []) {
+        const d = ts.data.instant.details, n1 = ts.data.next_1_hours || ts.data.next_6_hours; if (!n1) continue;
+        const sym = n1.summary.symbol_code || '', base = sym.split('_')[0], mm = (n1.details || {}).precipitation_amount || 0;
+        h.time.push(Date.parse(ts.time) / 1000); h.temperature_2m.push(d.air_temperature);
+        h.precipitation_probability.push(mm >= 0.5 ? 80 : mm > 0 ? 45 : 5);
+        h.weather_code.push(/thunder/.test(base) ? 95 : MET_CODE[base] != null ? MET_CODE[base] : 3);
+        h.wind_speed_10m.push((d.wind_speed || 0) * 3.6); h.wind_direction_10m.push(d.wind_from_direction);
+        h.is_day.push(/_night|_polartwilight/.test(sym) ? 0 : 1);
+      }
+      return { hourly: h };
+    }));
+  } finally { clearTimeout(timer); }
 }
 // prévisions heure par heure aux points du parcours → étiquettes aux changements de temps + bandes de pluie
 function wxBuild(pts, js, a) {
