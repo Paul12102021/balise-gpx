@@ -5,7 +5,7 @@
 
 // La page et le code doivent être de la même version. Sinon (page gardée en cache
 // par le téléphone ou par GitHub), on recharge une page fraîche, au plus 3 fois.
-const APP_VERSION = 247;
+const APP_VERSION = 248;
 try {
   const meta = document.querySelector('meta[name="balise-version"]');
   const pageV = meta ? +meta.content : 0;
@@ -1690,7 +1690,11 @@ function stvButton(it, keepMsg) {
   const done = it.strava || it.stravaManual;
   b.disabled = false;
   b.classList.toggle('sent', !!done);
-  b.textContent = it.strava ? 'Voir sur Strava ✓' : it.stravaManual ? 'Sur Strava ✓ · remettre' : 'Mettre sur Strava';
+  b.textContent = it.strava ? tr('✓ Sur Strava') : it.stravaManual ? 'Sur Strava ✓ · remettre' : 'Mettre sur Strava';
+  // lien vers l'activité : texte imposé par Strava (« View on Strava »)
+  const v = $('sdStvView'), url = it.strava ? 'https://www.strava.com/activities/' + it.strava : '';
+  v.hidden = !url; v.href = url || '#';
+  v.onclick = e => { if (AND && AND.openExternal) { e.preventDefault(); try { AND.openExternal(url); } catch {} } };
   b.onclick = async () => {
     if (it.strava) { window.open('https://www.strava.com/activities/' + it.strava, '_blank'); return; }
     // envoi direct seulement si Strava l'accepte (compte connecté et appli active), sinon import manuel

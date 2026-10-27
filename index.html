@@ -9,13 +9,13 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<meta name="balise-version" content="247">
+<meta name="balise-version" content="248">
 <title>Pisteo</title>
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" href="icon.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
 <link rel="stylesheet" href="vendor/maplibre-gl.css">
-<link rel="stylesheet" href="app.css?v=247">
+<link rel="stylesheet" href="app.css?v=248">
 </head>
 <body>
 <div id="map" aria-label="Carte"></div>
@@ -351,7 +351,9 @@
       <div class="so-acts">
         <button id="sdFollow" class="btn go">Refaire ce parcours</button>
         <button id="sdStrava" class="btn strava">Mettre sur Strava</button>
+        <a id="sdStvView" class="stv-view" href="#" target="_blank" rel="noopener" hidden>View on Strava</a>
         <p id="sdStvMsg" class="so-msg" hidden></p>
+        <div id="sdStvCompat" class="stv-compat"><img class="cw-dark" src="vendor/strava/compatible-white.svg" alt="Compatible with Strava"><img class="cw-light" src="vendor/strava/compatible-black.svg" alt="Compatible with Strava"></div>
         <button id="sdShare" class="btn">Partager</button>
         <button id="sdExport" class="btn">Exporter le GPX</button>
         <button id="sdRename" class="btn ghost">Renommer</button>
@@ -550,7 +552,7 @@
       <p class="note">Connecte ton compte Strava une fois : tes sorties pourront ensuite y être envoyées d'un toucher, ou automatiquement.</p>
       <p id="stvNotReady" class="fin-msg" hidden>La connexion Strava n'est pas encore activée sur cette version de Pisteo.</p>
     </div>
-    <button id="stvConnect" class="btn strava">Se connecter avec Strava</button>
+    <button id="stvConnect" class="stv-connect" aria-label="Connect with Strava"><img src="vendor/strava/connect-orange.svg" alt="Connect with Strava" width="237" height="48"></button>
     <div id="stvOn" hidden>
       <p class="lib-sum">Connecté : <b id="stvWho"></b></p>
       <p id="stvBlockedMsg" class="fin-msg" hidden>Strava refuse l'envoi direct depuis Pisteo sans abonnement Strava. Pour publier une sortie : <b>Mes sorties</b> → la sortie → <b>Mettre sur Strava</b> (import par le site Strava).</p>
@@ -561,6 +563,7 @@
       <button id="stvRetryBtn" class="btn ghost" hidden>J'ai pris un abonnement : réessayer l'envoi direct</button>
       <button id="stvOff" class="btn ghost danger">Se déconnecter de Strava</button>
     </div>
+    <div class="stv-compat"><img class="cw-dark" src="vendor/strava/compatible-white.svg" alt="Compatible with Strava"><img class="cw-light" src="vendor/strava/compatible-black.svg" alt="Compatible with Strava"></div>
   </div>
 </div>
 
@@ -846,8 +849,8 @@
 
 <script src="vendor/maplibre-gl.js"></script>
 <script src="vendor/qrcode.js"></script>
-<script src="i18n/en.js?v=247"></script>
-<script src="i18n/es.js?v=247"></script>
-<script src="app.js?v=247"></script>
+<script src="i18n/en.js?v=248"></script>
+<script src="i18n/es.js?v=248"></script>
+<script src="app.js?v=248"></script>
 </body>
 </html>

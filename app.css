@@ -820,3 +820,16 @@ body.wx-on:not(.side) .trackrow { justify-content: space-between; } /* les bouto
 .lit-chip b { font-weight: 700; }
 .lit-chip b.warn { color: #f08a24; }
 .lit-chip { flex-wrap: wrap; border-radius: 12px; }
+
+/* Strava : bouton et logo officiels (guide de marque Strava), lien « View on Strava » */
+.stv-connect { border: 0; background: none; padding: 0; align-self: center; cursor: pointer; line-height: 0; }
+.stv-connect img { height: 48px; width: auto; display: block; }
+.stv-connect[hidden] { display: none; }
+.stv-compat { grid-column: 1 / -1; display: flex; justify-content: center; padding: 6px 0 2px; }
+.stv-compat img { height: 13px; width: auto; opacity: .9; }
+.stv-compat .cw-light { display: none; }
+@media (prefers-color-scheme: light) { :root:not([data-theme="dark"]) .stv-compat .cw-dark { display: none; } :root:not([data-theme="dark"]) .stv-compat .cw-light { display: block; } }
+:root[data-theme="light"] .stv-compat .cw-dark { display: none; }
+:root[data-theme="light"] .stv-compat .cw-light { display: block; }
+.stv-view { grid-column: 1 / -1; text-align: center; font-weight: 700; color: #FC5200; text-decoration: underline; padding: 4px; }
+.stv-view[hidden] { display: none; }
