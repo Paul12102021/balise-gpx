@@ -128,7 +128,7 @@ async function checkProposal(b, r, idx) {
   if (gap > 5000) return 'Le tracé a des trous de plus de 5 km : ce n\'est sans doute pas un vrai parcours.';
   const name = String(b.name || '').trim(), desc = String(r.desc || '').trim();
   if (name.length < 4 || name.length > 60) return 'Le nom doit faire entre 4 et 60 caractères.';
-  if (/^(sortie du|trace sans nom|parcours partagé|boucle (à pied|à vélo) de)/i.test(name)) return 'Donne un vrai nom au parcours (lieu, sommet, lac…).';
+  if (/^((sortie|balade|course|course à pied|marche|randonnée|rando|vélo|sortie à vélo|sortie vélo|activité|entraînement)( (à pied|à vélo|vtt|gravel))? (du|de la|de l'|de l’|d'|d’|le|en) ?(matin|midi|après-midi|apres-midi|soir|soirée|nuit|\d)|sortie du|trace sans nom|parcours partagé|boucle (à pied|à vélo) de|vers |(morning|afternoon|evening|night|lunch) (ride|run|walk|hike))/i.test(name)) return 'Donne un vrai nom au parcours (lieu, sommet, lac…).';
   if (desc.length < 30) return 'Ajoute une description d\'au moins 30 caractères : difficulté, départ, ce qu\'on y voit…';
   for (const t of [name, desc, ...r.wpts.map(w => w.name + ' ' + w.desc)]) { const e = badText(t); if (e) return e; }
   // doublon : même sport, départ à moins de 300 m et longueur proche, ou tracé presque identique

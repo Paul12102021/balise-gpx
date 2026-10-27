@@ -5,7 +5,7 @@
 
 // La page et le code doivent être de la même version. Sinon (page gardée en cache
 // par le téléphone ou par GitHub), on recharge une page fraîche, au plus 3 fois.
-const APP_VERSION = 241;
+const APP_VERSION = 242;
 try {
   const meta = document.querySelector('meta[name="balise-version"]');
   const pageV = meta ? +meta.content : 0;
@@ -5000,7 +5000,7 @@ $('wtAddNote').onclick = () => { wtNotes(); $('watch').hidden = true; addNote('s
 $('wtPropose').onclick = () => {
   if (!wtSrc) return;
   const n = wtNotes(), nm = wtSrc.name || '';
-  $('cpName').value = /^(sortie du|trace sans nom|parcours partagé|boucle (à pied|à vélo) de|vers )/i.test(nm) ? '' : nm.replace(/ \(sens inverse\)$/, '').slice(0, 60);
+  $('cpName').value = CP_AUTO_NAME.test(nm) ? '' : nm.replace(/ \(sens inverse\)$/, '').slice(0, 60);
   $('cpDesc').value = n.desc || ''; cpSport = profile === 'trekking' ? 'bike' : 'foot'; cpSportUI();
   $('cpOk').checked = false; $('cpMsg').hidden = true; $('cpSend').disabled = false;
   // proposé depuis une sortie : ses photos sont reprises (on peut en retirer)
@@ -5008,6 +5008,8 @@ $('wtPropose').onclick = () => {
   $('watch').hidden = true; $('propose').hidden = false;
 };
 let cpSport = 'foot', cpFiles = [];
+// noms donnés automatiquement (Pisteo, Strava, Garmin…) : pas un vrai nom de parcours
+const CP_AUTO_NAME = /^((sortie|balade|course|course à pied|marche|randonnée|rando|vélo|sortie à vélo|sortie vélo|activité|entraînement)( (à pied|à vélo|vtt|gravel))? (du|de la|de l'|de l’|d'|d’|le|en) ?(matin|midi|après-midi|apres-midi|soir|soirée|nuit|\d)|sortie du|trace sans nom|parcours partagé|boucle (à pied|à vélo) de|vers |(morning|afternoon|evening|night|lunch) (ride|run|walk|hike))/i;
 function catPhView(urls, i) {
   $('phImg').src = urls[i]; $('phInfo').textContent = `${i + 1} / ${urls.length}`; $('phDel').hidden = true;
   $('phPrev').hidden = i === 0; $('phNext').hidden = i >= urls.length - 1;
@@ -5041,7 +5043,7 @@ $('propose').onclick = e => { if (e.target === $('propose')) cpClose(); };
 $('cpSend').onclick = async () => {
   const say = (m, ok) => { $('cpMsg').textContent = tr(m); $('cpMsg').className = ok ? 'note cp-ok' : 'fin-msg'; $('cpMsg').hidden = false; };
   const name = $('cpName').value.trim(), desc = $('cpDesc').value.trim();
-  if (name.length < 4) { say('Donne un nom au parcours (lieu, sommet, lac…).'); return; }
+  if (name.length < 4 || CP_AUTO_NAME.test(name)) { say('Donne un nom au parcours (lieu, sommet, lac…).'); return; }
   if (desc.length < 30) { say('Ajoute une description d\'au moins 30 caractères : difficulté, départ, ce qu\'on y voit…'); return; }
   if (!$('cpOk').checked) { say('Coche la case pour confirmer que tu as fait ce parcours.'); return; }
   // la description sert aussi au parcours ouvert (et au lien partagé)
