@@ -5,7 +5,7 @@
 
 // La page et le code doivent être de la même version. Sinon (page gardée en cache
 // par le téléphone ou par GitHub), on recharge une page fraîche, au plus 3 fois.
-const APP_VERSION = 253;
+const APP_VERSION = 254;
 try {
   const meta = document.querySelector('meta[name="balise-version"]');
   const pageV = meta ? +meta.content : 0;
@@ -4543,9 +4543,10 @@ function planRemove(k) {
 // pendant qu'on prépare un autre trajet, la trace ouverte est masquée (une seule trace à l'écran) ;
 // « Quitter » la fait réapparaître, « Naviguer » / « Aperçu » / « Enregistrer » la remplacent par le nouveau trajet
 function trackShown(on) {
-  for (const id of ['track', 'track-casing']) if (map.getLayer(id)) map.setLayoutProperty(id, 'visibility', on ? 'visible' : 'none');
-  if (!on) { startMk.remove(); endMk.remove(); }
-  else if (track) { startMk.addTo(map); endMk.addTo(map); }
+  // la trace et ce qui l'accompagne (sens, portions sombres, flèches de vent) : masqués ensemble pendant un tracé
+  for (const id of ['track', 'track-casing', 'track-dir', 'litdark', 'litdark-bg']) if (map.getLayer(id)) map.setLayoutProperty(id, 'visibility', on ? 'visible' : 'none');
+  if (!on) { startMk.remove(); endMk.remove(); (wxPins || []).forEach(m => m.remove()); }
+  else if (track) { startMk.addTo(map); endMk.addTo(map); wxMap(); }
 }
 function openPlan(go, from, restore) {
   if (nav) { toast('Quitte d\'abord la navigation.'); return; }
