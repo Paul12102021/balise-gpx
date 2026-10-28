@@ -18,7 +18,8 @@ const API = 'https://www.strava.com/api/v3';
 
 export default {
   // vérification des services extérieurs (déclencheur Cron du worker, toutes les heures) → https://api.pisteo.app/etat
-  async scheduled(ev, env, ctx) { ctx.waitUntil(etatCheck(env)); },
+  // espacée : rien la nuit, toutes les 2 h en journée, toutes les heures tant qu'un service est en panne (voir etatDue)
+  async scheduled(ev, env, ctx) { ctx.waitUntil(etatDue(env).then(go => go && etatCheck(env))); },
   async fetch(req, env, ctx) {
     const origin = req.headers.get('Origin') || '';
     const allowed = (env.ALLOWED_ORIGIN || '').split(',').map(s => s.trim()).filter(Boolean);
@@ -585,10 +586,22 @@ async function etatStore(env, res) {
   if (env.CATALOGUE) await env.CATALOGUE.put('etat', JSON.stringify(out));
   return out;
 }
+// heure de Paris (0-23)
+const parisHour = () => parseInt(new Intl.DateTimeFormat('en-GB', { timeZone: 'Europe/Paris', hour: '2-digit', hourCycle: 'h23' }).format(new Date()), 10);
+const ETAT_DAY = [7, 21]; // vérifications de 7 h à 21 h ; la nuit, personne ne navigue (ou presque)
+async function etatDue(env) {
+  const h = parisHour();
+  if (h < ETAT_DAY[0] || h > ETAT_DAY[1]) return false;
+  const prev = env.CATALOGUE && await env.CATALOGUE.get('etat', 'json');
+  if (prev && prev.down && prev.down.length) return true; // une panne en cours : on suit son retour toutes les heures
+  return h % 2 === 1; // sinon une fois toutes les 2 h : 7 h, 9 h, 11 h… 21 h
+}
 async function etatLoad(env, url) {
   let e = env.CATALOGUE && await env.CATALOGUE.get('etat', 'json');
-  // pas de vérification depuis plus d'1 h 30 (déclencheur absent) : on vérifie maintenant ; « revérifier » : 5 min au plus souvent
-  if (!e || Date.now() - Date.parse(e.t) > 90 * 6e4 || (url.searchParams.get('maintenant') === '1' && Date.now() - Date.parse(e.t) > 5 * 6e4)) e = await etatCheck(env);
+  // résultat trop vieux en journée (plus de 3 h : déclencheur absent) : on vérifie maintenant ; la nuit, on garde le dernier.
+  // « revérifier » : 5 min au plus souvent
+  const age = e ? Date.now() - Date.parse(e.t) : Infinity, h = parisHour(), day = h >= ETAT_DAY[0] && h <= ETAT_DAY[1];
+  if (!e || (day && age > 3 * 36e5) || (url.searchParams.get('maintenant') === '1' && age > 5 * 6e4)) e = await etatCheck(env);
   return e;
 }
 const etatDate = d => new Date(d).toLocaleString('fr-FR', { timeZone: 'Europe/Paris', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
@@ -600,7 +613,7 @@ function etatTable(e) {
 }
 function etatResume(e) {
   const crit = e.res.filter(r => !r.ok && r.crit).length;
-  return `Vérifié le ${etatDate(e.t)} · ${e.down.length ? `<b>${e.down.length} en panne</b>${crit ? ' dont ' + crit + ' critique' + (crit > 1 ? 's' : '') : ''}` : '<b>tout fonctionne</b>'} · vérification automatique toutes les heures`;
+  return `Vérifié le ${etatDate(e.t)} · ${e.down.length ? `<b>${e.down.length} en panne</b>${crit ? ' dont ' + crit + ' critique' + (crit > 1 ? 's' : '') : ''}` : '<b>tout fonctionne</b>'} · vérification automatique toutes les 2 h de 7 h à 21 h (toutes les heures pendant une panne)`;
 }
 async function etatAdmin(env, url, k) {
   const nav = adminHead(k, 'etat');
