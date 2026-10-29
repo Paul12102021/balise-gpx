@@ -5,7 +5,7 @@
 
 // La page et le code doivent être de la même version. Sinon (page gardée en cache
 // par le téléphone ou par GitHub), on recharge une page fraîche, au plus 3 fois.
-const APP_VERSION = 259;
+const APP_VERSION = 260;
 try {
   const meta = document.querySelector('meta[name="balise-version"]');
   const pageV = meta ? +meta.content : 0;
@@ -1172,16 +1172,22 @@ function libDragStart() {
   const d = libDrag, li = d.li; if (!li) return;
   d.on = true; d.top0 = li.offsetTop; libMoveOpen = null;
   for (const m of $('libList').querySelectorAll('.lib-move')) m.remove();
-  li.classList.add('drag'); $('libList').classList.add('dragging'); vibrate(25);
+  li.classList.add('drag'); $('libList').classList.add('dragging'); $('lib').classList.add('libdrag'); vibrate(25);
 }
 function libDragMove(x, y) {
   const d = libDrag, li = d.li, list = $('libList'), panel = $('lib').querySelector('.lib-panel');
   if (!d.on || !li) return;
   // défilement automatique près des bords
-  const r = panel.getBoundingClientRect();
+  // seulement si le doigt est vraiment collé au bord et qu'il y est allé, et doucement
+  const rr = panel.getBoundingClientRect(), Z = 36, vh = window.visualViewport ? visualViewport.height : innerHeight;
+  const r = { top: Math.max(rr.top, 0), bottom: Math.min(rr.bottom, vh) }; // partie du panneau vraiment visible
   cancelAnimationFrame(d.scroll);
-  const edge = y < r.top + 60 ? -1 : y > r.bottom - 60 ? 1 : 0;
-  if (edge) { const step = () => { panel.scrollTop += edge * 8; libDragMove(x, y); }; d.scroll = requestAnimationFrame(step); }
+  const depth = y < r.top + Z ? (r.top + Z - y) : y > r.bottom - Z ? -(y - (r.bottom - Z)) : 0;
+  const edge = depth > 0 && y < d.y0 - 24 ? -1 : depth < 0 && y > d.y0 + 24 ? 1 : 0;
+  if (edge) {
+    const v = Math.min(5, 1 + Math.abs(depth) / 8);
+    const step = () => { const before = panel.scrollTop; panel.scrollTop += edge * v; if (panel.scrollTop !== before) libDragMove(x, y); }; d.scroll = requestAnimationFrame(step);
+  }
   const dy = y - d.y0 + (panel.scrollTop - d.st0);
   li.style.transform = `translateY(${dy - (li.offsetTop - d.top0)}px)`;
   // au-dessus d'un dossier ?
@@ -1206,12 +1212,13 @@ async function libDragEnd() {
   clearTimeout(d.timer); cancelAnimationFrame(d.scroll);
   if (!d.on) { d.li = null; return; }
   d.on = false; d.li = null; d.justDropped = true; setTimeout(() => { d.justDropped = false; }, 350);
-  li.classList.remove('drag', 'to-fold'); li.style.transform = ''; list.classList.remove('dragging');
+  li.classList.remove('drag', 'to-fold'); li.style.transform = ''; list.classList.remove('dragging'); $('lib').classList.remove('libdrag');
   const over = d.over; d.over = null;
   if (over) { over.classList.remove('drop'); await libMoveTo(li.dataset.id, over.id === 'libBack' ? null : over.dataset.folder); return; }
   const ids = [...list.querySelectorAll('.lib-tr')].map(x => x.dataset.id), pos = new Map(ids.map((id, i) => [id, i]));
   await libPatch(ids, it => { it.pos = pos.get(it.id); });
-  renderLib();
+  const panel = $('lib').querySelector('.lib-panel'), keep = panel.scrollTop;
+  await renderLib(); panel.scrollTop = keep; // la liste reste où elle était
 }
 {
   const list = $('libList');
