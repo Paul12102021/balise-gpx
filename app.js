@@ -5,7 +5,7 @@
 
 // La page et le code doivent être de la même version. Sinon (page gardée en cache
 // par le téléphone ou par GitHub), on recharge une page fraîche, au plus 3 fois.
-const APP_VERSION = 260;
+const APP_VERSION = 261;
 try {
   const meta = document.querySelector('meta[name="balise-version"]');
   const pageV = meta ? +meta.content : 0;
@@ -6907,6 +6907,7 @@ document.querySelectorAll('.lib').forEach(lib => {
   }, { passive: true });
   panel.addEventListener('touchmove', e => {
     if (x0 == null) return;
+    if (libDrag.li) { x0 = null; return; } // une trace de « Mes traces » est tenue (appui long) : ce n'est pas la fenêtre qu'on tire
     const cx = e.touches[0].clientX, cy = e.touches[0].clientY, dx = cx - x0; dy = cy - y0;
     const now = performance.now(); if (now > lastT) { vy = vy * 0.6 + (cy - lastY) / (now - lastT) * 0.4; lastY = cy; lastT = now; }
     if (!decided && (Math.abs(dx) > 10 || Math.abs(dy) > 10)) {
