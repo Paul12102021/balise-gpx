@@ -5,7 +5,7 @@
 
 // La page et le code doivent être de la même version. Sinon (page gardée en cache
 // par le téléphone ou par GitHub), on recharge une page fraîche, au plus 3 fois.
-const APP_VERSION = 257;
+const APP_VERSION = 258;
 try {
   const meta = document.querySelector('meta[name="balise-version"]');
   const pageV = meta ? +meta.content : 0;
@@ -1014,8 +1014,11 @@ const isRec = it => it.kind === 'rec' || (!it.kind && /^Sortie du /.test(it.name
 async function saveRecent(p, text, mustSucceed = false, extra = null) {
   try {
     const id = p.name + '|' + Math.round(p.total);
-    await idb('readwrite', st => st.put(Object.assign({ id, name: p.name, dist: p.total, up: p.hasEle ? p.totalUp : null, date: Date.now(), text }, extra || {})));
-    const all = (await listRecent()).filter(it => !isRec(it));
+    const old = await idb('readonly', st => st.get(id)).catch(() => null), keep = {};
+    if (old && old.folder) keep.folder = old.folder;
+    if (old && old.pos != null) keep.pos = old.pos;
+    await idb('readwrite', st => st.put(Object.assign({ id, name: p.name, dist: p.total, up: p.hasEle ? p.totalUp : null, date: Date.now(), text }, keep, extra || {})));
+    const all = (await listRecent()).filter(it => !isRec(it) && !it.folder);
     for (const old of all.slice(30)) await idb('readwrite', st => st.delete(old.id));
     return true;
   } catch (e) { if (mustSucceed) throw e; return false; }
@@ -1033,26 +1036,178 @@ function recDuration(text) {
 const ICON_SHARE = '<svg viewBox="0 0 24 24"><path d="M12 15V3M7 8l5-5 5 5"/><path d="M5 13v7h14v-7"/></svg>';
 const ICON_DEL = '<svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></svg>';
 // Mes traces : les GPX ouverts (les sorties enregistrées ont leur propre écran)
+// rangement : dossiers (un par projet) et ordre libre (appui long sur une trace, puis glisser)
+const ICON_FOLDER = '<svg viewBox="0 0 24 24"><path d="M3 6.5A1.5 1.5 0 0 1 4.5 5H10l2 2.5h7.5A1.5 1.5 0 0 1 21 9v9.5a1.5 1.5 0 0 1-1.5 1.5h-15A1.5 1.5 0 0 1 3 18.5Z"/></svg>';
+const ICON_GRIP = '<svg viewBox="0 0 24 24"><path d="M9 6h.01M15 6h.01M9 12h.01M15 12h.01M9 18h.01M15 18h.01"/></svg>';
+let libFolder = null, libMoveOpen = null; // dossier affiché (null : racine) · trace dont le menu « Ranger » est ouvert
+function libFoldersStored() { try { const a = JSON.parse(store.get('libFolders') || '[]'); return Array.isArray(a) ? a.filter(x => typeof x === 'string' && x) : []; } catch { return []; } }
+function libFolders(items) {
+  const a = libFoldersStored();
+  for (const it of items) if (it.folder && !a.includes(it.folder)) a.push(it.folder);
+  return a;
+}
+const libSaveFolders = a => store.set('libFolders', JSON.stringify(a));
+// ordre : les traces jamais déplacées (nouvelles) en haut, par date ; puis l'ordre choisi
+const libSort = arr => arr.sort((a, b) => (a.pos == null) !== (b.pos == null) ? (a.pos == null ? -1 : 1) : a.pos == null ? b.date - a.date : a.pos - b.pos);
+async function libPatch(ids, fn) {
+  for (const id of ids) {
+    const it = await idb('readonly', st => st.get(id)).catch(() => null);
+    if (it) { fn(it); await idb('readwrite', st => st.put(it)).catch(() => {}); }
+  }
+}
+function libAskName(def) {
+  const n = (prompt(tr('Nom du dossier (projet, région, saison…)'), def || '') || '').trim().slice(0, 40);
+  return n || null;
+}
+async function libNewFolder(moveId) {
+  const items = (await listRecent()).filter(it => !isRec(it)), fs = libFolders(items);
+  const n = libAskName(''); if (!n) return;
+  if (!fs.includes(n)) { fs.push(n); libSaveFolders(fs); }
+  if (moveId) await libMoveTo(moveId, n); else renderLib();
+}
+async function libMoveTo(id, folder) {
+  await libPatch([id], it => { if (folder) it.folder = folder; else delete it.folder; delete it.pos; });
+  libMoveOpen = null; vibrate(15);
+  toast(folder ? tr('Rangée dans « ' + folder + ' »') : tr('Sortie du dossier'), 2500);
+  renderLib();
+}
 async function renderLib() {
-  const list = $('libList'), items = (await listRecent()).filter(it => !isRec(it));
+  const list = $('libList'), all = (await listRecent()).filter(it => !isRec(it)), folders = libFolders(all);
+  if (libFolder && !folders.includes(libFolder)) libFolder = null;
+  const items = libSort(all.filter(it => (it.folder || null) === libFolder));
   list.innerHTML = '';
-  $('libEmpty').hidden = items.length > 0;
+  $('libFoldHead').hidden = !libFolder; $('libBrowse').hidden = !!libFolder; $('libNewFold').hidden = !!libFolder;
+  if (libFolder) $('libFoldName').textContent = libFolder;
+  $('libTitle').textContent = tr('Mes traces');
+  // dossiers en tête de la racine
+  if (!libFolder) for (const f of folders) {
+    const inF = all.filter(it => it.folder === f), km = inF.reduce((t, it) => t + (it.dist || 0), 0);
+    const li = document.createElement('li'); li.className = 'lib-fold'; li.dataset.folder = f;
+    const b = document.createElement('button'); b.className = 'lib-item';
+    b.innerHTML = '<i>' + ICON_FOLDER + '</i><b></b><span></span>';
+    b.querySelector('b').textContent = f;
+    b.querySelector('span').textContent = inF.length ? (inF.length > 1 ? tr(inF.length + ' traces') : tr('1 trace')) + ' · ' + fmtDist(km) : tr('Vide');
+    b.onclick = () => { libFolder = f; libMoveOpen = null; renderLib(); $('lib').querySelector('.lib-panel').scrollTop = 0; };
+    li.appendChild(b); list.appendChild(li);
+  }
+  const empty = !items.length && (libFolder || !folders.length);
+  $('libEmpty').hidden = !empty;
+  $('libEmpty').textContent = libFolder ? tr('Ce dossier est vide. Pour y ranger une trace : touche l\'icône dossier à côté d\'elle, ou reste appuyé dessus et glisse-la sur le dossier.')
+    : tr('Les traces que tu ouvres ou enregistres apparaîtront ici.');
+  $('libHint').hidden = items.length < 2 && !(folders.length && items.length);
   for (const it of items) {
-    const li = document.createElement('li');
+    const li = document.createElement('li'); li.className = 'lib-tr'; li.dataset.id = it.id;
     const open = document.createElement('button'); open.className = 'lib-item';
     open.innerHTML = '<b></b><span></span>';
     open.querySelector('b').textContent = it.name;
     open.querySelector('span').textContent = `${fmtDist(it.dist)}${it.up != null ? ' · D+ ' + fmtM(it.up) : ''} · ouverte le ${fmtDate(it.date)}`;
-    open.onclick = () => { closeLib(); loadText(it.text); };
+    open.onclick = () => { if (libDrag.justDropped) return; closeLib(); loadText(it.text); };
+    const mv = document.createElement('button'); mv.className = 'lib-del' + (libMoveOpen === it.id ? ' on' : ''); mv.setAttribute('aria-label', tr('Ranger dans un dossier'));
+    mv.innerHTML = ICON_FOLDER; mv.onclick = () => { libMoveOpen = libMoveOpen === it.id ? null : it.id; renderLib(); };
     const share = document.createElement('button'); share.className = 'lib-del'; share.setAttribute('aria-label', 'Envoyer ' + it.name);
     share.innerHTML = ICON_SHARE; share.onclick = () => { try { const t = parseGPX(it.text); openSend({ name: it.name, pts: t.pts, wpts: t.wpts, desc: t.desc, text: it.text }); } catch { shareGPX(it.text, it.name); } };
     const del = document.createElement('button'); del.className = 'lib-del'; del.setAttribute('aria-label', 'Retirer ' + it.name);
     del.innerHTML = ICON_DEL; del.onclick = async () => { await idb('readwrite', st => st.delete(it.id)).catch(() => {}); renderLib(); };
-    li.append(open, share, del); list.appendChild(li);
+    li.append(open, mv, share, del); list.appendChild(li);
+    if (libMoveOpen === it.id) {
+      const m = document.createElement('li'); m.className = 'lib-move';
+      const lab = document.createElement('span'); lab.textContent = tr('Ranger dans :'); m.appendChild(lab);
+      const chip = (txt, on, run) => { const c = document.createElement('button'); c.className = 'lib-chip' + (on ? ' on' : ''); c.textContent = txt; c.onclick = run; m.appendChild(c); };
+      if (it.folder) chip(tr('Hors dossier'), false, () => libMoveTo(it.id, null));
+      for (const f of folders) if (f !== it.folder) chip(f, false, () => libMoveTo(it.id, f));
+      chip(tr('＋ Nouveau dossier'), true, () => libNewFolder(it.id));
+      list.appendChild(m);
+    }
   }
 }
 async function openLib() {
   await renderLib(); $('lib').hidden = false;
+}
+$('libNewFold').onclick = () => libNewFolder(null);
+$('libBack').onclick = () => { libFolder = null; libMoveOpen = null; renderLib(); };
+$('libFoldRen').onclick = async () => {
+  const old = libFolder, n = libAskName(old); if (!n || n === old) return;
+  const all = (await listRecent()).filter(it => !isRec(it)), fs = libFolders(all);
+  if (fs.includes(n)) { toast(tr('Un dossier porte déjà ce nom'), 3000); return; }
+  libSaveFolders(fs.map(f => f === old ? n : f));
+  await libPatch(all.filter(it => it.folder === old).map(it => it.id), it => { it.folder = n; });
+  libFolder = n; renderLib();
+};
+$('libFoldDel').onclick = async () => {
+  const f = libFolder, all = (await listRecent()).filter(it => !isRec(it)), inF = all.filter(it => it.folder === f);
+  if (inF.length && !confirm(tr('Supprimer le dossier « ' + f + ' » ? Ses traces sont gardées et reviennent dans « Mes traces ».'))) return;
+  libSaveFolders(libFolders(all).filter(x => x !== f));
+  await libPatch(inF.map(it => it.id), it => { delete it.folder; delete it.pos; });
+  libFolder = null; renderLib();
+};
+// appui long puis glisser : changer l'ordre, ou lâcher sur un dossier pour l'y ranger
+const libDrag = { li: null, timer: 0, x0: 0, y0: 0, dy: 0, top0: 0, over: null, justDropped: false, scroll: 0 };
+function libDragStart() {
+  const d = libDrag, li = d.li; if (!li) return;
+  d.on = true; d.top0 = li.offsetTop; libMoveOpen = null;
+  for (const m of $('libList').querySelectorAll('.lib-move')) m.remove();
+  li.classList.add('drag'); $('libList').classList.add('dragging'); vibrate(25);
+}
+function libDragMove(x, y) {
+  const d = libDrag, li = d.li, list = $('libList'), panel = $('lib').querySelector('.lib-panel');
+  if (!d.on || !li) return;
+  // défilement automatique près des bords
+  const r = panel.getBoundingClientRect();
+  cancelAnimationFrame(d.scroll);
+  const edge = y < r.top + 60 ? -1 : y > r.bottom - 60 ? 1 : 0;
+  if (edge) { const step = () => { panel.scrollTop += edge * 8; libDragMove(x, y); }; d.scroll = requestAnimationFrame(step); }
+  const dy = y - d.y0 + (panel.scrollTop - d.st0);
+  li.style.transform = `translateY(${dy - (li.offsetTop - d.top0)}px)`;
+  // au-dessus d'un dossier ?
+  li.style.pointerEvents = 'none';
+  const under = document.elementFromPoint(x, y), fold = under && under.closest('.lib-fold, #libBack');
+  li.style.pointerEvents = '';
+  if (d.over !== fold) { if (d.over) d.over.classList.remove('drop'); d.over = fold; if (fold) { fold.classList.add('drop'); vibrate(10); } }
+  li.classList.toggle('to-fold', !!fold);
+  if (fold) return;
+  // sinon : on change de place parmi les traces
+  const trs = [...list.querySelectorAll('.lib-tr')].filter(x => x !== li), mid = li.getBoundingClientRect().top + li.offsetHeight / 2;
+  let before = null;
+  for (const o of trs) { const b = o.getBoundingClientRect(); if (mid < b.top + b.height / 2) { before = o; break; } }
+  const cur = li.nextElementSibling;
+  if (before !== cur && !(before === null && !cur)) {
+    if (before) list.insertBefore(li, before); else list.appendChild(li);
+    li.style.transform = `translateY(${dy - (li.offsetTop - d.top0)}px)`;
+  }
+}
+async function libDragEnd() {
+  const d = libDrag, li = d.li, list = $('libList');
+  clearTimeout(d.timer); cancelAnimationFrame(d.scroll);
+  if (!d.on) { d.li = null; return; }
+  d.on = false; d.li = null; d.justDropped = true; setTimeout(() => { d.justDropped = false; }, 350);
+  li.classList.remove('drag', 'to-fold'); li.style.transform = ''; list.classList.remove('dragging');
+  const over = d.over; d.over = null;
+  if (over) { over.classList.remove('drop'); await libMoveTo(li.dataset.id, over.id === 'libBack' ? null : over.dataset.folder); return; }
+  const ids = [...list.querySelectorAll('.lib-tr')].map(x => x.dataset.id), pos = new Map(ids.map((id, i) => [id, i]));
+  await libPatch(ids, it => { it.pos = pos.get(it.id); });
+  renderLib();
+}
+{
+  const list = $('libList');
+  const down = (e, x, y) => {
+    const li = e.target.closest('.lib-tr'); if (!li || e.target.closest('.lib-del')) return;
+    const d = libDrag; d.li = li; d.x0 = x; d.y0 = y; d.st0 = $('lib').querySelector('.lib-panel').scrollTop; d.on = false;
+    clearTimeout(d.timer); d.timer = setTimeout(libDragStart, 420);
+  };
+  const move = (e, x, y) => {
+    const d = libDrag; if (!d.li) return;
+    if (!d.on) { if (Math.hypot(x - d.x0, y - d.y0) > 10) { clearTimeout(d.timer); d.li = null; } return; }
+    if (e.cancelable) e.preventDefault();
+    libDragMove(x, y);
+  };
+  list.addEventListener('touchstart', e => { if (e.touches.length === 1) down(e, e.touches[0].clientX, e.touches[0].clientY); }, { passive: true });
+  list.addEventListener('touchmove', e => move(e, e.touches[0].clientX, e.touches[0].clientY), { passive: false });
+  list.addEventListener('touchend', () => libDragEnd());
+  list.addEventListener('touchcancel', () => libDragEnd());
+  list.addEventListener('mousedown', e => { if (e.button === 0) down(e, e.clientX, e.clientY); });
+  window.addEventListener('mousemove', e => { if (libDrag.li) move(e, e.clientX, e.clientY); });
+  window.addEventListener('mouseup', () => { if (libDrag.li) libDragEnd(); });
+  list.addEventListener('contextmenu', e => { if (e.target.closest('.lib-tr')) e.preventDefault(); });
 }
 
 // =====================================================================
@@ -1370,7 +1525,7 @@ function stvUI() {
 // ---------- Sauvegarde : sorties, traces et réglages dans un fichier, et restauration ----------
 // réglages choisis par l'utilisateur (pas l'état en cours, ni les caches, ni la connexion Strava)
 const BK_KEYS = ['thr', 'voice', 'vib', 'autoRec', 'alertNight', 'litNight', 'statsOff', 'soBilan', 'poi', 'gdAuto', 'eco', 'ecoSeen', 'banner', 'theme', 'profile', 'layerId', 'soLayer',
-  'rtFilt', 'npProfOnly', 'showPacks', 'stvAuto', 'recHint'];
+  'rtFilt', 'npProfOnly', 'showPacks', 'stvAuto', 'recHint', 'libFolders'];
 const bkCount = items => {
   const r = items.filter(isRec).length;
   const plural = (n, w) => n + ' ' + w + (n > 1 ? 's' : '');

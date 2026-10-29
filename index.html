@@ -9,13 +9,13 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<meta name="balise-version" content="257">
+<meta name="balise-version" content="258">
 <title>Pisteo</title>
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" href="icon.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
 <link rel="stylesheet" href="vendor/maplibre-gl.css">
-<link rel="stylesheet" href="app.css?v=257">
+<link rel="stylesheet" href="app.css?v=258">
 </head>
 <body>
 <div id="map" aria-label="Carte"></div>
@@ -310,7 +310,15 @@
       <b id="libTitle">Mes traces</b>
       <button id="libClose" class="closebtn" aria-label="Fermer"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></svg>Fermer</button>
     </div>
+    <div id="libFoldHead" class="lib-foldhead" hidden>
+      <button id="libBack" class="lib-back" aria-label="Retour à Mes traces"><svg viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7"/></svg>Mes traces</button>
+      <b id="libFoldName"></b>
+      <button id="libFoldRen" class="lib-chip">Renommer</button>
+      <button id="libFoldDel" class="lib-chip">Supprimer</button>
+    </div>
     <button id="libBrowse" class="btn go">Chercher un fichier GPX…</button>
+    <button id="libNewFold" class="btn">＋ Nouveau dossier</button>
+    <p id="libHint" class="note lib-hint" hidden>Reste appuyé sur une trace puis glisse-la pour changer l'ordre, ou lâche-la sur un dossier pour l'y ranger.</p>
     <ul id="libList" class="lib-list"></ul>
     <p id="libEmpty" class="note" hidden>Les traces que tu ouvres ou enregistres apparaîtront ici.</p>
     <p id="libTip" class="note">Pour créer un parcours (boucle, tracé point par point, parcours balisés) : bouton « Naviguer » quand aucune trace n'est ouverte, ou « ＋ Autre trajet ». Astuce : dans ton gestionnaire de fichiers ou un mail, fais « Partager » sur un GPX puis choisis Pisteo.</p>
@@ -856,8 +864,8 @@
 
 <script src="vendor/maplibre-gl.js"></script>
 <script src="vendor/qrcode.js"></script>
-<script src="i18n/en.js?v=257"></script>
-<script src="i18n/es.js?v=257"></script>
-<script src="app.js?v=257"></script>
+<script src="i18n/en.js?v=258"></script>
+<script src="i18n/es.js?v=258"></script>
+<script src="app.js?v=258"></script>
 </body>
 </html>

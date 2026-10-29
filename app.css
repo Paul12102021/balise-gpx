@@ -283,6 +283,25 @@ body.nav .toast { top: auto; bottom: calc(var(--nav-h, 92px) + 90px); }
 .lib-item span { font-size: 13px; color: var(--muted); font-variant-numeric: tabular-nums; }
 .lib-del { flex: none; width: 40px; height: 40px; border: 0; background: none; color: var(--muted); display: grid; place-items: center; cursor: pointer; }
 .lib-del svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 2.4; stroke-linecap: round; }
+.lib-del.on { color: var(--go-ink); }
+.lib-tr .lib-item, .lib-fold .lib-item { -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
+.lib-tr.drag { position: relative; z-index: 2; background: var(--panel); border-radius: 12px; box-shadow: 0 8px 24px rgba(0,0,0,.28); border-bottom-color: transparent; transition: box-shadow .15s; }
+.lib-tr.drag.to-fold { opacity: .55; }
+.lib-list.dragging .lib-tr:not(.drag) { transition: transform .15s; }
+.lib-fold .lib-item { display: grid; grid-template-columns: 34px 1fr; column-gap: 8px; align-items: center; }
+.lib-fold .lib-item i { grid-row: span 2; width: 34px; height: 34px; border-radius: 9px; display: grid; place-items: center; background: var(--field); color: var(--ink); }
+.lib-fold .lib-item i svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linejoin: round; }
+.lib-fold.drop, .lib-back.drop { background: var(--field); outline: 2px solid var(--go-ink); outline-offset: -2px; border-radius: 12px; }
+.lib-move { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; padding: 8px 2px 12px; }
+.lib-move > span { font-size: 13px; color: var(--muted); margin-right: 2px; }
+.lib-chip { min-height: 34px; padding: 0 12px; border-radius: 17px; border: 1px solid var(--line); background: var(--field); color: var(--ink); font-family: inherit; font-weight: 600; font-size: 14px; cursor: pointer; }
+.lib-chip.on { border-style: dashed; background: none; }
+.lib-foldhead { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.lib-foldhead b { flex: 1 1 100%; order: 2; font-size: 20px; overflow-wrap: anywhere; }
+.lib-foldhead .lib-chip { order: 3; }
+.lib-back { order: 1; display: inline-flex; align-items: center; gap: 4px; min-height: 36px; padding: 0 10px 0 4px; border: 0; background: none; color: var(--muted); font: inherit; font-weight: 600; cursor: pointer; }
+.lib-back svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 2.4; stroke-linecap: round; stroke-linejoin: round; }
+.lib-hint { margin: -4px 0 0; font-size: 13px; }
 
 /* ---------- Cartes hors ligne ---------- */
 .dl-box { display: flex; flex-direction: column; gap: 8px; padding: 12px; border: 1px solid var(--line); border-radius: 12px; }
