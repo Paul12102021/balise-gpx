@@ -19,7 +19,7 @@ const API = 'https://www.strava.com/api/v3';
 export default {
   // vérification des services extérieurs (déclencheur Cron du worker, toutes les heures) → https://api.pisteo.app/etat
   // espacée : rien la nuit, toutes les 2 h en journée, toutes les heures tant qu'un service est en panne (voir etatDue)
-  async scheduled(ev, env, ctx) { ctx.waitUntil(etatDue(env).then(go => go && etatCheck(env))); },
+  async scheduled(ev, env, ctx) { ctx.waitUntil(Promise.all([stFold(env).catch(() => 0), etatDue(env).then(go => go && etatCheck(env))])); },
   async fetch(req, env, ctx) {
     const origin = req.headers.get('Origin') || '';
     const allowed = (env.ALLOWED_ORIGIN || '').split(',').map(s => s.trim()).filter(Boolean);
@@ -355,8 +355,24 @@ async function catImg(env, url, path) {
 // Chaque appareil envoie le résumé d'une journée finie : { d: 'AAAA-MM-JJ', c: { compteur: n }, dims: { plat: 'android', … } }.
 // Tout est additionné par jour (aucune ligne par appareil) : « dev » = nombre d'appareils actifs ce jour-là.
 const ST_SQL = 'CREATE TABLE IF NOT EXISTS daily (day TEXT NOT NULL, k TEXT NOT NULL, v REAL NOT NULL DEFAULT 0, PRIMARY KEY (day, k))';
+// arrivée : une seule ligne par résumé d'appareil (inbox), additionnée dans daily par la base elle-même (stFold),
+// chaque heure et à l'ouverture de la page : ~2 écritures par appareil au lieu de 60 à 120
+const ST_INBOX = 'CREATE TABLE IF NOT EXISTS inbox (id INTEGER PRIMARY KEY, r TEXT NOT NULL)';
+const ST_LOG = 'CREATE TABLE IF NOT EXISTS etat_log (t TEXT NOT NULL, id TEXT NOT NULL, ok INTEGER NOT NULL, ms INTEGER)';
 let stReady = false;
-async function stInit(env) { if (!stReady) { await env.STATS.prepare(ST_SQL).run(); stReady = true; } }
+async function stInit(env) { if (!stReady) { await env.STATS.batch([ST_SQL, ST_INBOX, ST_LOG].map(q => env.STATS.prepare(q))); stReady = true; } }
+async function stFold(env) {
+  if (!env.STATS) return 0;
+  await stInit(env);
+  const m = await env.STATS.prepare('SELECT MAX(id) m FROM (SELECT id FROM inbox ORDER BY id LIMIT 5000)').first('m');
+  if (!m) return 0;
+  // addition et effacement dans une même transaction : rien n'est compté deux fois
+  await env.STATS.batch([
+    env.STATS.prepare("INSERT INTO daily (day, k, v) SELECT json_extract(e.value, '$[0]'), json_extract(e.value, '$[1]'), SUM(json_extract(e.value, '$[2]')) FROM inbox, json_each(inbox.r) e WHERE inbox.id <= ?1 GROUP BY 1, 2 ON CONFLICT (day, k) DO UPDATE SET v = v + excluded.v").bind(m),
+    env.STATS.prepare('DELETE FROM inbox WHERE id <= ?1').bind(m)
+  ]);
+  return m;
+}
 // Rangement par provenance : « a| » = appli Android, « w| » = site web (navigateur).
 // Les lignes sans préfixe datent d'avant ce rangement : elles ne comptent que dans « Tout ».
 // u:… = appareils ayant fait l'action dans la journée (entonnoir) ; x:ver=…/x:plat=… = sorties et coupures GPS par version / appareil.
@@ -389,8 +405,7 @@ async function statsIn(req, env, json) {
   const ret = [], r = b.ret, f = r && typeof r.first === 'string' && /^\d{4}-\d\d-\d\d$/.test(r.first) ? r.first : null;
   if (f && f <= day && Date.parse(f) > t - 400 * 864e5 && Array.isArray(r.m)) for (const m of new Set(r.m)) if ([1, 7, 30].includes(m)) ret.push([f, 'ret:j' + m]);
   await stInit(env);
-  const st = env.STATS.prepare('INSERT INTO daily (day, k, v) VALUES (?1, ?2, ?3) ON CONFLICT (day, k) DO UPDATE SET v = v + excluded.v');
-  await env.STATS.batch([...rows.map(([k, v]) => st.bind(day, grp + k, v)), ...ret.map(([d, k]) => st.bind(d, grp + k, 1))]);
+  await env.STATS.prepare('INSERT INTO inbox (r) VALUES (?1)').bind(JSON.stringify([...rows.map(([k, v]) => [day, grp + k, v]), ...ret.map(([d, k]) => [d, grp + k, 1])])).run();
   return json({ ok: true });
 }
 const ST_LABELS = {
@@ -446,7 +461,7 @@ function stBucket(d, g) {
 async function statsHtml(env, url, k, esc) {
   const nav = adminHead(k, 'stats');
   if (!env.STATS) return nav + '<main><p class="empty">Base D1 « STATS » pas encore reliée au worker (Settings → Bindings → D1 database, nom STATS).</p></main>';
-  await stInit(env);
+  await stFold(env);
   const R = stRange(url), { f } = R;
   const T = await stTotals(env, R.from, R.to, f), P = R.p === 'all' ? {} : await stTotals(env, R.prevFrom, R.prevTo, f);
   const byDay = await stDaily(env, R.from, R.to, f, ['dev', 'c:sortie_pied', 'c:sortie_velo', 'c:nav', 'd:age:nouveau', 'ret:j1', 'ret:j7', 'ret:j30']);
@@ -582,7 +597,7 @@ ${barList('Autres compteurs', others, '#8a959e')}
 // export pour Excel : une ligne par jour, une colonne par compteur (séparateur « ; », virgule décimale, UTF-8 avec BOM) ; même période et même filtre que la page
 async function statsCsv(env, url) {
   if (!env.STATS) return new Response('Base STATS non reliée', { status: 503 });
-  await stInit(env);
+  await stFold(env);
   const R = stRange(url), byDay = {};
   for (const r of (await env.STATS.prepare('SELECT day, k, v FROM daily WHERE day >= ?1 AND day <= ?2 ORDER BY day').bind(R.from, R.to).all()).results) {
     const k = stKey(r.k, R.f); if (!k) continue; const d = byDay[r.day] || (byDay[r.day] = {}); d[k] = (d[k] || 0) + r.v;
@@ -730,6 +745,12 @@ async function etatStore(env, res) {
   }
   const out = { t: now, down: res.filter(r => !r.ok).map(r => r.id), res };
   if (env.CATALOGUE) await env.CATALOGUE.put('etat', JSON.stringify(out));
+  if (env.STATS) try {
+    await stInit(env);
+    const st = env.STATS.prepare('INSERT INTO etat_log (t, id, ok, ms) VALUES (?1, ?2, ?3, ?4)');
+    await env.STATS.batch([...res.map(r => st.bind(now, r.id, r.ok ? 1 : 0, r.ok && r.ms ? Math.round(r.ms) : null)),
+      env.STATS.prepare('DELETE FROM etat_log WHERE t < ?1').bind(new Date(Date.now() - 400 * 864e5).toISOString())]);
+  } catch {}
   return out;
 }
 // heure de Paris (0-23)
@@ -739,7 +760,9 @@ async function etatDue(env) {
   const h = parisHour();
   if (h < ETAT_DAY[0] || h > ETAT_DAY[1]) return false;
   const prev = env.CATALOGUE && await env.CATALOGUE.get('etat', 'json');
-  if (prev && prev.down && prev.down.length) return true; // une panne en cours : on suit son retour toutes les heures
+  // une panne qui gêne (service critique) ou récente (moins de 24 h) : on suit son retour toutes les heures ;
+  // une panne qui dure sur un service secondaire (Overpass…) ne change rien à l'appli : rythme normal
+  if (prev && (prev.res || []).some(r => !r.ok && (r.crit || Date.now() - Date.parse(r.since || prev.t) < 24 * 36e5))) return true;
   return h % 2 === 1; // sinon une fois toutes les 2 h : 7 h, 9 h, 11 h… 21 h
 }
 async function etatLoad(env, url) {
@@ -759,7 +782,42 @@ function etatTable(e) {
 }
 function etatResume(e) {
   const crit = e.res.filter(r => !r.ok && r.crit).length;
-  return `Vérifié le ${etatDate(e.t)} · ${e.down.length ? `<b>${e.down.length} en panne</b>${crit ? ' dont ' + crit + ' critique' + (crit > 1 ? 's' : '') : ''}` : '<b>tout fonctionne</b>'} · vérification automatique toutes les 2 h de 7 h à 21 h (toutes les heures pendant une panne)`;
+  return `Vérifié le ${etatDate(e.t)} · ${e.down.length ? `<b>${e.down.length} en panne</b>${crit ? ' dont ' + crit + ' critique' + (crit > 1 ? 's' : '') : ''}` : '<b>tout fonctionne</b>'} · vérification automatique toutes les 2 h de 7 h à 21 h (toutes les heures pendant une panne critique ou de moins de 24 h)`;
+}
+// historique des pannes, reconstitué à partir des vérifications notées (etat_log)
+async function etatHist(env, url, k) {
+  if (!env.STATS) return '';
+  await stInit(env);
+  const n = ['7', '30', '90'].includes(url.searchParams.get('hp')) ? +url.searchParams.get('hp') : 30;
+  const since = new Date(Date.now() - n * 864e5).toISOString();
+  const rows = (await env.STATS.prepare('SELECT t, id, ok, ms FROM etat_log WHERE t >= ?1 ORDER BY t').bind(since).all()).results;
+  const chips = ['7', '30', '90'].map(x => `<a class="${+x === n ? 'on' : ''}" href="?key=${k}&tab=etat&hp=${x}">${x} jours</a>`).join('');
+  const head = `<h2 style="font-size:16px;margin:18px 0 6px">Historique des pannes</h2><div class="hper">${chips}</div>`;
+  if (!rows.length) return head + '<p class="hnote">Pas encore d’historique : il se remplit à chaque vérification depuis le 29 octobre 2026.</p>';
+  const name = Object.fromEntries(ETAT.map(x => [x[0], x[1]])), crit = Object.fromEntries(ETAT.map(x => [x[0], !!x[4]]));
+  const S = {}, eps = [];
+  for (const r of rows) {
+    const x = S[r.id] || (S[r.id] = { n: 0, ok: 0, ms: 0, msn: 0, cur: null, eps: [] });
+    x.n++; if (r.ok) { x.ok++; if (r.ms) { x.ms += r.ms; x.msn++; } }
+    if (!r.ok && !x.cur) { x.cur = { id: r.id, a: r.t, b: null }; x.eps.push(x.cur); eps.push(x.cur); }
+    else if (r.ok && x.cur) { x.cur.b = r.t; x.cur = null; }
+  }
+  const now = Date.now(), len = e => (e.b ? Date.parse(e.b) : now) - Date.parse(e.a);
+  const dur = ms => { const h = ms / 36e5; return h < 1 ? Math.max(1, Math.round(ms / 6e4)) + ' min' : h < 48 ? Math.round(h) + ' h' : Math.round(h / 24) + ' j'; };
+  const date = d => new Date(d).toLocaleString('fr-FR', { timeZone: 'Europe/Paris', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
+  const pc = x => (Math.floor(x.ok / x.n * 1000) / 10).toLocaleString('fr-FR') + ' %';
+  const ids = Object.keys(S).sort((a, b) => S[a].ok / S[a].n - S[b].ok / S[b].n || (name[a] || a).localeCompare(name[b] || b));
+  const bad = ids.filter(id => S[id].eps.length), good = ids.length - bad.length;
+  const sum = { checks: Math.max(...ids.map(id => S[id].n)), eps: eps.length, open: eps.filter(e => !e.b).length };
+  const table = bad.length ? `<table class="etat"><tr><th>Service</th><th>Disponible</th><th>Pannes</th><th>Durée totale</th><th>Plus longue</th></tr>${bad.map(id => { const x = S[id], tot = x.eps.reduce((a, e) => a + len(e), 0), max = Math.max(...x.eps.map(len)), open = x.cur;
+    return `<tr class="${open ? (crit[id] ? 'crit' : 'ko') : ''}"><td>${crit[id] ? '⭐ ' : ''}${name[id] || id}${open ? ' <small>· en panne</small>' : ''}</td><td>${pc(x)}</td><td>${x.eps.length}</td><td>${dur(tot)}</td><td>${dur(max)}</td></tr>`; }).join('')}</table>` : '<p>Aucune panne sur la période. 🎉</p>';
+  const last = eps.slice().sort((a, b) => b.a.localeCompare(a.a)).slice(0, 12);
+  const list = last.length ? `<h3 style="font-size:14px;margin:14px 0 4px">Dernières pannes</h3><table class="etat"><tr><th>Service</th><th>Début</th><th>Fin</th><th>Durée</th></tr>${last.map(e => `<tr><td>${name[e.id] || e.id}</td><td>${date(e.a)}</td><td>${e.b ? date(e.b) : '<b>en cours</b>'}</td><td>${e.b ? '' : '≥ '}${dur(len(e))}</td></tr>`).join('')}</table>` : '';
+  const slow = ids.filter(id => S[id].msn).map(id => [id, S[id].ms / S[id].msn]).sort((a, b) => b[1] - a[1]).slice(0, 5);
+  const slowTxt = slow.length ? `<p class="hnote">Les plus lents quand ils répondent : ${slow.map(([id, ms]) => `${name[id] || id} (${Math.round(ms)} ms)`).join(', ')}.</p>` : '';
+  return head + `<style>.hper{display:flex;gap:6px;margin:0 0 8px}.hper a{background:#ffffff14;border-radius:999px;padding:4px 12px;font-size:13px;font-weight:600;color:inherit;text-decoration:none}.hper a.on{background:#2f6b4f;color:#fff}.hnote{font-size:13px;opacity:.75;max-width:860px}</style>
+<p>${sum.checks} vérifications · <b>${sum.eps} panne${sum.eps > 1 ? 's' : ''}</b>${sum.open ? ` dont ${sum.open} en cours` : ''} · ${good} service${good > 1 ? 's' : ''} sans aucune panne · ⭐ = service critique</p>${table}${list}${slowTxt}
+<p class="hnote">Mesuré à chaque vérification (toutes les 1 à 2 h, de 7 h à 21 h) : une panne courte entre deux vérifications peut passer inaperçue, et les durées sont approchées à la vérification près.</p>`;
 }
 async function etatAdmin(env, url, k) {
   const nav = adminHead(k, 'etat');
@@ -793,7 +851,7 @@ location.replace('?key='+encodeURIComponent(key)+'&tab=etat')}})()</script>
 <div class="everd"><h2>${ic} ${v.title}</h2><p>${esc(v.text)}</p></div>
 ${cards}${v.items.length ? `<button class="ebtn" id="ecopy">📋 Copier le message pour Claude</button><textarea id="emsg" hidden>${esc(etatMessage(e, v))}</textarea>
 <script>document.getElementById('ecopy').onclick=async function(){const t=document.getElementById('emsg').value;try{await navigator.clipboard.writeText(t);this.textContent='✓ Copié : colle-le dans la conversation Pisteo'}catch(_){const a=document.getElementById('emsg');a.hidden=false;a.select();this.textContent='Sélectionné : Ctrl+C'}}</script>` : ''}
-<h2 style="font-size:16px;margin:10px 0 6px">Tous les services</h2>${etatTable(e)}</main>`;
+<h2 style="font-size:16px;margin:10px 0 6px">Tous les services</h2>${etatTable(e)}${await etatHist(env, url, k).catch(() => '')}</main>`;
 }
 async function etatGet(env, url, ctx) {
   const e = await etatLoad(env, url);
