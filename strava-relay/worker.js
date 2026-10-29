@@ -391,12 +391,15 @@ async function statsIn(req, env, json) {
   const c = {}, dims = {};
   for (const [k, v] of Object.entries(b.c || {}).slice(0, 160)) if (/^[\w:.\-]{1,60}$/.test(k) && typeof v === 'number' && isFinite(v) && v > 0 && v < 1e5) c[k] = v;
   for (const [k, v] of Object.entries(b.dims || {}).slice(0, 20)) if (/^\w{1,12}$/.test(k) && v != null) dims[k] = String(v).replace(/[^\w.\-]/g, '_').slice(0, 30);
+  // pays d'envoi, donné par Cloudflare (l'adresse IP n'est ni lue ni gardée) ; il remplace toute valeur envoyée par l'appli
+  const cc = req.cf && typeof req.cf.country === 'string' && /^[A-Z]{2}$/.test(req.cf.country) ? req.cf.country : '';
+  if (cc) dims.pays = cc; else delete dims.pays;
   const rows = [['dev', 1]];
   for (const [k, v] of Object.entries(c)) rows.push(['c:' + k, v]);
   for (const [k, v] of Object.entries(dims)) rows.push([`d:${k}:${v}`, 1]);
   for (const [id, , test] of ST_FUNNEL) if (test(c)) rows.push(['u:' + id, 1]);
   const out = (c.sortie_pied || 0) + (c.sortie_velo || 0);
-  for (const dn of ['ver', 'plat', 'os']) if (dims[dn]) {
+  for (const dn of ['ver', 'plat', 'os', 'pays']) if (dims[dn]) {
     const p = `x:${dn}=${dims[dn]}:`; rows.push([p + 'dev', 1]);
     for (const [k, v] of [['sortie', out], ['coupee', c.sortie_coupee], ['coupure_min', c.coupure_min], ['batt_pct', c.batt_pct], ['batt_h', c.batt_h]]) if (v) rows.push([p + k, v]);
   }
@@ -523,6 +526,10 @@ ${kpi('Calcul d’une boucle', g(T, 'c:boucle_calculs') ? (g(T, 'c:boucle_second
   const PLAT = { android: 'Appli Android', 'web-android': 'Site, Android', 'web-ios': 'Site, iPhone', 'web-pc': 'Site, ordinateur' };
   const osName = v => v.startsWith('android') ? 'Android ' + v.slice(7) : v.startsWith('ios') ? 'iOS ' + v.slice(3) : v === 'autre' ? 'Ordinateur / autre' : v;
   const vt = cross('ver', 'Version', v => 'v' + v, (a, b) => b - a) + cross('plat', 'Appareil', v => PLAT[v] || v) + cross('os', 'Système', osName, (a, b) => (parseInt(b.replace(/\D/g, '')) || 0) - (parseInt(a.replace(/\D/g, '')) || 0));
+  const payName = (() => { let dn = null; try { dn = new Intl.DisplayNames(['fr'], { type: 'region' }); } catch {} return c => { try { return (dn && dn.of(c)) || c; } catch { return c; } }; })();
+  const flag = c => /^[A-Z]{2}$/.test(c) ? String.fromCodePoint(...[...c].map(x => 0x1F1E6 + x.charCodeAt(0) - 65)) + ' ' : '';
+  const paysT = cross('pays', 'Pays', c => flag(c) + payName(c), (a, b) => (pref(`x:pays=${b}:dev`)[0] || [0, 0])[1] - (pref(`x:pays=${a}:dev`)[0] || [0, 0])[1]);
+  const pays = paysT ? `<div class="scard"><h3>Pays</h3>${paysT}<p class="note">Pays d’où l’appareil a envoyé sa journée, déduit par Cloudflare (aucune adresse IP gardée). Collecté depuis le 29 octobre 2026.</p></div>` : '';
   const versions = vt ? `<div class="scard"><h3>Versions, coupures GPS et batterie</h3>${vt}<p class="note">Usage : part des jours d’utilisation. Coupure GPS : part des sorties avec au moins un trou de position. Batterie : consommation moyenne pendant les sorties.</p></div>` : '';
   // sorties en détail, fiabilité, fidélité
   const kv = (title, rows, note) => { rows = rows.filter(Boolean); return rows.length ? `<div class="scard"><h3>${title}</h3><div class="kv">${rows.map(([l, v, sub]) => `<div><span>${l}</span><b>${v}${sub ? ` <small>${sub}</small>` : ''}</b></div>`).join('')}</div>${note ? `<p class="note">${note}</p>` : ''}</div>` : ''; };
@@ -555,7 +562,7 @@ ${kpi('Calcul d’une boucle', g(T, 'c:boucle_calculs') ? (g(T, 'c:boucle_second
     return [`Revenus après ${m} jour${m > 1 ? 's' : ''}`, n ? pc(r, n) : '–', n ? `${fmt(r)} sur ${fmt(n)}` : 'pas encore assez de recul']; });
   const fidel = g(T, 'd:age:nouveau') ? kv('Fidélité des nouveaux appareils', ret, 'Parmi les appareils arrivés pendant la période, part de ceux qui ont rouvert l’appli au moins 1, 7 ou 30 jours après leur premier jour. Seuls comptent ceux arrivés assez tôt.') : '';
   const feats = Object.entries(ST_LABELS).map(([key, l]) => [l, g(T, 'c:' + key)]);
-  const dimNames = { plat: 'Appli / navigateur', os: 'Système', lang: 'Langue', ver: 'Version', mode: 'Mode', screen: 'Écran', strava: 'Strava connecté', drive: 'Sauvegarde Drive', theme: 'Thème', voice: 'Voix', eco: 'Économie batterie', poi: 'Points utiles', night: 'Alerte nuit', lit: 'De nuit : éclairé', units: 'Unités', layer: 'Fond de carte' };
+  const dimNames = { plat: 'Appli / navigateur', os: 'Système', pays: 'Pays', lang: 'Langue', ver: 'Version', mode: 'Mode', screen: 'Écran', strava: 'Strava connecté', drive: 'Sauvegarde Drive', theme: 'Thème', voice: 'Voix', eco: 'Économie batterie', poi: 'Points utiles', night: 'Alerte nuit', lit: 'De nuit : éclairé', units: 'Unités', layer: 'Fond de carte' };
   const dims = Object.entries(dimNames).map(([d, l]) => { const arr = pref(`d:${d}:`); if (!arr.length) return ''; arr.sort((a, b) => b[1] - a[1]);
     return `<div class="dim"><b>${l}</b>${arr.map(([v, c]) => `<span>${esc(v)} <i>${Math.round(c / devDays * 100)} %</i></span>`).join('')}</div>`; }).join('');
   const known = new Set(Object.keys(ST_LABELS).map(x => 'c:' + x));
@@ -584,7 +591,7 @@ ${kpi('Calcul d’une boucle', g(T, 'c:boucle_calculs') ? (g(T, 'c:boucle_second
 .note{font-size:12px;color:var(--mut)}</style>
 <div class="per">${filt}</div><div class="per">${pers}</div>${form}
 <div class="range">${per}${fl}${prevNote}</div>${g(T, 'dev') ? '' : '<p class="note">Aucune donnée pour cette période' + (f === 'all' ? '' : ' et ce filtre (le classement appli / site web existe depuis le 29 octobre 2026)') + '.</p>'}${kpis}${chart}
-${funnel}${detail}${fiab}${fidel}${ages}${hours}${versions}
+${funnel}${detail}${fiab}${fidel}${pays}${ages}${hours}${versions}
 ${barList('Fonctions utilisées', feats)}
 ${barList('Cartes hors ligne téléchargées', pref('c:carte_').map(([c, v]) => [({ fr: 'France', es: 'Espagne', at: 'Autriche', be: 'Belgique', ch: 'Suisse', gb: 'Royaume-Uni', de: 'Allemagne', ca: 'Canada', us: 'États-Unis', zone: 'Zone libre' })[c] || c, v]))}
 ${barList('Fonds de carte choisis', pref('c:fond_'), '#2F5E45')}
