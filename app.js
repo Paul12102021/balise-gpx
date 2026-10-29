@@ -5,7 +5,7 @@
 
 // La page et le code doivent être de la même version. Sinon (page gardée en cache
 // par le téléphone ou par GitHub), on recharge une page fraîche, au plus 3 fois.
-const APP_VERSION = 261;
+const APP_VERSION = 262;
 try {
   const meta = document.querySelector('meta[name="balise-version"]');
   const pageV = meta ? +meta.content : 0;
@@ -5297,7 +5297,7 @@ function wtSay(m) { $('wtMsg').textContent = m || ''; $('wtMsg').hidden = !m; }
 function openSend(src) {
   wtSrc = src; const p = makePath(src.pts, '');
   $('wtName').textContent = `${src.name || 'Parcours'} · ${fmtDist(p.total)}${p.hasEle ? ' · D+ ' + fmtM(p.totalUp) : ''}${src.sub ? ' · ' + src.sub : ''}`; wtSay('');
-  $('wtQrBox').hidden = true; wtNotesUI();
+  qrShown(false); wtNotesUI();
   $('wtPropose').hidden = !catOn; if (!catOn) catLoad().then(() => { $('wtPropose').hidden = !catOn; });
   $('watch').hidden = false;
 }
@@ -5450,9 +5450,11 @@ async function qrLink() {
   for (const max of [300, 200, 140, 100, 70, 50]) { url = await routeLink(wtSrc.name, wtSrc.pts, notes, max); if (url.length <= 900) break; }
   return url;
 }
+// le même bouton affiche puis masque le QR code
+function qrShown(on) { $('wtQrBox').hidden = !on; $('wtQr').textContent = on ? 'Masquer le QR code' : 'Afficher un QR code'; }
 $('wtQr').onclick = async () => {
   if (!wtSrc) return;
-  if (!$('wtQrBox').hidden) { $('wtQrBox').hidden = true; return; }
+  if (!$('wtQrBox').hidden) { qrShown(false); return; }
   const url = await qrLink();
   let q; try { q = qrcode(0, 'L'); q.addData(url); q.make(); } catch { wtSay('Parcours trop long pour un QR code : partage plutôt le lien.'); return; }
   const n = q.getModuleCount(), quiet = 4, scale = Math.max(4, Math.ceil(720 / (n + 2 * quiet)));
@@ -5470,7 +5472,7 @@ $('wtQr').onclick = async () => {
   ctx.fillText(tr(`${fmtDist(p.total)}${p.hasEle ? ' · D+ ' + fmtM(p.totalUp) : ''} · à scanner pour l'ouvrir dans Pisteo`), side / 2, side + foot * 0.8);
   $('wtQrSave').hidden = !!AND; // appli Android : une capture d'écran suffit
   $('wtQrNote').textContent = tr(AND ? 'Fais scanner l\'écran par un autre téléphone, ou prends une capture d\'écran pour l\'imprimer.' : 'Fais scanner l\'écran par un autre téléphone, ou enregistre l\'image pour l\'imprimer.');
-  $('wtQrBox').hidden = false; wtSay('');
+  qrShown(true); wtSay('');
   setTimeout(() => $('wtQrBox').scrollIntoView({ block: 'nearest', behavior: 'smooth' }), 50);
 };
 $('wtQrSave').onclick = () => {
