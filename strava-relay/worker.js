@@ -357,18 +357,37 @@ async function catImg(env, url, path) {
 const ST_SQL = 'CREATE TABLE IF NOT EXISTS daily (day TEXT NOT NULL, k TEXT NOT NULL, v REAL NOT NULL DEFAULT 0, PRIMARY KEY (day, k))';
 let stReady = false;
 async function stInit(env) { if (!stReady) { await env.STATS.prepare(ST_SQL).run(); stReady = true; } }
+// Rangement par provenance : « a| » = appli Android, « w| » = site web (navigateur).
+// Les lignes sans préfixe datent d'avant ce rangement : elles ne comptent que dans « Tout ».
+// u:… = appareils ayant fait l'action dans la journée (entonnoir) ; x:ver=…/x:plat=… = sorties et coupures GPS par version / appareil.
+const ST_FUNNEL = [
+  ['prep', 'Ont préparé un itinéraire', c => c.boucle_calculs || c.point_par_point || c.vers_lieu || c.choisir_carte || c.balise_naviguer || c.gpx_ouvrir],
+  ['nav', 'Ont lancé une navigation', c => c.nav],
+  ['sortie', 'Ont gardé une sortie', c => c.sortie_pied || c.sortie_velo],
+  ['strava', 'Ont envoyé sur Strava', c => c.strava_envoi_ok]
+];
 async function statsIn(req, env, json) {
   if (!env.STATS) return json({ ok: false, message: 'statistiques non configurées' }, 503);
   const b = await req.json().catch(() => null);
   const day = b && typeof b.d === 'string' && /^\d{4}-\d\d-\d\d$/.test(b.d) ? b.d : null;
   const now = Date.now(), t = day ? Date.parse(day + 'T12:00:00Z') : NaN;
   if (!day || !(t > now - 10 * 864e5 && t < now + 2 * 864e5)) return json({ ok: false }, 400);
+  const c = {}, dims = {};
+  for (const [k, v] of Object.entries(b.c || {}).slice(0, 160)) if (/^[\w:.\-]{1,60}$/.test(k) && typeof v === 'number' && isFinite(v) && v > 0 && v < 1e5) c[k] = v;
+  for (const [k, v] of Object.entries(b.dims || {}).slice(0, 20)) if (/^\w{1,12}$/.test(k) && v != null) dims[k] = String(v).replace(/[^\w.\-]/g, '_').slice(0, 30);
   const rows = [['dev', 1]];
-  for (const [k, v] of Object.entries(b.c || {}).slice(0, 160)) if (/^[\w:.\-]{1,60}$/.test(k) && typeof v === 'number' && isFinite(v) && v > 0 && v < 1e5) rows.push(['c:' + k, v]);
-  for (const [k, v] of Object.entries(b.dims || {}).slice(0, 20)) if (/^\w{1,12}$/.test(k) && v != null) rows.push([`d:${k}:${String(v).replace(/[^\w.\-]/g, '_').slice(0, 30)}`, 1]);
+  for (const [k, v] of Object.entries(c)) rows.push(['c:' + k, v]);
+  for (const [k, v] of Object.entries(dims)) rows.push([`d:${k}:${v}`, 1]);
+  for (const [id, , test] of ST_FUNNEL) if (test(c)) rows.push(['u:' + id, 1]);
+  const out = (c.sortie_pied || 0) + (c.sortie_velo || 0);
+  for (const dn of ['ver', 'plat']) if (dims[dn]) {
+    const p = `x:${dn}=${dims[dn]}:`; rows.push([p + 'dev', 1]);
+    if (out) rows.push([p + 'sortie', out]); if (c.sortie_coupee) rows.push([p + 'coupee', c.sortie_coupee]); if (c.coupure_min) rows.push([p + 'coupure_min', c.coupure_min]);
+  }
+  const grp = dims.plat === 'android' ? 'a|' : 'w|';
   await stInit(env);
   const st = env.STATS.prepare('INSERT INTO daily (day, k, v) VALUES (?1, ?2, ?3) ON CONFLICT (day, k) DO UPDATE SET v = v + excluded.v');
-  await env.STATS.batch(rows.map(([k, v]) => st.bind(day, k, v)));
+  await env.STATS.batch(rows.map(([k, v]) => st.bind(day, grp + k, v)));
   return json({ ok: true });
 }
 const ST_LABELS = {
@@ -380,76 +399,168 @@ const ST_LABELS = {
   photo_ajouter: 'Photos ajoutées (bouton)', photo_camera: 'Photo prise', retour_trace_manuel: 'Retour à la trace (bouton)', retour_trace_auto: 'Retour à la trace (auto)', recalcul: 'Itinéraire recalculé', retour_depart: 'Ramène-moi au départ', reprendre_parcours: 'Reprendre le parcours',
   signaler_osm: 'Signalement OSM', pip: 'Image dans l’image', eco_bouton: 'Économie de batterie', avis: '« Mon avis »', sortie_supprimee: 'Sorties jetées', terminer: '« Terminer »'
 };
+// période et filtre demandés : p = hier | 7 | 30 | 90 | all | custom (from, to) ; f = all | app | web ; g = jour | semaine | mois
+function stRange(url) {
+  const D = 864e5, iso = t => new Date(t).toISOString().slice(0, 10), ok = s => /^\d{4}-\d\d-\d\d$/.test(s || '');
+  const sp = url.searchParams, yest = iso(Date.now() - D);
+  let p = sp.get('p') || '30', from, to = yest;
+  if (p === 'custom' && (ok(sp.get('from')) || ok(sp.get('to')))) {
+    from = ok(sp.get('from')) ? sp.get('from') : sp.get('to'); to = ok(sp.get('to')) ? sp.get('to') : from;
+    if (to < from) [from, to] = [to, from];
+  } else if (p === 'hier') from = yest;
+  else if (p === 'all') from = '2000-01-01';
+  else { p = ['7', '30', '90'].includes(p) ? p : '30'; from = iso(Date.now() - +p * D); }
+  const len = Math.round((Date.parse(to) - Date.parse(from)) / D) + 1;
+  const f = ['app', 'web'].includes(sp.get('f')) ? sp.get('f') : 'all';
+  return { p, from, to, len, f, g: sp.get('g'), prevFrom: iso(Date.parse(from) - len * D), prevTo: iso(Date.parse(from) - D) };
+}
+// clé enregistrée → clé de base, ou null si elle n'entre pas dans le filtre
+function stKey(k, f) {
+  const g = k[1] === '|' ? k[0] : '';
+  if ((f === 'app' && g !== 'a') || (f === 'web' && g !== 'w')) return null;
+  return g ? k.slice(2) : k;
+}
+async function stTotals(env, a, b, f) {
+  const o = {};
+  for (const r of (await env.STATS.prepare('SELECT k, SUM(v) s FROM daily WHERE day >= ?1 AND day <= ?2 GROUP BY k').bind(a, b).all()).results) { const k = stKey(r.k, f); if (k) o[k] = (o[k] || 0) + r.s; }
+  return o;
+}
+async function stDaily(env, a, b, f, keys) {
+  const all = keys.flatMap(k => [k, 'a|' + k, 'w|' + k]).map(k => `'${k.replace(/'/g, "''")}'`).join(',');
+  const o = {};
+  for (const r of (await env.STATS.prepare(`SELECT day, k, SUM(v) s FROM daily WHERE day >= ?1 AND day <= ?2 AND k IN (${all}) GROUP BY day, k`).bind(a, b).all()).results) {
+    const k = stKey(r.k, f); if (!k) continue; const d = o[r.day] || (o[r.day] = {}); d[k] = (d[k] || 0) + r.s;
+  }
+  return o;
+}
+const ST_MOIS = ['janv.', 'févr.', 'mars', 'avr.', 'mai', 'juin', 'juil.', 'août', 'sept.', 'oct.', 'nov.', 'déc.'];
+const stDate = (d, y) => { const [Y, M, J] = d.split('-'); return `${+J} ${ST_MOIS[+M - 1]}${y ? ' ' + Y : ''}`; };
+function stBucket(d, g) {
+  if (g === 'mois') { const m = d.slice(0, 7), last = new Date(Date.UTC(+m.slice(0, 4), +m.slice(5), 0)).toISOString().slice(0, 10); return [m, m + '-01', last]; }
+  if (g === 'semaine') { const t = Date.parse(d), wd = (new Date(t).getUTCDay() + 6) % 7, mon = new Date(t - wd * 864e5).toISOString().slice(0, 10); return [mon, mon, new Date(t + (6 - wd) * 864e5).toISOString().slice(0, 10)]; }
+  return [d, d, d];
+}
 async function statsHtml(env, url, k, esc) {
   const nav = adminHead(k, 'stats');
   if (!env.STATS) return nav + '<main><p class="empty">Base D1 « STATS » pas encore reliée au worker (Settings → Bindings → D1 database, nom STATS).</p></main>';
   await stInit(env);
-  const per = url.searchParams.get('p') || '30', n = per === 'all' ? 3650 : +per || 30;
-  const iso = d => new Date(d).toISOString().slice(0, 10), today = Date.now();
-  const since = iso(today - n * 864e5), prev = iso(today - 2 * n * 864e5);
-  const q = async (a, b) => Object.fromEntries((await env.STATS.prepare('SELECT k, SUM(v) s FROM daily WHERE day >= ?1 AND day < ?2 GROUP BY k').bind(a, b).all()).results.map(r => [r.k, r.s]));
-  const T = await q(since, '9999'), P = per === 'all' ? {} : await q(prev, since);
-  const days = (await env.STATS.prepare("SELECT day, k, v FROM daily WHERE day >= ?1 AND k IN ('dev','c:sortie_pied','c:sortie_velo','c:nav') ORDER BY day").bind(since).all()).results;
-  const g = (o, key) => o[key] || 0, fmt = v => Math.round(v).toLocaleString('fr-FR');
-  const nDays = new Set(days.map(r => r.day)).size || 1;
+  const R = stRange(url), { f } = R;
+  const T = await stTotals(env, R.from, R.to, f), P = R.p === 'all' ? {} : await stTotals(env, R.prevFrom, R.prevTo, f);
+  const byDay = await stDaily(env, R.from, R.to, f, ['dev', 'c:sortie_pied', 'c:sortie_velo', 'c:nav', 'd:age:nouveau']);
+  const g = (o, key) => o[key] || 0, fmt = v => Math.round(v).toLocaleString('fr-FR'), pc = (a, b) => b ? Math.round(a / b * 100) + ' %' : '–';
+  const link = o => '?' + Object.entries(Object.assign({ key: k, tab: 'stats', p: R.p, f, from: R.p === 'custom' ? R.from : null, to: R.p === 'custom' ? R.to : null, g: R.g }, o)).filter(([, v]) => v != null && v !== '').map(([a, v]) => a === 'key' ? 'key=' + v : a + '=' + encodeURIComponent(v)).join('&');
+  const nDays = Object.values(byDay).filter(d => d.dev).length || 1;
   const delta = (a, b) => !b ? '' : `<i class="${a >= b ? 'up' : 'dn'}">${a >= b ? '▲' : '▼'} ${Math.round((a / b - 1) * 100)} %</i>`;
   const out = g(T, 'c:sortie_pied') + g(T, 'c:sortie_velo'), outP = g(P, 'c:sortie_pied') + g(P, 'c:sortie_velo');
+  const devDays = g(T, 'dev') || 1, older = g(T, 'd:age:j8-30') + g(T, 'd:age:j30') + g(T, 'd:age:ancien');
+  // jours d'utilisation envoyés depuis le 29 octobre 2026 (les seuls qui ont l'ancienneté et l'entonnoir)
+  const sumPref = (p, end) => Object.entries(T).filter(([key]) => key.startsWith(p) && (!end || key.endsWith(end))).reduce((a, [, v]) => a + v, 0);
+  const ageDays = sumPref('d:age:') || 1, newDays = sumPref('x:plat=', ':dev') || 1;
   const kpi = (l, v, sub) => `<div class="k"><small>${l}</small><b>${v}</b>${sub || ''}</div>`;
-  const kpis = `<div class="kpis">${kpi('Appareils actifs / jour', fmt(g(T, 'dev') / nDays), delta(g(T, 'dev'), g(P, 'dev')))}${kpi('Sorties enregistrées', fmt(out), delta(out, outP))}
+  const kpis = `<div class="kpis">${kpi(R.len === 1 ? 'Appareils actifs' : 'Appareils actifs / jour', fmt(g(T, 'dev') / nDays), delta(g(T, 'dev'), g(P, 'dev')))}${kpi('Sorties enregistrées', fmt(out), delta(out, outP))}
+${kpi('Nouveaux appareils', fmt(g(T, 'd:age:nouveau')), delta(g(T, 'd:age:nouveau'), g(P, 'd:age:nouveau')))}${kpi('Utilisation par des habitués', sumPref('d:age:') ? pc(older, ageDays) : '–', '<small>appareils de plus de 7 jours</small>')}
 ${kpi('Kilomètres parcourus', fmt(g(T, 'c:km_pied') + g(T, 'c:km_velo')), `<small>🥾 ${fmt(g(T, 'c:km_pied'))} · 🚴 ${fmt(g(T, 'c:km_velo'))}</small>`)}${kpi('Navigations lancées', fmt(g(T, 'c:nav')), delta(g(T, 'c:nav'), g(P, 'c:nav')))}
-${kpi('Ouvertures de l’appli', fmt(g(T, 'c:open') + g(T, 'c:resume')), '')}${kpi('Sorties avec coupure GPS', out ? Math.round(g(T, 'c:sortie_coupee') / out * 100) + ' %' : '–', `<small>${fmt(g(T, 'c:coupure_min'))} min sans position</small>`)}
+${kpi('Ouvertures de l’appli', fmt(g(T, 'c:open') + g(T, 'c:resume')), '')}${kpi('Sorties avec coupure GPS', out ? pc(g(T, 'c:sortie_coupee'), out) : '–', `<small>${fmt(g(T, 'c:coupure_min'))} min sans position</small>`)}
 ${kpi('Calcul d’une boucle', g(T, 'c:boucle_calculs') ? (g(T, 'c:boucle_secondes') / g(T, 'c:boucle_calculs')).toFixed(1) + ' s' : '–', '<small>en moyenne</small>')}${kpi('Envois Strava', fmt(g(T, 'c:strava_envoi_ok')), g(T, 'c:strava_envoi_echec') ? `<small>${fmt(g(T, 'c:strava_envoi_echec'))} échec(s)</small>` : '')}</div>`;
-  // courbe par jour
-  const byDay = {}; for (const r of days) (byDay[r.day] = byDay[r.day] || {})[r.k] = r.v;
-  const ds = Object.keys(byDay).sort(), W = 340, H = 110, maxD = Math.max(1, ...ds.map(d => byDay[d].dev || 0)), maxS = Math.max(1, ...ds.map(d => (byDay[d]['c:sortie_pied'] || 0) + (byDay[d]['c:sortie_velo'] || 0)));
-  const X = i => 10 + (ds.length > 1 ? i * (W - 20) / (ds.length - 1) : (W - 20) / 2);
-  const line = ds.map((d, i) => `${i ? 'L' : 'M'}${X(i).toFixed(1)} ${(H - (byDay[d].dev || 0) / maxD * (H - 10)).toFixed(1)}`).join('');
-  const bars = ds.map((d, i) => { const v = (byDay[d]['c:sortie_pied'] || 0) + (byDay[d]['c:sortie_velo'] || 0), h = v / maxS * (H - 50); return `<rect x="${(X(i) - 3).toFixed(1)}" y="${(H - h).toFixed(1)}" width="6" height="${h.toFixed(1)}" rx="2" fill="#E8742A" opacity=".85"/>`; }).join('');
-  const chart = ds.length ? `<div class="scard"><h3>Activité par jour</h3><svg viewBox="0 0 ${W} ${H + 4}" width="100%">${bars}<path d="${line}" fill="none" stroke="#2F5E45" stroke-width="2.5"/></svg><div class="leg"><span><i style="background:#2F5E45"></i>Appareils actifs (max ${fmt(maxD)})</span><span><i style="background:#E8742A"></i>Sorties</span></div></div>` : '';
-  const barList = (title, arr, col) => { arr = arr.filter(x => x[1] > 0).sort((a, b) => b[1] - a[1]); if (!arr.length) return ''; const m = arr[0][1];
-    return `<div class="scard"><h3>${title}</h3><div class="bars">${arr.map(([l, v]) => `<div><span>${esc(l)}</span><em><u style="width:${Math.max(2, v / m * 100)}%;background:${col || '#3A9A6A'}"></u></em><b>${fmt(v)}</b></div>`).join('')}</div></div>`; };
+  // courbe : jour, semaine ou mois ; chaque colonne mène au détail de sa période
+  const dataDays = Object.keys(byDay).sort();
+  let chart = '';
+  if (dataDays.length && R.len > 1) {
+    const span = Math.round((Date.parse(R.to) - Date.parse(dataDays[0])) / 864e5) + 1;
+    const gr = ['jour', 'semaine', 'mois'].includes(R.g) ? R.g : span > 200 ? 'mois' : span > 45 ? 'semaine' : 'jour';
+    const B = {};
+    for (let t = Date.parse(dataDays[0]); t <= Date.parse(R.to); t += 864e5) {
+      const d = new Date(t).toISOString().slice(0, 10), [id, a, b] = stBucket(d, gr), x = B[id] || (B[id] = { a, b, dev: 0, n: 0, s: 0, nw: 0 }), v = byDay[d] || {};
+      x.dev += v.dev || 0; x.n++; x.s += (v['c:sortie_pied'] || 0) + (v['c:sortie_velo'] || 0); x.nw += v['d:age:nouveau'] || 0;
+    }
+    const L = Object.values(B), W = 340, H = 120, top = 8;
+    const maxD = Math.max(1, ...L.map(x => x.dev / x.n), ...L.map(x => x.nw)), maxS = Math.max(1, ...L.map(x => x.s));
+    const cw = (W - 20) / L.length, X = i => 10 + cw * (i + .5);
+    const path = fn => L.map((x, i) => `${i ? 'L' : 'M'}${X(i).toFixed(1)} ${(H - fn(x) / maxD * (H - top)).toFixed(1)}`).join('');
+    const bw = Math.max(2, Math.min(14, cw * .6));
+    const bars = L.map((x, i) => { const h = x.s / maxS * (H - 50); return h ? `<rect x="${(X(i) - bw / 2).toFixed(1)}" y="${(H - h).toFixed(1)}" width="${bw.toFixed(1)}" height="${h.toFixed(1)}" rx="2" fill="#E8742A" opacity=".85"/>` : ''; }).join('');
+    const lab = x => x.a === x.b ? stDate(x.a) : gr === 'mois' ? ST_MOIS[+x.a.slice(5, 7) - 1] + ' ' + x.a.slice(0, 4) : stDate(x.a) + ' – ' + stDate(x.b);
+    const hits = L.map((x, i) => `<a href="${link({ p: 'custom', from: x.a, to: x.b, g: null })}"><rect x="${(X(i) - cw / 2).toFixed(1)}" y="0" width="${cw.toFixed(1)}" height="${H}" fill="transparent"><title>${esc(lab(x))} : ${fmt(x.dev / x.n)} appareils / jour, ${fmt(x.nw)} nouveaux, ${fmt(x.s)} sorties</title></rect></a>`).join('');
+    const dot = L.length <= 40 ? L.map((x, i) => `<circle cx="${X(i).toFixed(1)}" cy="${(H - x.dev / x.n / maxD * (H - top)).toFixed(1)}" r="2.5" fill="#2F5E45"/>`).join('') : '';
+    const gl = ['jour', 'semaine', 'mois'].map(x => `<a class="${x === gr ? 'on' : ''}" href="${link({ g: x })}">${x[0].toUpperCase() + x.slice(1)}</a>`).join('');
+    chart = `<div class="scard"><div class="hd"><h3>Activité par ${gr}</h3><div class="mini">${gl}</div></div>
+<svg viewBox="0 0 ${W} ${H + 16}" width="100%">${bars}<path d="${path(x => x.nw)}" fill="none" stroke="#6FA8DC" stroke-width="1.5" stroke-dasharray="3 3"/><path d="${path(x => x.dev / x.n)}" fill="none" stroke="#2F5E45" stroke-width="2.5"/>${dot}
+<text x="10" y="${H + 13}" font-size="10" fill="currentColor" opacity=".6">${esc(lab(L[0]))}</text><text x="${W - 10}" y="${H + 13}" font-size="10" fill="currentColor" opacity=".6" text-anchor="end">${esc(lab(L[L.length - 1]))}</text>${hits}</svg>
+<div class="leg"><span><i style="background:#2F5E45"></i>Appareils actifs / jour</span><span><i style="background:#6FA8DC"></i>Nouveaux</span><span><i style="background:#E8742A"></i>Sorties</span></div><p class="note">Touche une ${gr === 'jour' ? 'journée' : gr} pour en voir le détail.</p></div>`;
+  }
+  const barList = (title, arr, col, note, keep) => { arr = arr.filter(x => x[1] > 0); if (!keep) arr.sort((a, b) => b[1] - a[1]); if (!arr.length) return ''; const m = Math.max(...arr.map(x => x[1]));
+    return `<div class="scard"><h3>${title}</h3><div class="bars">${arr.map(([l, v, t]) => `<div><span>${esc(l)}</span><em><u style="width:${Math.max(2, v / m * 100)}%;background:${col || '#3A9A6A'}"></u></em><b>${t || fmt(v)}</b></div>`).join('')}</div>${note ? `<p class="note">${note}</p>` : ''}</div>`; };
   const pref = p => Object.entries(T).filter(([key]) => key.startsWith(p)).map(([key, v]) => [key.slice(p.length), v]);
+  // entonnoir : part des appareils qui, dans la journée, vont jusqu'à chaque étape
+  const funnel = sumPref('x:plat=', ':dev') ? `<div class="scard"><h3>Du lancement à la sortie</h3><div class="bars">${[['Ont ouvert l’appli', newDays], ...ST_FUNNEL.map(([id, l]) => [l, g(T, 'u:' + id)])].map(([l, v]) => `<div><span>${l}</span><em><u style="width:${Math.max(2, v / newDays * 100)}%;background:#2F5E45"></u></em><b>${pc(v, newDays)}</b></div>`).join('')}</div><p class="note">Part des appareils qui, dans leur journée, sont allés jusqu’à cette étape (${fmt(newDays)} jours d’utilisation). Compté depuis le 29 octobre 2026.</p></div>` : '';
+  const ages = barList('Nouveaux et habitués', [['Premier jour', g(T, 'd:age:nouveau')], ['Installé depuis 1 à 7 jours', g(T, 'd:age:j1-7')], ['Depuis 8 à 30 jours', g(T, 'd:age:j8-30')], ['Depuis plus de 30 jours', g(T, 'd:age:j30')], ['Installé avant le suivi', g(T, 'd:age:ancien')]].map(([l, v]) => [l, v, pc(v, ageDays)]), '#6FA8DC', 'Part des jours d’utilisation selon l’ancienneté de l’appareil.', true);
+  // heures d'utilisation
+  const hrs = Array.from({ length: 24 }, (_, h) => g(T, 'c:heure_' + String(h).padStart(2, '0'))), maxH = Math.max(...hrs);
+  const hours = maxH ? `<div class="scard"><h3>Heures d’utilisation</h3><svg viewBox="0 0 340 86" width="100%">${hrs.map((v, h) => { const bh = v / maxH * 66; return `<rect x="${(4 + h * 14).toFixed(1)}" y="${(70 - bh).toFixed(1)}" width="11" height="${bh.toFixed(1)}" rx="2" fill="#3A9A6A"><title>${h} h : ${fmt(v)}</title></rect>`; }).join('')}${[0, 6, 12, 18].map(h => `<text x="${(9.5 + h * 14).toFixed(1)}" y="83" font-size="10" fill="currentColor" opacity=".6" text-anchor="middle">${h} h</text>`).join('')}</svg><p class="note">Ouvertures et retours dans l’appli, selon l’heure du téléphone.</p></div>` : '';
+  // sorties et coupures GPS par version et par appareil
+  const cross = (dn, title, name, sort) => { const m = {};
+    for (const [key, v] of pref(`x:${dn}=`)) { const i = key.lastIndexOf(':'), id = key.slice(0, i); (m[id] = m[id] || {})[key.slice(i + 1)] = v; }
+    const ids = Object.keys(m).sort(sort); if (!ids.length) return '';
+    return `<table class="tb"><tr><th>${title}</th><th>Utilisation</th><th>Sorties</th><th>Coupure GPS</th></tr>${ids.map(id => { const x = m[id]; return `<tr><td>${esc(name(id))}</td><td>${pc(x.dev || 0, newDays)}</td><td>${fmt(x.sortie || 0)}</td><td>${x.sortie ? pc(x.coupee || 0, x.sortie) + (x.coupure_min ? ` <small>${fmt(x.coupure_min)} min</small>` : '') : '–'}</td></tr>`; }).join('')}</table>`; };
+  const PLAT = { android: 'Appli Android', 'web-android': 'Site, Android', 'web-ios': 'Site, iPhone', 'web-pc': 'Site, ordinateur' };
+  const vt = cross('ver', 'Version', v => 'v' + v, (a, b) => b - a) + cross('plat', 'Appareil', v => PLAT[v] || v);
+  const versions = vt ? `<div class="scard"><h3>Versions et coupures GPS</h3>${vt}<p class="note">Utilisation : part des jours d’utilisation. Coupure GPS : part des sorties avec au moins un trou de position.</p></div>` : '';
   const feats = Object.entries(ST_LABELS).map(([key, l]) => [l, g(T, 'c:' + key)]);
   const dimNames = { plat: 'Appli / navigateur', lang: 'Langue', ver: 'Version', mode: 'Mode', screen: 'Écran', strava: 'Strava connecté', drive: 'Sauvegarde Drive', theme: 'Thème', voice: 'Voix', eco: 'Économie batterie', poi: 'Points utiles', night: 'Alerte nuit', lit: 'De nuit : éclairé', units: 'Unités', layer: 'Fond de carte' };
-  const devDays = g(T, 'dev') || 1;
   const dims = Object.entries(dimNames).map(([d, l]) => { const arr = pref(`d:${d}:`); if (!arr.length) return ''; arr.sort((a, b) => b[1] - a[1]);
     return `<div class="dim"><b>${l}</b>${arr.map(([v, c]) => `<span>${esc(v)} <i>${Math.round(c / devDays * 100)} %</i></span>`).join('')}</div>`; }).join('');
   const known = new Set(Object.keys(ST_LABELS).map(x => 'c:' + x));
-  const others = Object.entries(T).filter(([key]) => key.startsWith('c:') && !known.has(key) && !key.startsWith('c:err:') && !key.startsWith('c:carte_') && !key.startsWith('c:fond_')).map(([key, v]) => [key.slice(2), v]);
-  const pers = ['7', '30', 'all'].map(x => `<a class="${x === per ? 'on' : ''}" href="?key=${k}&tab=stats&p=${x}">${x === 'all' ? 'Tout' : x + ' jours'}</a>`).join('')
-    + `<a style="margin-left:auto" href="?key=${k}&tab=stats&p=${per}&csv=1">⬇ Excel</a>`;
-  return nav + `<main><style>.per{display:flex;gap:6px}.per a{background:var(--chip);border-radius:999px;padding:5px 12px;font-weight:600;font-size:13px;color:var(--ink);text-decoration:none}.per a.on{background:var(--go);color:#fff}
-.kpis{display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:8px}.k{background:var(--card);border-radius:14px;padding:10px 12px}.k b{display:block;font-size:24px}.k small{color:var(--mut);display:block}.k i{font-style:normal;font-size:12px;font-weight:700}.k i.up{color:#3A9A6A}.k i.dn{color:#C8412F}
-.scard{display:block;background:var(--card);border-radius:14px;padding:12px;margin-top:10px}.scard h3{margin:0 0 8px;font-size:13px;color:var(--mut);text-transform:uppercase;letter-spacing:.05em}
+  const others = Object.entries(T).filter(([key]) => key.startsWith('c:') && !known.has(key) && !/^c:(err:|carte_|fond_|heure_)/.test(key)).map(([key, v]) => [key.slice(2), v]);
+  // filtres
+  const chip = (on, href, l) => `<a class="${on ? 'on' : ''}" href="${href}">${l}</a>`;
+  const filt = [['all', 'Tout'], ['app', '📱 Appli'], ['web', '🌐 Site web']].map(([x, l]) => chip(x === f, link({ f: x }), l)).join('');
+  const pers = [['hier', 'Hier'], ['7', '7 jours'], ['30', '30 jours'], ['90', '90 jours'], ['all', 'Tout']].map(([x, l]) => chip(x === R.p, link({ p: x, from: null, to: null, g: null }), l)).join('')
+    + `<a href="${link({ csv: 1 })}" style="margin-left:auto">⬇ Excel</a>`;
+  const yest = new Date(Date.now() - 864e5).toISOString().slice(0, 10);
+  const form = `<details class="dates"${R.p === 'custom' ? ' open' : ''}><summary>📅 Choisir les dates</summary><form method="get"><input type="hidden" name="key" value="${esc(decodeURIComponent(k))}"><input type="hidden" name="tab" value="stats"><input type="hidden" name="p" value="custom"><input type="hidden" name="f" value="${f}">
+<label>Du <input type="date" name="from" value="${R.from > '2020' ? R.from : ''}" max="${yest}"></label><label>au <input type="date" name="to" value="${R.to}" max="${yest}"></label><button>Afficher</button></form></details>`;
+  const per = R.len === 1 ? 'Le ' + stDate(R.from, true) : R.p === 'all' ? 'Depuis le début' : `Du ${stDate(R.from, R.from.slice(0, 4) !== R.to.slice(0, 4))} au ${stDate(R.to, true)}`;
+  const fl = { all: '', app: ' · appli Android', web: ' · site web' }[f];
+  const prevNote = R.p === 'all' ? '' : ` <span class="note">(▲▼ par rapport aux ${R.len} jours d’avant)</span>`;
+  return nav + `<main><style>.per{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:6px}.per a,.mini a{background:var(--chip);border-radius:999px;padding:5px 12px;font-weight:600;font-size:13px;color:var(--ink);text-decoration:none}.per a.on,.mini a.on{background:var(--go);color:#fff}
+.mini{display:flex;gap:4px}.mini a{padding:3px 9px;font-size:12px}.hd{display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:6px}.hd h3{margin:0!important}
+.dates{margin:2px 0 8px;font-size:13px}.dates summary{cursor:pointer;color:var(--mut);font-weight:600}.dates form{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-top:8px}.dates input{background:var(--card);color:var(--ink);border:1px solid var(--line);border-radius:8px;padding:5px 8px;color-scheme:light dark;font:inherit}.dates button{background:var(--go);color:#fff;border:0;border-radius:999px;padding:6px 14px;font-weight:700;font:inherit;font-weight:700}
+.range{font-weight:700;margin:6px 0 8px}.kpis{display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:8px}.k{background:var(--card);border-radius:14px;padding:10px 12px}.k b{display:block;font-size:24px}.k small{color:var(--mut);display:block}.k i{font-style:normal;font-size:12px;font-weight:700}.k i.up{color:#3A9A6A}.k i.dn{color:#C8412F}
+.scard{display:block;background:var(--card);border-radius:14px;padding:12px;margin-top:10px}.scard h3{margin:0 0 8px;font-size:13px;color:var(--mut);text-transform:uppercase;letter-spacing:.05em}.scard svg{color:var(--ink)}
 .bars div{display:grid;grid-template-columns:minmax(120px,40%) 1fr auto;gap:8px;align-items:center;font-size:13px;margin:4px 0}.bars em{display:block;height:10px}.bars u{display:block;height:10px;border-radius:5px}.bars b{font-size:12px;color:var(--mut)}
-.leg{display:flex;gap:12px;font-size:12px;color:var(--mut)}.leg i{display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:4px}
+.tb{width:100%;border-collapse:collapse;font-size:13px;margin-bottom:10px}.tb th{text-align:left;color:var(--mut);font-weight:600;font-size:12px;padding:4px 6px 4px 0}.tb td{padding:5px 6px 5px 0;border-top:1px solid var(--line)}.tb small{color:var(--mut)}
+.leg{display:flex;gap:12px;flex-wrap:wrap;font-size:12px;color:var(--mut)}.leg i{display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:4px}
 .dim{margin:6px 0;font-size:13px;display:flex;flex-wrap:wrap;gap:6px;align-items:center}.dim b{width:100%;font-size:12px;color:var(--mut)}.dim span{background:var(--chip);border-radius:8px;padding:2px 8px}.dim i{font-style:normal;color:var(--mut)}
 .note{font-size:12px;color:var(--mut)}</style>
-<div class="per">${pers}</div>${kpis}${chart}
+<div class="per">${filt}</div><div class="per">${pers}</div>${form}
+<div class="range">${per}${fl}${prevNote}</div>${g(T, 'dev') ? '' : '<p class="note">Aucune donnée pour cette période' + (f === 'all' ? '' : ' et ce filtre (le classement appli / site web existe depuis le 29 octobre 2026)') + '.</p>'}${kpis}${chart}
+${funnel}${ages}${hours}${versions}
 ${barList('Fonctions utilisées', feats)}
 ${barList('Cartes hors ligne téléchargées', pref('c:carte_').map(([c, v]) => [({ fr: 'France', es: 'Espagne', at: 'Autriche', be: 'Belgique', ch: 'Suisse', gb: 'Royaume-Uni', de: 'Allemagne', ca: 'Canada', us: 'États-Unis', zone: 'Zone libre' })[c] || c, v]))}
 ${barList('Fonds de carte choisis', pref('c:fond_'), '#2F5E45')}
 <div class="scard"><h3>Appareils et réglages (part des jours-appareils)</h3>${dims || '<p class="note">Pas encore de données.</p>'}</div>
 ${barList('Erreurs de l’appli', pref('c:err:'), '#C8412F')}
 ${barList('Autres compteurs', others, '#8a959e')}
-<p class="note">Anonyme : chaque appareil envoie une fois par jour les compteurs de la veille, additionnés ici par jour (aucune ligne par appareil, aucune position). Les chiffres arrivent avec un jour de décalage.</p></main>`;
+<p class="note">Anonyme : chaque appareil envoie une fois par jour les compteurs de la veille, additionnés ici par jour (aucune ligne par appareil, aucune position). Les chiffres arrivent avec un jour de décalage, et seulement quand l’appareil rouvre l’appli.</p></main>`;
 }
 
-// export pour Excel : une ligne par jour, une colonne par compteur (séparateur « ; », virgule décimale, UTF-8 avec BOM)
+// export pour Excel : une ligne par jour, une colonne par compteur (séparateur « ; », virgule décimale, UTF-8 avec BOM) ; même période et même filtre que la page
 async function statsCsv(env, url) {
   if (!env.STATS) return new Response('Base STATS non reliée', { status: 503 });
   await stInit(env);
-  const per = url.searchParams.get('p') || '30', n = per === 'all' ? 3650 : +per || 30;
-  const since = new Date(Date.now() - n * 864e5).toISOString().slice(0, 10);
-  const rows = (await env.STATS.prepare('SELECT day, k, v FROM daily WHERE day >= ?1 ORDER BY day').bind(since).all()).results;
-  const keys = [...new Set(rows.map(r => r.k))].sort((a, b) => (a === 'dev' ? -1 : b === 'dev' ? 1 : a.localeCompare(b)));
-  const byDay = {}; for (const r of rows) (byDay[r.day] = byDay[r.day] || {})[r.k] = r.v;
-  const name = k => k === 'dev' ? 'appareils actifs' : k.startsWith('c:') ? (ST_LABELS[k.slice(2)] || k.slice(2)) : k.startsWith('d:') ? k.slice(2).replace(':', ' = ') : k;
+  const R = stRange(url), byDay = {};
+  for (const r of (await env.STATS.prepare('SELECT day, k, v FROM daily WHERE day >= ?1 AND day <= ?2 ORDER BY day').bind(R.from, R.to).all()).results) {
+    const k = stKey(r.k, R.f); if (!k) continue; const d = byDay[r.day] || (byDay[r.day] = {}); d[k] = (d[k] || 0) + r.v;
+  }
+  const keys = [...new Set(Object.values(byDay).flatMap(Object.keys))].sort((a, b) => (a === 'dev' ? -1 : b === 'dev' ? 1 : a.localeCompare(b)));
+  const fun = Object.fromEntries(ST_FUNNEL.map(([id, l]) => [id, l]));
+  const name = k => k === 'dev' ? 'appareils actifs' : k.startsWith('c:') ? (ST_LABELS[k.slice(2)] || k.slice(2)) : k.startsWith('d:') ? k.slice(2).replace(':', ' = ') : k.startsWith('u:') ? 'appareils : ' + (fun[k.slice(2)] || k.slice(2)) : k.startsWith('x:') ? k.slice(2).replace(':', ' · ') : k;
   const cell = v => { const t = String(v).replace(/"/g, '""'); return /[;"\n]/.test(t) ? `"${t}"` : t; };
   const num = v => v == null ? '' : String(Math.round(v * 10) / 10).replace('.', ',');
   const lines = [['Jour', ...keys.map(name)].map(cell).join(';')];
   for (const d of Object.keys(byDay).sort()) lines.push([d, ...keys.map(k => num(byDay[d][k]))].join(';'));
-  return new Response('﻿' + lines.join('\r\n'), { headers: { 'Content-Type': 'text/csv; charset=utf-8', 'Content-Disposition': `attachment; filename="pisteo-statistiques-${per === 'all' ? 'tout' : per + 'j'}-${new Date().toISOString().slice(0, 10)}.csv"`, 'Cache-Control': 'no-store' } });
+  const tag = (R.p === 'custom' ? R.from + '_' + R.to : R.p === 'all' ? 'tout' : R.p === 'hier' ? R.from : R.p + 'j') + (R.f === 'all' ? '' : '-' + R.f);
+  return new Response('﻿' + lines.join('\r\n'), { headers: { 'Content-Type': 'text/csv; charset=utf-8', 'Content-Disposition': `attachment; filename="pisteo-statistiques-${tag}.csv"`, 'Cache-Control': 'no-store' } });
 }
 
 // ---------- Plan de secours : état des services extérieurs ----------

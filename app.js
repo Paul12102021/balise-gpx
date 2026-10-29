@@ -5,7 +5,7 @@
 
 // La page et le code doivent être de la même version. Sinon (page gardée en cache
 // par le téléphone ou par GitHub), on recharge une page fraîche, au plus 3 fois.
-const APP_VERSION = 254;
+const APP_VERSION = 255;
 try {
   const meta = document.querySelector('meta[name="balise-version"]');
   const pageV = meta ? +meta.content : 0;
@@ -7491,6 +7491,13 @@ setTimeout(() => gdAuto(false), 15000);
 // =====================================================================
 const STATS_ON = () => store.get('statsOff') !== '1';
 function statDay() { const d = new Date(); return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); }
+// premier jour de l'appareil (pour « nouveaux / habitués ») ; déjà là avant ce suivi : « ancien »
+if (!store.get('statFirst')) store.set('statFirst', store.get('stats') ? 'ancien' : statDay());
+function statAge(d) {
+  const f = store.get('statFirst'); if (!f || f === 'ancien') return 'ancien';
+  const n = Math.round((Date.parse(d) - Date.parse(f)) / 864e5);
+  return !(n > 0) ? 'nouveau' : n <= 7 ? 'j1-7' : n <= 30 ? 'j8-30' : 'j30';
+}
 function statLoad() { try { return JSON.parse(store.get('stats') || '{}') || {}; } catch { return {}; } }
 function stat(name, n = 1) {
   if (!STATS_ON()) return;
@@ -7503,7 +7510,7 @@ function stat(name, n = 1) {
   } catch {}
 }
 // contexte de la journée : appli ou navigateur, langue, version, réglages principaux
-function statDims() {
+function statDims(d) {
   const ua = navigator.userAgent, w = innerWidth;
   return {
     plat: AND ? 'android' : /Android/i.test(ua) ? 'web-android' : /iPhone|iPad/i.test(ua) ? 'web-ios' : 'web-pc',
@@ -7512,7 +7519,7 @@ function statDims() {
     voice: store.get('voice') === '0' ? 'off' : 'on', eco: store.get('eco') || 'off', poi: store.get('poi') === '0' ? 'off' : 'on',
     night: store.get('alertNight') === '1' ? 'on' : 'off', lit: store.get('litNight') === '1' ? 'on' : 'off',
     strava: (() => { try { return stvOn() ? 'oui' : 'non'; } catch { return 'non'; } })(), drive: store.get('gdAuto') === '1' ? 'auto' : 'non',
-    layer: (LAYERS[layerIdx] || {}).id || '?'
+    layer: (LAYERS[layerIdx] || {}).id || '?', age: statAge(d)
   };
 }
 let statSending = false;
@@ -7524,7 +7531,7 @@ async function statFlush() {
   try {
     for (const d of days) {
       if (d < new Date(Date.now() - 8 * 864e5).toISOString().slice(0, 10)) { delete all[d]; continue; } // trop vieux : oublié
-      const r = await fetch(STRAVA_RELAY + '/stats', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ d, c: all[d], dims: statDims() }) });
+      const r = await fetch(STRAVA_RELAY + '/stats', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ d, c: all[d], dims: statDims(d) }) });
       if (!r.ok && r.status !== 400) break;
       delete all[d];
     }
@@ -7532,9 +7539,11 @@ async function statFlush() {
     store.set('stats', JSON.stringify(cur));
   } catch {} finally { statSending = false; }
 }
-stat('open');
+// heure d'utilisation (heure du téléphone), comptée à chaque ouverture ou retour dans l'appli
+const statHour = () => stat('heure_' + String(new Date().getHours()).padStart(2, '0'));
+stat('open'); statHour();
 setTimeout(statFlush, 8000); setInterval(statFlush, 3600e3);
-document.addEventListener('visibilitychange', () => { if (!document.hidden) { stat('resume'); statFlush(); } });
+document.addEventListener('visibilitychange', () => { if (!document.hidden) { stat('resume'); statHour(); statFlush(); } });
 // boutons touchés (un compteur par bouton utile)
 const STAT_BTN = {
   btnNav: 'nav_btn', btnNew: 'autre_trajet', destLoop: 'boucle_ouvrir', lpGo: 'boucle', lbAgain: 'boucle_autre', lbEdit: 'boucle_modifier', lbKeep: 'boucle_garder', lbGo: 'boucle_naviguer',
