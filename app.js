@@ -5,7 +5,7 @@
 
 // La page et le code doivent être de la même version. Sinon (page gardée en cache
 // par le téléphone ou par GitHub), on recharge une page fraîche, au plus 3 fois.
-const APP_VERSION = 256;
+const APP_VERSION = 257;
 try {
   const meta = document.querySelector('meta[name="balise-version"]');
   const pageV = meta ? +meta.content : 0;
@@ -6425,27 +6425,92 @@ $('btnSim').onclick = startSim;
 // Écran d'accueil : une seule fois, au tout premier lancement (pas pour ceux qui ont déjà des traces)
 // =====================================================================
 let onbI = 0;
+const ONB_N = () => $('onb').querySelectorAll('.onb-s').length;
 function onbShow(i) {
   onbI = i;
   $('onb').querySelectorAll('.onb-s').forEach((x, k) => x.classList.toggle('on', k === i));
   $('onb').querySelectorAll('.onb-dots i').forEach((x, k) => x.classList.toggle('on', k === i));
-  const last = i === 3;
-  $('onbNext').textContent = last ? 'C\'est parti' : 'Suivant'; $('onbSkip').hidden = last;
+  const last = i === ONB_N() - 1;
+  $('onbNext').hidden = last; $('onbSkip').textContent = last ? 'Explorer la carte' : 'Passer';
+  $('onbFoot').classList.toggle('on', profile !== 'trekking'); $('onbBike').classList.toggle('on', profile === 'trekking');
 }
-function onbClose() { $('onb').hidden = true; store.set('onb', '1'); }
-$('onbNext').onclick = () => onbI < 3 ? onbShow(onbI + 1) : onbClose();
-$('onbSkip').onclick = onbClose;
+function onbClose(how) { $('onb').hidden = true; store.set('onb', '1'); try { stat('onb_' + how); } catch {} }
+$('onbNext').onclick = () => onbShow(onbI + 1);
+$('onbSkip').onclick = () => onbClose(onbI === ONB_N() - 1 ? 'carte' : 'passer_' + onbI);
+const onbMode = p => { setProfile(p, true); try { stat(p === 'trekking' ? 'onb_velo' : 'onb_pied'); } catch {} onbShow(2); };
+$('onbFoot').onclick = () => onbMode('hiking-mountain');
+$('onbBike').onclick = () => onbMode('trekking');
+// première action : directement dans la bonne fenêtre (la position est demandée à ce moment-là)
+$('onbLoop').onclick = () => { onbClose('boucle'); openLoop(); };
+$('onbRoutes').onclick = () => { onbClose('balises'); rtShowOnMap(); };
+$('onbGpx').onclick = () => { onbClose('gpx'); openLib(); };
 // glisser à gauche / à droite pour changer d'écran
 (() => { let x0 = null;
   $('onb').addEventListener('touchstart', e => { x0 = e.touches[0].clientX; }, { passive: true });
   $('onb').addEventListener('touchend', e => { if (x0 == null) return; const dx = e.changedTouches[0].clientX - x0; x0 = null;
-    if (dx < -50 && onbI < 3) onbShow(onbI + 1); else if (dx > 50 && onbI > 0) onbShow(onbI - 1); });
+    if (dx < -50 && onbI < ONB_N() - 1) onbShow(onbI + 1); else if (dx > 50 && onbI > 0) onbShow(onbI - 1); });
 })();
+// petite fenêtre au centre (même style que l'accueil) : titre, texte, boutons [texte, classe, action]
+function askCard(title, text, btns) {
+  let el = document.getElementById('askCard');
+  if (!el) { el = document.createElement('div'); el.id = 'askCard'; el.className = 'onb'; el.setAttribute('role', 'dialog'); document.body.appendChild(el); }
+  el.innerHTML = '<div class="onb-card"><div class="onb-s on ask"><h2></h2><p></p></div><div class="onb-acts"></div></div>';
+  el.querySelector('h2').textContent = title; el.querySelector('p').textContent = text;
+  const acts = el.querySelector('.onb-acts');
+  for (const [l, cls, run] of btns) { const b = document.createElement('button'); b.className = 'btn ' + (cls || ''); b.textContent = l; b.onclick = () => { el.hidden = true; if (run) run(); }; acts.appendChild(b); }
+  el.hidden = false;
+}
+// ---------- demande d'avis : une seule fois, après une sortie gardée ----------
+// oui → note Play Store (fenêtre Google dans l'appli 2.5.0, sinon la fiche) ; non → « Mon avis »
+const PLAY_URL = 'https://play.google.com/store/apps/details?id=fr.pisteo.app';
+function askReview() {
+  if (store.get('avisAsk') || !(AND || PLAY_PUBLIC)) return;
+  const ac = document.getElementById('askCard'); if (!$('onb').hidden || (ac && !ac.hidden)) return;
+  store.set('avisAsk', '1'); try { stat('avis_demande'); } catch {}
+  askCard('Ça t\'a plu ?', 'Sortie enregistrée, bravo ! Pisteo t\'a été utile ?', [
+    ['Pas vraiment', 'ghost', () => { try { stat('avis_non'); } catch {}
+      askCard('Pas vraiment', 'Dis-nous ce qui t\'a gêné : on lit tous les messages.', [['Non merci', 'ghost'], ['Donner mon avis', 'go', () => $('btnFeedback').click()]]); }],
+    ['Oui, j\'ai aimé', 'go', () => { try { stat('avis_oui'); } catch {}
+      askCard('Ça t\'a plu ?', 'Merci ! Une note sur le Play Store aide beaucoup Pisteo à se faire connaître.', [['Plus tard', 'ghost'], ['Noter Pisteo', 'go', () => {
+        try { stat('avis_note'); } catch {}
+        if (AND && AND.askReview) { try { AND.askReview(); return; } catch {} }
+        if (AND && AND.openExternal) { try { AND.openExternal(PLAY_URL); return; } catch {} }
+        window.open(PLAY_URL, '_blank');
+      }]]); }]
+  ]);
+}
+endActivity = (fn => async function (keep) {
+  let ok = false; try { ok = keep && rec.length > 1 && recDist() > 500; } catch {}
+  const r = await fn.apply(this, arguments);
+  if (ok) setTimeout(askReview, 2500);
+  return r;
+})(endActivity);
+// ---------- avant de partir : batterie basse, économie d'énergie d'Android ----------
+async function battCheck() {
+  try {
+    if (AND && AND.powerSave && AND.powerSave()) {
+      if (store.get('battSaverWarn') !== new Date().toDateString()) {
+        store.set('battSaverWarn', new Date().toDateString()); stat('alerte_economie');
+        toast(tr('Économie d\'énergie Android activée : le GPS peut être coupé écran éteint. Désactive-la pour la sortie.'), 9000,
+          AND.openBatterySettings ? { label: tr('Réglages batterie'), run: () => { try { AND.openBatterySettings(); } catch {} } } : undefined);
+        return;
+      }
+    }
+    const b = navigator.getBattery ? await navigator.getBattery() : null;
+    if (!b || b.charging || b.level > 0.3) return;
+    const key = new Date().toDateString() + Math.round(b.level * 10);
+    if (store.get('battLowWarn') === key) return;
+    store.set('battLowWarn', key); stat('alerte_batterie');
+    toast(`${tr('Batterie à')} ${Math.round(b.level * 100)} % · ${tr('Recharge si tu peux avant de partir, ou active l\'économie de batterie pendant la navigation.')}`, 9000);
+  } catch {}
+}
+startNav = (fn => async function () { setTimeout(battCheck, 1500); return fn.apply(this, arguments); })(startNav);
+startActivity = (fn => function () { if (!nav) setTimeout(battCheck, 1500); return fn.apply(this, arguments); })(startActivity);
 (async () => {
   if (store.get('onb') === '1' || /[?&]shared=1/.test(location.search)) return;
   const had = (await listRecent()).length > 0 || store.get('gpx');
   if (had) { store.set('onb', '1'); return; }
-  onbShow(0); $('onb').hidden = false;
+  onbShow(0); $('onb').hidden = false; try { stat('onb_vu'); } catch {}
 })();
 
 // =====================================================================

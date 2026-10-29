@@ -16,6 +16,7 @@ import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.Environment;
+import android.os.PowerManager;
 import android.provider.MediaStore;
 import android.speech.tts.TextToSpeech;
 import android.speech.tts.UtteranceProgressListener;
@@ -523,6 +524,11 @@ public class MainActivity extends Activity {
         runOnUiThread(() -> { if (web != null) web.evaluateJavascript(js, null); });
     }
 
+    private void openPlayPage() {
+        try { startActivity(new Intent(Intent.ACTION_VIEW, Uri.parse("market://details?id=" + getPackageName()))); }
+        catch (Exception e) { try { startActivity(new Intent(Intent.ACTION_VIEW, Uri.parse("https://play.google.com/store/apps/details?id=" + getPackageName()))); } catch (Exception ignored) {} }
+    }
+
     /** Ce que la page peut demander au téléphone (window.PisteoAndroid). */
     private class Bridge {
         // sauvegarde Drive : demande un jeton (interactive = fenêtre Google si besoin) ; réponse par window.pisteoDrive
@@ -660,6 +666,32 @@ public class MainActivity extends Activity {
             return t;
         }
 
+        // économie d'énergie d'Android : peut couper le GPS écran éteint (2.5.0)
+        @JavascriptInterface
+        public boolean powerSave() {
+            try { PowerManager pm = (PowerManager) getSystemService(POWER_SERVICE); return pm != null && pm.isPowerSaveMode(); }
+            catch (Exception e) { return false; }
+        }
+        @JavascriptInterface
+        public void openBatterySettings() {
+            runOnUiThread(() -> {
+                try { startActivity(new Intent(android.provider.Settings.ACTION_BATTERY_SAVER_SETTINGS)); }
+                catch (Exception e) { try { startActivity(new Intent(android.provider.Settings.ACTION_SETTINGS)); } catch (Exception ignored) {} }
+            });
+        }
+        // note dans l'appli (fenêtre Google Play) ; sinon la fiche Play Store (2.5.0)
+        @JavascriptInterface
+        public void askReview() {
+            runOnUiThread(() -> {
+                try {
+                    com.google.android.play.core.review.ReviewManager rm = com.google.android.play.core.review.ReviewManagerFactory.create(MainActivity.this);
+                    rm.requestReviewFlow().addOnCompleteListener(t -> {
+                        if (t.isSuccessful()) rm.launchReviewFlow(MainActivity.this, t.getResult());
+                        else openPlayPage();
+                    });
+                } catch (Exception e) { openPlayPage(); }
+            });
+        }
         @JavascriptInterface
         public void openSettings() {
             runOnUiThread(() -> {
