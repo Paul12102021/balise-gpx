@@ -5,7 +5,7 @@
 
 // La page et le code doivent être de la même version. Sinon (page gardée en cache
 // par le téléphone ou par GitHub), on recharge une page fraîche, au plus 3 fois.
-const APP_VERSION = 255;
+const APP_VERSION = 256;
 try {
   const meta = document.querySelector('meta[name="balise-version"]');
   const pageV = meta ? +meta.content : 0;
@@ -7519,7 +7519,8 @@ function statDims(d) {
     voice: store.get('voice') === '0' ? 'off' : 'on', eco: store.get('eco') || 'off', poi: store.get('poi') === '0' ? 'off' : 'on',
     night: store.get('alertNight') === '1' ? 'on' : 'off', lit: store.get('litNight') === '1' ? 'on' : 'off',
     strava: (() => { try { return stvOn() ? 'oui' : 'non'; } catch { return 'non'; } })(), drive: store.get('gdAuto') === '1' ? 'auto' : 'non',
-    layer: (LAYERS[layerIdx] || {}).id || '?', age: statAge(d)
+    layer: (LAYERS[layerIdx] || {}).id || '?', age: statAge(d),
+    os: (m => m ? 'android' + m[1] : '')(ua.match(/Android (\d+)/)) || (m => m ? 'ios' + m[1] : '')(ua.match(/OS (\d+)_\d+.* like Mac OS X/)) || 'autre'
   };
 }
 let statSending = false;
@@ -7531,8 +7532,13 @@ async function statFlush() {
   try {
     for (const d of days) {
       if (d < new Date(Date.now() - 8 * 864e5).toISOString().slice(0, 10)) { delete all[d]; continue; } // trop vieux : oublié
-      const r = await fetch(STRAVA_RELAY + '/stats', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ d, c: all[d], dims: statDims(d) }) });
+      const first = store.get('statFirst'), done = (store.get('statRet') || '').split(',');
+      const age = first && first !== 'ancien' ? Math.round((Date.parse(d) - Date.parse(first)) / 864e5) : -1;
+      const ms = [1, 7, 30].filter(m => age >= m && !done.includes(String(m)));
+      const body = { d, c: all[d], dims: statDims(d) }; if (ms.length) body.ret = { first, m: ms };
+      const r = await fetch(STRAVA_RELAY + '/stats', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
       if (!r.ok && r.status !== 400) break;
+      if (ms.length) store.set('statRet', done.concat(ms.map(String)).filter(Boolean).join(','));
       delete all[d];
     }
     const cur = statLoad(); for (const d of Object.keys(cur)) if (!(d in all) && d < today) delete cur[d];
@@ -7559,6 +7565,38 @@ document.addEventListener('click', e => { const b = e.target.closest('[id]'); if
 // évènements internes
 const _st = (name, fn, before) => function (...a) { try { before ? before.apply(this, a) : stat(name); } catch {} return fn.apply(this, a); };
 startNav = _st('nav', startNav, free => { stat('nav'); stat(free ? 'nav_libre' : track && track.route ? 'nav_vers_lieu' : 'nav_trace'); });
+// précision GPS pendant l'enregistrement, par tranche (jamais la position) : comptée en mémoire, ajoutée chaque minute
+const gpsAcc = { gps_bon: 0, gps_moyen: 0, gps_mauvais: 0 };
+const gpsFlush = () => { for (const k in gpsAcc) if (gpsAcc[k]) { stat(k, gpsAcc[k]); gpsAcc[k] = 0; } };
+setInterval(gpsFlush, 60000);
+onPos = (fn => function (pos) {
+  try { if (recording && pos && !pos.sim && pos.acc != null) gpsAcc[pos.acc <= 10 ? 'gps_bon' : pos.acc <= 30 ? 'gps_moyen' : 'gps_mauvais']++; } catch {}
+  return fn.apply(this, arguments);
+})(onPos);
+// sortie faite au moins un moment sans réseau
+addEventListener('offline', () => { if (recording) store.set('statOffline', '1'); });
+// batterie au début de l'enregistrement (ignorée si le téléphone charge)
+const battGet = () => navigator.getBattery ? navigator.getBattery().catch(() => null) : Promise.resolve(null);
+battGet().then(b => b && b.addEventListener('chargingchange', () => { if (recording && b.charging) store.set('statBatt', 'x'); }));
+beginRecording = (fn => function () {
+  try {
+    store.set('statOffline', navigator.onLine === false ? '1' : '');
+    store.set('statBatt', ''); battGet().then(b => { if (b && !b.charging) store.set('statBatt', JSON.stringify({ l: b.level, t: Date.now() })); else store.set('statBatt', 'x'); });
+  } catch {}
+  return fn.apply(this, arguments);
+})(beginRecording);
+endActivity = (fn => async function (keep) {
+  try {
+    gpsFlush();
+    if (keep && rec.length > 1) {
+      if (store.get('statOffline') === '1') stat('sortie_hors_ligne');
+      const b0 = (() => { try { return JSON.parse(store.get('statBatt') || 'null'); } catch { return null; } })(), b = b0 && b0.t ? await battGet() : null;
+      if (b && !b.charging && b0.l > b.level) { const h = (Date.now() - b0.t) / 3600e3; if (h >= 0.25 && h < 24) { stat('batt_pct', Math.round((b0.l - b.level) * 100)); stat('batt_h', Math.round(h * 100) / 100); } }
+    }
+    store.set('statBatt', ''); store.set('statOffline', '');
+  } catch {}
+  return fn.apply(this, arguments);
+})(endActivity);
 endActivity = (fn => async function (keep) {
   try {
     if (keep && rec.length > 1) {
@@ -7574,6 +7612,20 @@ makeLoop = (fn => async function () {
   const r = await fn.apply(this, arguments); stat('boucle_secondes', Math.round((Date.now() - t0) / 1000)); stat('boucle_calculs'); return r;
 })(makeLoop);
 goTo = _st('vers_lieu', goTo);
+// services d'itinéraire : réussites et échecs (hors absence de réseau)
+const _svc = (name, fn) => async function () {
+  try { const r = await fn.apply(this, arguments); stat('svc_' + name + '_ok'); return r; }
+  catch (e) { if (navigator.onLine !== false) stat('svc_' + name + '_echec'); throw e; }
+};
+brFetchMain = _svc('brouter', brFetchMain);
+osrmFetch = _svc('osrm', osrmFetch);
+// issue d'une recherche de boucle ratée (repérée par le message affiché)
+toast = (fn => function (t) {
+  try { const m = String(t); if (/^Aucune boucle trouvée/.test(m)) stat('boucle_introuvable'); else if (/^Le serveur d'itinéraires ne répond pas/.test(m)) stat('boucle_echec_serveur'); else if (/^Pas de réseau : boucle/.test(m)) stat('boucle_sans_reseau'); } catch {}
+  return fn.apply(this, arguments);
+})(toast);
+// démarrage : page ouverte → carte prête, puis carte entièrement affichée
+ready.then(() => { stat('perf_demarrage_ms', Math.round(performance.now())); stat('perf_demarrage_n'); map.once('idle', () => { stat('perf_carte_ms', Math.round(performance.now())); stat('perf_carte_n'); }); });
 requestRejoin = _st('', requestRejoin, manual => stat(manual ? 'retour_trace_manuel' : 'retour_trace_auto'));
 reroute = _st('recalcul', reroute);
 stvUploadNow = (fn => async function () { try { const r = await fn.apply(this, arguments); stat('strava_envoi_ok'); return r; } catch (e) { stat('strava_envoi_echec'); throw e; } })(stvUploadNow);

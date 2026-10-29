@@ -380,14 +380,17 @@ async function statsIn(req, env, json) {
   for (const [k, v] of Object.entries(dims)) rows.push([`d:${k}:${v}`, 1]);
   for (const [id, , test] of ST_FUNNEL) if (test(c)) rows.push(['u:' + id, 1]);
   const out = (c.sortie_pied || 0) + (c.sortie_velo || 0);
-  for (const dn of ['ver', 'plat']) if (dims[dn]) {
+  for (const dn of ['ver', 'plat', 'os']) if (dims[dn]) {
     const p = `x:${dn}=${dims[dn]}:`; rows.push([p + 'dev', 1]);
-    if (out) rows.push([p + 'sortie', out]); if (c.sortie_coupee) rows.push([p + 'coupee', c.sortie_coupee]); if (c.coupure_min) rows.push([p + 'coupure_min', c.coupure_min]);
+    for (const [k, v] of [['sortie', out], ['coupee', c.sortie_coupee], ['coupure_min', c.coupure_min], ['batt_pct', c.batt_pct], ['batt_h', c.batt_h]]) if (v) rows.push([p + k, v]);
   }
   const grp = dims.plat === 'android' ? 'a|' : 'w|';
+  // fidélité : rangée au premier jour de l'appareil (sa « cohorte ») ; m = jalon atteint (1, 7 ou 30 jours après)
+  const ret = [], r = b.ret, f = r && typeof r.first === 'string' && /^\d{4}-\d\d-\d\d$/.test(r.first) ? r.first : null;
+  if (f && f <= day && Date.parse(f) > t - 400 * 864e5 && Array.isArray(r.m)) for (const m of new Set(r.m)) if ([1, 7, 30].includes(m)) ret.push([f, 'ret:j' + m]);
   await stInit(env);
   const st = env.STATS.prepare('INSERT INTO daily (day, k, v) VALUES (?1, ?2, ?3) ON CONFLICT (day, k) DO UPDATE SET v = v + excluded.v');
-  await env.STATS.batch(rows.map(([k, v]) => st.bind(day, grp + k, v)));
+  await env.STATS.batch([...rows.map(([k, v]) => st.bind(day, grp + k, v)), ...ret.map(([d, k]) => st.bind(d, grp + k, 1))]);
   return json({ ok: true });
 }
 const ST_LABELS = {
@@ -446,7 +449,7 @@ async function statsHtml(env, url, k, esc) {
   await stInit(env);
   const R = stRange(url), { f } = R;
   const T = await stTotals(env, R.from, R.to, f), P = R.p === 'all' ? {} : await stTotals(env, R.prevFrom, R.prevTo, f);
-  const byDay = await stDaily(env, R.from, R.to, f, ['dev', 'c:sortie_pied', 'c:sortie_velo', 'c:nav', 'd:age:nouveau']);
+  const byDay = await stDaily(env, R.from, R.to, f, ['dev', 'c:sortie_pied', 'c:sortie_velo', 'c:nav', 'd:age:nouveau', 'ret:j1', 'ret:j7', 'ret:j30']);
   const g = (o, key) => o[key] || 0, fmt = v => Math.round(v).toLocaleString('fr-FR'), pc = (a, b) => b ? Math.round(a / b * 100) + ' %' : '–';
   const link = o => '?' + Object.entries(Object.assign({ key: k, tab: 'stats', p: R.p, f, from: R.p === 'custom' ? R.from : null, to: R.p === 'custom' ? R.to : null, g: R.g }, o)).filter(([, v]) => v != null && v !== '').map(([a, v]) => a === 'key' ? 'key=' + v : a + '=' + encodeURIComponent(v)).join('&');
   const nDays = Object.values(byDay).filter(d => d.dev).length || 1;
@@ -501,16 +504,47 @@ ${kpi('Calcul d’une boucle', g(T, 'c:boucle_calculs') ? (g(T, 'c:boucle_second
   const cross = (dn, title, name, sort) => { const m = {};
     for (const [key, v] of pref(`x:${dn}=`)) { const i = key.lastIndexOf(':'), id = key.slice(0, i); (m[id] = m[id] || {})[key.slice(i + 1)] = v; }
     const ids = Object.keys(m).sort(sort); if (!ids.length) return '';
-    return `<table class="tb"><tr><th>${title}</th><th>Utilisation</th><th>Sorties</th><th>Coupure GPS</th></tr>${ids.map(id => { const x = m[id]; return `<tr><td>${esc(name(id))}</td><td>${pc(x.dev || 0, newDays)}</td><td>${fmt(x.sortie || 0)}</td><td>${x.sortie ? pc(x.coupee || 0, x.sortie) + (x.coupure_min ? ` <small>${fmt(x.coupure_min)} min</small>` : '') : '–'}</td></tr>`; }).join('')}</table>`; };
+    return `<table class="tb"><tr><th>${title}</th><th>Usage</th><th>Sorties</th><th>Coupure GPS</th><th>Batterie</th></tr>${ids.map(id => { const x = m[id]; return `<tr><td>${esc(name(id))}</td><td>${pc(x.dev || 0, newDays)}</td><td>${fmt(x.sortie || 0)}</td><td>${x.sortie ? pc(x.coupee || 0, x.sortie) + (x.coupure_min ? ` <small>${fmt(x.coupure_min)} min</small>` : '') : '–'}</td><td>${x.batt_h ? (x.batt_pct / x.batt_h).toLocaleString('fr-FR', { maximumFractionDigits: 1 }) + ' %/h' : '–'}</td></tr>`; }).join('')}</table>`; };
   const PLAT = { android: 'Appli Android', 'web-android': 'Site, Android', 'web-ios': 'Site, iPhone', 'web-pc': 'Site, ordinateur' };
-  const vt = cross('ver', 'Version', v => 'v' + v, (a, b) => b - a) + cross('plat', 'Appareil', v => PLAT[v] || v);
-  const versions = vt ? `<div class="scard"><h3>Versions et coupures GPS</h3>${vt}<p class="note">Utilisation : part des jours d’utilisation. Coupure GPS : part des sorties avec au moins un trou de position.</p></div>` : '';
+  const osName = v => v.startsWith('android') ? 'Android ' + v.slice(7) : v.startsWith('ios') ? 'iOS ' + v.slice(3) : v === 'autre' ? 'Ordinateur / autre' : v;
+  const vt = cross('ver', 'Version', v => 'v' + v, (a, b) => b - a) + cross('plat', 'Appareil', v => PLAT[v] || v) + cross('os', 'Système', osName, (a, b) => (parseInt(b.replace(/\D/g, '')) || 0) - (parseInt(a.replace(/\D/g, '')) || 0));
+  const versions = vt ? `<div class="scard"><h3>Versions, coupures GPS et batterie</h3>${vt}<p class="note">Usage : part des jours d’utilisation. Coupure GPS : part des sorties avec au moins un trou de position. Batterie : consommation moyenne pendant les sorties.</p></div>` : '';
+  // sorties en détail, fiabilité, fidélité
+  const kv = (title, rows, note) => { rows = rows.filter(Boolean); return rows.length ? `<div class="scard"><h3>${title}</h3><div class="kv">${rows.map(([l, v, sub]) => `<div><span>${l}</span><b>${v}${sub ? ` <small>${sub}</small>` : ''}</b></div>`).join('')}</div>${note ? `<p class="note">${note}</p>` : ''}</div>` : ''; };
+  const dur = m => m >= 60 ? Math.floor(m / 60) + ' h ' + String(Math.round(m % 60)).padStart(2, '0') : Math.round(m) + ' min';
+  const km1 = v => v.toLocaleString('fr-FR', { maximumFractionDigits: 1 }) + ' km', sec = v => (v / 1000).toLocaleString('fr-FR', { maximumFractionDigits: 1 }) + ' s';
+  const perN = (a, b) => b ? (a / b).toLocaleString('fr-FR', { maximumFractionDigits: 1 }) : '–';
+  const nNav = g(T, 'c:nav'), gps = ['bon', 'moyen', 'mauvais'].map(x => g(T, 'c:gps_' + x)), gpsT = gps.reduce((a, b) => a + b, 0);
+  const detail = kv('Sorties en détail', [
+    out && ['Durée moyenne', dur(g(T, 'c:minutes_sortie') / out)],
+    g(T, 'c:sortie_pied') && ['Distance moyenne à pied', km1(g(T, 'c:km_pied') / g(T, 'c:sortie_pied'))],
+    g(T, 'c:sortie_velo') && ['Distance moyenne à vélo', km1(g(T, 'c:km_velo') / g(T, 'c:sortie_velo'))],
+    (out || g(T, 'c:sortie_supprimee')) && ['Sorties gardées', pc(out, out + g(T, 'c:sortie_supprimee')), `${fmt(g(T, 'c:sortie_supprimee'))} jetée(s)`],
+    nNav && ['Recalculs par navigation', perN(g(T, 'c:recalcul'), nNav)],
+    nNav && ['Retours à la trace par navigation', perN(g(T, 'c:retour_trace_manuel') + g(T, 'c:retour_trace_auto'), nNav)],
+    out && ['Faites sans réseau (au moins un moment)', pc(g(T, 'c:sortie_hors_ligne'), out)],
+    g(T, 'c:batt_h') && ['Batterie consommée', (g(T, 'c:batt_pct') / g(T, 'c:batt_h')).toLocaleString('fr-FR', { maximumFractionDigits: 1 }) + ' % / h', `sur ${dur(g(T, 'c:batt_h') * 60)} mesurées`],
+    gpsT && ['Précision GPS', `${pc(gps[0], gpsT)} bonne`, `${pc(gps[1], gpsT)} moyenne · ${pc(gps[2], gpsT)} mauvaise`]
+  ], 'Précision GPS : bonne à 10 m près, moyenne jusqu’à 30 m, mauvaise au-delà. Batterie : sorties sans recharge, d’au moins 15 min.');
+  const svc = n => { const ok = g(T, `c:svc_${n}_ok`), ko = g(T, `c:svc_${n}_echec`); return ok + ko ? [n === 'brouter' ? 'Itinéraires BRouter' : 'Itinéraires de secours (OSRM)', pc(ok, ok + ko) + ' réussis', `${fmt(ok + ko)} demandes`] : null; };
+  const loops = g(T, 'c:boucle_calculs');
+  const fiab = kv('Fiabilité', [
+    g(T, 'c:perf_demarrage_n') && ['Démarrage (carte prête)', sec(g(T, 'c:perf_demarrage_ms') / g(T, 'c:perf_demarrage_n'))],
+    g(T, 'c:perf_carte_n') && ['Carte entièrement affichée', sec(g(T, 'c:perf_carte_ms') / g(T, 'c:perf_carte_n'))],
+    svc('brouter'), svc('osrm'),
+    loops && ['Boucles introuvables', pc(g(T, 'c:boucle_introuvable'), loops), `${fmt(g(T, 'c:boucle_echec_serveur'))} échec(s) serveur · ${fmt(g(T, 'c:boucle_sans_reseau'))} sans réseau`]
+  ], 'Temps moyens depuis l’ouverture de l’appli. Les demandes faites sans réseau ne comptent pas comme des échecs.');
+  const yest0 = new Date(Date.now() - 864e5).toISOString().slice(0, 10);
+  const ret = [1, 7, 30].map(m => { const lim = new Date(Date.parse(yest0) - m * 864e5).toISOString().slice(0, 10); let n = 0, r = 0;
+    for (const [d, v] of Object.entries(byDay)) if (d <= lim) { n += v['d:age:nouveau'] || 0; r += v['ret:j' + m] || 0; }
+    return [`Revenus après ${m} jour${m > 1 ? 's' : ''}`, n ? pc(r, n) : '–', n ? `${fmt(r)} sur ${fmt(n)}` : 'pas encore assez de recul']; });
+  const fidel = g(T, 'd:age:nouveau') ? kv('Fidélité des nouveaux appareils', ret, 'Parmi les appareils arrivés pendant la période, part de ceux qui ont rouvert l’appli au moins 1, 7 ou 30 jours après leur premier jour. Seuls comptent ceux arrivés assez tôt.') : '';
   const feats = Object.entries(ST_LABELS).map(([key, l]) => [l, g(T, 'c:' + key)]);
-  const dimNames = { plat: 'Appli / navigateur', lang: 'Langue', ver: 'Version', mode: 'Mode', screen: 'Écran', strava: 'Strava connecté', drive: 'Sauvegarde Drive', theme: 'Thème', voice: 'Voix', eco: 'Économie batterie', poi: 'Points utiles', night: 'Alerte nuit', lit: 'De nuit : éclairé', units: 'Unités', layer: 'Fond de carte' };
+  const dimNames = { plat: 'Appli / navigateur', os: 'Système', lang: 'Langue', ver: 'Version', mode: 'Mode', screen: 'Écran', strava: 'Strava connecté', drive: 'Sauvegarde Drive', theme: 'Thème', voice: 'Voix', eco: 'Économie batterie', poi: 'Points utiles', night: 'Alerte nuit', lit: 'De nuit : éclairé', units: 'Unités', layer: 'Fond de carte' };
   const dims = Object.entries(dimNames).map(([d, l]) => { const arr = pref(`d:${d}:`); if (!arr.length) return ''; arr.sort((a, b) => b[1] - a[1]);
     return `<div class="dim"><b>${l}</b>${arr.map(([v, c]) => `<span>${esc(v)} <i>${Math.round(c / devDays * 100)} %</i></span>`).join('')}</div>`; }).join('');
   const known = new Set(Object.keys(ST_LABELS).map(x => 'c:' + x));
-  const others = Object.entries(T).filter(([key]) => key.startsWith('c:') && !known.has(key) && !/^c:(err:|carte_|fond_|heure_)/.test(key)).map(([key, v]) => [key.slice(2), v]);
+  const others = Object.entries(T).filter(([key]) => key.startsWith('c:') && !known.has(key) && !/^c:(err:|carte_|fond_|heure_|svc_|perf_|gps_|batt_|boucle_introuvable|boucle_echec_serveur|boucle_sans_reseau|boucle_calculs|boucle_secondes|sortie_hors_ligne|sortie_pied|sortie_velo|sortie_coupee|coupure_min|km_|minutes_sortie|open|resume)/.test(key)).map(([key, v]) => [key.slice(2), v]);
   // filtres
   const chip = (on, href, l) => `<a class="${on ? 'on' : ''}" href="${href}">${l}</a>`;
   const filt = [['all', 'Tout'], ['app', '📱 Appli'], ['web', '🌐 Site web']].map(([x, l]) => chip(x === f, link({ f: x }), l)).join('');
@@ -528,13 +562,14 @@ ${kpi('Calcul d’une boucle', g(T, 'c:boucle_calculs') ? (g(T, 'c:boucle_second
 .range{font-weight:700;margin:6px 0 8px}.kpis{display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:8px}.k{background:var(--card);border-radius:14px;padding:10px 12px}.k b{display:block;font-size:24px}.k small{color:var(--mut);display:block}.k i{font-style:normal;font-size:12px;font-weight:700}.k i.up{color:#3A9A6A}.k i.dn{color:#C8412F}
 .scard{display:block;background:var(--card);border-radius:14px;padding:12px;margin-top:10px}.scard h3{margin:0 0 8px;font-size:13px;color:var(--mut);text-transform:uppercase;letter-spacing:.05em}.scard svg{color:var(--ink)}
 .bars div{display:grid;grid-template-columns:minmax(120px,40%) 1fr auto;gap:8px;align-items:center;font-size:13px;margin:4px 0}.bars em{display:block;height:10px}.bars u{display:block;height:10px;border-radius:5px}.bars b{font-size:12px;color:var(--mut)}
+.kv div{display:flex;justify-content:space-between;gap:10px;font-size:13px;padding:5px 0;border-top:1px solid var(--line)}.kv div:first-child{border-top:0}.kv b{text-align:right;font-weight:700}.kv small{display:block;font-weight:400;color:var(--mut);font-size:11px}
 .tb{width:100%;border-collapse:collapse;font-size:13px;margin-bottom:10px}.tb th{text-align:left;color:var(--mut);font-weight:600;font-size:12px;padding:4px 6px 4px 0}.tb td{padding:5px 6px 5px 0;border-top:1px solid var(--line)}.tb small{color:var(--mut)}
 .leg{display:flex;gap:12px;flex-wrap:wrap;font-size:12px;color:var(--mut)}.leg i{display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:4px}
 .dim{margin:6px 0;font-size:13px;display:flex;flex-wrap:wrap;gap:6px;align-items:center}.dim b{width:100%;font-size:12px;color:var(--mut)}.dim span{background:var(--chip);border-radius:8px;padding:2px 8px}.dim i{font-style:normal;color:var(--mut)}
 .note{font-size:12px;color:var(--mut)}</style>
 <div class="per">${filt}</div><div class="per">${pers}</div>${form}
 <div class="range">${per}${fl}${prevNote}</div>${g(T, 'dev') ? '' : '<p class="note">Aucune donnée pour cette période' + (f === 'all' ? '' : ' et ce filtre (le classement appli / site web existe depuis le 29 octobre 2026)') + '.</p>'}${kpis}${chart}
-${funnel}${ages}${hours}${versions}
+${funnel}${detail}${fiab}${fidel}${ages}${hours}${versions}
 ${barList('Fonctions utilisées', feats)}
 ${barList('Cartes hors ligne téléchargées', pref('c:carte_').map(([c, v]) => [({ fr: 'France', es: 'Espagne', at: 'Autriche', be: 'Belgique', ch: 'Suisse', gb: 'Royaume-Uni', de: 'Allemagne', ca: 'Canada', us: 'États-Unis', zone: 'Zone libre' })[c] || c, v]))}
 ${barList('Fonds de carte choisis', pref('c:fond_'), '#2F5E45')}
