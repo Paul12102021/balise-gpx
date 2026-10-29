@@ -485,6 +485,17 @@ const exact = {
   'Économie d\'énergie Android activée : le GPS peut être coupé écran éteint. Désactive-la pour la sortie.': 'Android battery saver is on: GPS may stop when the screen is off. Turn it off for the outing.',
   'Réglages batterie': 'Battery settings',
   // ---- Mes traces : dossiers et ordre
+  "Renommer le dossier": "Rename folder",
+  "Nouveau dossier": "New folder",
+  "Créer": "Create",
+  "À faire": "To do",
+  "Déjà faites": "Done",
+  "Rando": "Hiking",
+  "Vélo": "Cycling",
+  "Vacances": "Holidays",
+  "Week-end": "Weekend",
+  "Ex. : Alpes été 2026": "E.g. Alps summer 2026",
+  "Ses traces sont gardées : elles reviennent dans « Mes traces ».": "Its tracks are kept: they go back to “My tracks”.",
   "Nom du dossier (projet, région, saison…)": "Folder name (project, region, season…)",
   "Sortie du dossier": "Removed from folder",
   "Vide": "Empty",
@@ -502,6 +513,7 @@ const exact = {
 };
 const D = '(\\d+(?:[.,]\\d+)?)';
 const patterns = [
+  [/^Supprimer le dossier « (.+) » \?$/, 'Delete the folder “$1”?'],
   [/^Rangée dans « (.+) »$/, 'Filed in “$1”'],
   [/^(\d+) traces · (.+)$/, '$1 tracks · $2'],
   [/^1 trace · (.+)$/, '1 track · $1'],

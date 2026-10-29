@@ -487,6 +487,17 @@ const exact = {
   'Économie d\'énergie Android activée : le GPS peut être coupé écran éteint. Désactive-la pour la sortie.': 'El ahorro de energía de Android está activado: el GPS puede cortarse con la pantalla apagada. Desactívalo durante la salida.',
   'Réglages batterie': 'Ajustes de batería',
   // ---- Mes traces : dossiers et ordre
+  "Renommer le dossier": "Renombrar la carpeta",
+  "Nouveau dossier": "Nueva carpeta",
+  "Créer": "Crear",
+  "À faire": "Por hacer",
+  "Déjà faites": "Hechas",
+  "Rando": "Senderismo",
+  "Vélo": "Bici",
+  "Vacances": "Vacaciones",
+  "Week-end": "Fin de semana",
+  "Ex. : Alpes été 2026": "Ej.: Alpes verano 2026",
+  "Ses traces sont gardées : elles reviennent dans « Mes traces ».": "Sus tracks se conservan: vuelven a «Mis tracks».",
   "Nom du dossier (projet, région, saison…)": "Nombre de la carpeta (proyecto, región, temporada…)",
   "Sortie du dossier": "Sacada de la carpeta",
   "Vide": "Vacía",
@@ -503,6 +514,7 @@ const exact = {
   "Reste appuyé sur une trace puis glisse-la pour changer l'ordre, ou lâche-la sur un dossier pour l'y ranger.": "Mantén pulsado un track y arrástralo para cambiar el orden, o suéltalo sobre una carpeta para guardarlo allí.",
 };
 const patterns = [
+  [/^Supprimer le dossier « (.+) » \?$/, '¿Eliminar la carpeta «$1»?'],
   [/^Rangée dans « (.+) »$/, 'Guardado en «$1»'],
   [/^(\d+) traces · (.+)$/, '$1 tracks · $2'],
   [/^1 trace · (.+)$/, '1 track · $1'],

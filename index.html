@@ -9,13 +9,13 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<meta name="balise-version" content="258">
+<meta name="balise-version" content="259">
 <title>Pisteo</title>
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" href="icon.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
 <link rel="stylesheet" href="vendor/maplibre-gl.css">
-<link rel="stylesheet" href="app.css?v=258">
+<link rel="stylesheet" href="app.css?v=259">
 </head>
 <body>
 <div id="map" aria-label="Carte"></div>
@@ -323,6 +323,16 @@
     <p id="libEmpty" class="note" hidden>Les traces que tu ouvres ou enregistres apparaîtront ici.</p>
     <p id="libTip" class="note">Pour créer un parcours (boucle, tracé point par point, parcours balisés) : bouton « Naviguer » quand aucune trace n'est ouverte, ou « ＋ Autre trajet ». Astuce : dans ton gestionnaire de fichiers ou un mail, fais « Partager » sur un GPX puis choisis Pisteo.</p>
   </div>
+</div>
+
+<div id="libDlg" class="lib-dlg" hidden>
+  <form class="lib-dlg-box" role="dialog" aria-labelledby="libDlgTitle" onsubmit="return false">
+    <b id="libDlgTitle"></b>
+    <p id="libDlgText"></p>
+    <input id="libDlgIn" type="text" maxlength="40" autocomplete="off" enterkeyhint="done" placeholder="Ex. : Alpes été 2026">
+    <div id="libDlgSug" class="lib-dlg-sug"></div>
+    <div class="lib-dlg-btns"><button id="libDlgNo" type="button" class="btn">Annuler</button><button id="libDlgOk" type="button" class="btn go">Créer</button></div>
+  </form>
 </div>
 
 <div id="sorties" class="lib" hidden>
@@ -864,8 +874,8 @@
 
 <script src="vendor/maplibre-gl.js"></script>
 <script src="vendor/qrcode.js"></script>
-<script src="i18n/en.js?v=258"></script>
-<script src="i18n/es.js?v=258"></script>
-<script src="app.js?v=258"></script>
+<script src="i18n/en.js?v=259"></script>
+<script src="i18n/es.js?v=259"></script>
+<script src="app.js?v=259"></script>
 </body>
 </html>

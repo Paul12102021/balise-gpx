@@ -5,7 +5,7 @@
 
 // La page et le code doivent être de la même version. Sinon (page gardée en cache
 // par le téléphone ou par GitHub), on recharge une page fraîche, au plus 3 fois.
-const APP_VERSION = 258;
+const APP_VERSION = 259;
 try {
   const meta = document.querySelector('meta[name="balise-version"]');
   const pageV = meta ? +meta.content : 0;
@@ -1055,13 +1055,39 @@ async function libPatch(ids, fn) {
     if (it) { fn(it); await idb('readwrite', st => st.put(it)).catch(() => {}); }
   }
 }
-function libAskName(def) {
-  const n = (prompt(tr('Nom du dossier (projet, région, saison…)'), def || '') || '').trim().slice(0, 40);
-  return n || null;
+// petite fenêtre de l'appli (à la place de celles du navigateur) : un nom à saisir, ou une confirmation
+function libDialog({ title, text, value, ok, danger, ask }) {
+  return new Promise(done => {
+    const w = $('libDlg'), inp = $('libDlgIn'), sug = $('libDlgSug');
+    $('libDlgTitle').textContent = tr(title);
+    $('libDlgText').textContent = text ? tr(text) : ''; $('libDlgText').hidden = !text;
+    inp.hidden = !ask; sug.hidden = !ask; sug.innerHTML = '';
+    $('libDlgOk').textContent = tr(ok); $('libDlgOk').className = 'btn ' + (danger ? 'danger' : 'go');
+    const finish = v => { w.hidden = true; w.onclick = null; inp.onkeydown = null; done(v); };
+    const valid = () => { $('libDlgOk').disabled = ask && !inp.value.trim(); };
+    if (ask) {
+      inp.value = value || ''; inp.oninput = valid;
+      inp.onkeydown = e => { if (e.key === 'Enter' && inp.value.trim()) finish(inp.value.trim().slice(0, 40)); };
+      const have = new Set(libFoldersStored());
+      for (const t of ['À faire', 'Déjà faites', 'Rando', 'Vélo', 'Vacances', 'Week-end']) {
+        if (have.has(tr(t)) || value) continue;
+        const c = document.createElement('button'); c.type = 'button'; c.className = 'lib-chip'; c.textContent = tr(t);
+        c.onclick = () => { inp.value = c.textContent; valid(); inp.focus(); }; sug.appendChild(c);
+      }
+      sug.hidden = !sug.children.length;
+    }
+    valid();
+    $('libDlgOk').onclick = () => finish(ask ? inp.value.trim().slice(0, 40) || null : true);
+    $('libDlgNo').onclick = () => finish(ask ? null : false);
+    w.onclick = e => { if (e.target === w) finish(ask ? null : false); };
+    w.hidden = false;
+    if (ask) setTimeout(() => { inp.focus(); inp.select(); }, 60);
+  });
 }
+const libAskName = def => libDialog({ title: def ? 'Renommer le dossier' : 'Nouveau dossier', value: def, ok: def ? 'Renommer' : 'Créer', ask: true });
 async function libNewFolder(moveId) {
   const items = (await listRecent()).filter(it => !isRec(it)), fs = libFolders(items);
-  const n = libAskName(''); if (!n) return;
+  const n = await libAskName(''); if (!n) return;
   if (!fs.includes(n)) { fs.push(n); libSaveFolders(fs); }
   if (moveId) await libMoveTo(moveId, n); else renderLib();
 }
@@ -1126,7 +1152,7 @@ async function openLib() {
 $('libNewFold').onclick = () => libNewFolder(null);
 $('libBack').onclick = () => { libFolder = null; libMoveOpen = null; renderLib(); };
 $('libFoldRen').onclick = async () => {
-  const old = libFolder, n = libAskName(old); if (!n || n === old) return;
+  const old = libFolder, n = await libAskName(old); if (!n || n === old) return;
   const all = (await listRecent()).filter(it => !isRec(it)), fs = libFolders(all);
   if (fs.includes(n)) { toast(tr('Un dossier porte déjà ce nom'), 3000); return; }
   libSaveFolders(fs.map(f => f === old ? n : f));
@@ -1135,7 +1161,7 @@ $('libFoldRen').onclick = async () => {
 };
 $('libFoldDel').onclick = async () => {
   const f = libFolder, all = (await listRecent()).filter(it => !isRec(it)), inF = all.filter(it => it.folder === f);
-  if (inF.length && !confirm(tr('Supprimer le dossier « ' + f + ' » ? Ses traces sont gardées et reviennent dans « Mes traces ».'))) return;
+  if (!await libDialog({ title: 'Supprimer le dossier « ' + f + ' » ?', text: inF.length ? 'Ses traces sont gardées : elles reviennent dans « Mes traces ».' : '', ok: 'Supprimer', danger: true })) return;
   libSaveFolders(libFolders(all).filter(x => x !== f));
   await libPatch(inF.map(it => it.id), it => { delete it.folder; delete it.pos; });
   libFolder = null; renderLib();

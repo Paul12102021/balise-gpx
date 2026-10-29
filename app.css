@@ -302,6 +302,26 @@ body.nav .toast { top: auto; bottom: calc(var(--nav-h, 92px) + 90px); }
 .lib-back { order: 1; display: inline-flex; align-items: center; gap: 4px; min-height: 36px; padding: 0 10px 0 4px; border: 0; background: none; color: var(--muted); font: inherit; font-weight: 600; cursor: pointer; }
 .lib-back svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 2.4; stroke-linecap: round; stroke-linejoin: round; }
 .lib-hint { margin: -4px 0 0; font-size: 13px; }
+.lib-fold .lib-item i { background: color-mix(in srgb, var(--go) 14%, transparent); color: var(--go-ink); }
+/* fenêtre « Nouveau dossier » : en haut de l'écran pour rester visible au-dessus du clavier */
+.lib-dlg { position: fixed; inset: 0; z-index: 45; background: rgba(10,16,13,.5); display: flex; justify-content: center; align-items: flex-start;
+  padding: calc(var(--sa-t) + 12vh) 16px 16px; animation: libDlgIn .16s ease-out; }
+.lib-dlg-box { width: 100%; max-width: 420px; margin: 0; background: var(--panel); color: var(--ink); border-radius: 18px; padding: 20px 18px 16px;
+  display: flex; flex-direction: column; gap: 14px; box-shadow: 0 18px 50px rgba(0,0,0,.35); border: 1px solid var(--line); }
+.lib-dlg-box > b { font-size: 19px; line-height: 1.25; }
+.lib-dlg-box p { margin: -6px 0 0; color: var(--muted); font-size: 15px; line-height: 1.4; }
+.lib-dlg-box input { width: 100%; box-sizing: border-box; min-height: 50px; padding: 0 14px; border-radius: 12px; border: 1.5px solid var(--line);
+  background: var(--field); color: var(--ink); font: inherit; font-size: 17px; outline: none; }
+.lib-dlg-box input:focus { border-color: var(--go-ink); box-shadow: 0 0 0 3px color-mix(in srgb, var(--go) 22%, transparent); }
+.lib-dlg-box input::placeholder { color: var(--muted); opacity: .8; }
+.lib-dlg-sug { display: flex; flex-wrap: wrap; gap: 6px; margin-top: -4px; }
+.lib-dlg-sug .lib-chip { min-height: 32px; font-size: 13px; font-weight: 500; }
+.lib-dlg-btns { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 2px; }
+.lib-dlg-btns .btn { min-height: 46px; }
+@keyframes libDlgIn { from { opacity: 0; } to { opacity: 1; } }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .lib-dlg { background: rgba(0,0,0,.6); } :root:not([data-theme="light"]) .lib-dlg-box { border-color: #3a4740; } }
+:root[data-theme="dark"] .lib-dlg { background: rgba(0,0,0,.6); }
+:root[data-theme="dark"] .lib-dlg-box { border-color: #3a4740; }
 
 /* ---------- Cartes hors ligne ---------- */
 .dl-box { display: flex; flex-direction: column; gap: 8px; padding: 12px; border: 1px solid var(--line); border-radius: 12px; }
