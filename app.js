@@ -7177,6 +7177,25 @@ endActivity = (fn => async function (keep) {
   if (ok) setTimeout(askReview, 2500);
   return r;
 })(endActivity);
+// ---------- Réglages : noter Pisteo (appli Android) et partager Pisteo ----------
+function openPlayReview() {
+  try { stat('avis_reglages'); } catch {}
+  if (AND && AND.askReview) { try { AND.askReview(); return; } catch {} }
+  if (AND && AND.openExternal) { try { AND.openExternal(PLAY_URL); return; } catch {} }
+  window.open(PLAY_URL, '_blank');
+}
+$('btnRate').hidden = !(AND || PLAY_PUBLIC);
+$('btnRate').onclick = openPlayReview;
+$('btnShareApp').onclick = async () => {
+  try { stat('partage_appli'); } catch {}
+  // tant que l'appli n'est pas publique, le lien Play Store ne marche que pour les testeurs : on partage le site
+  const url = PLAY_PUBLIC ? PLAY_URL : 'https://pisteo.app';
+  const title = 'Pisteo';
+  const msg = tr('Pisteo : suis ta trace GPX à pied ou à vélo, avec alerte hors trace et cartes hors ligne.');
+  if (AND && AND.shareText) { try { AND.shareText(msg + ' ' + url, title); return; } catch {} }
+  if (navigator.share) { try { await navigator.share({ title, text: msg, url }); return; } catch (e) { if (e.name === 'AbortError') return; } }
+  toast(copyText(msg + ' ' + url) ? 'Lien copié : colle-le dans un message.' : url, 4000);
+};
 // ---------- avant de partir : batterie basse, économie d'énergie d'Android ----------
 async function battCheck() {
   try {
@@ -7532,10 +7551,18 @@ if ('serviceWorker' in navigator) {
 // Appli Android : bouton retour (ferme d'abord le panneau ouvert) et GPX reçu d'une autre appli
 if (AND) {
   $('btnPip').style.display = 'none'; // fenêtre réduite : pas encore dans l'appli Android
+  let backAt = 0;
   window.pisteoBack = () => {
     const open = [...document.querySelectorAll('.lib')].filter(x => !x.hidden);
     if (open.length) { open[open.length - 1].hidden = true; return true; }
     if (!$('more').hidden) { toggleMore(false); return true; }
+    // rien d'ouvert : un 1er appui prévient, un 2e dans les 2,5 s met l'appli en arrière-plan (évite les sorties par erreur)
+    if (Date.now() - backAt > 2500) {
+      backAt = Date.now();
+      toast(nav || recording ? 'Appuie encore sur Retour pour réduire Pisteo (le suivi continue)' : 'Appuie encore sur Retour pour quitter Pisteo', 2500);
+      return true;
+    }
+    backAt = 0; $('toast').hidden = true;
     return false;
   };
   window.pisteoCheckShared = checkShared;
