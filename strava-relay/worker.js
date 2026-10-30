@@ -13,13 +13,17 @@
 //
 // Statistiques anonymes (route /stats, onglet « Statistiques » de la page d'administration) :
 //   STATS  (base D1 liée au worker, Settings → Bindings → D1 database, nom de variable STATS) — la table se crée toute seule
+//
+// Alertes sur le téléphone de Paul (appli gratuite ntfy, sans compte) :
+//   NTFY_TOPIC  (secret)  nom de canal ntfy.sh, long et impossible à deviner ; vide = pas d'alerte
+//   → panne gênante qui commence ou se termine (services), et chaque matin s'il y a eu des erreurs chez les utilisateurs la veille
 
 const API = 'https://www.strava.com/api/v3';
 
 export default {
   // vérification des services extérieurs (déclencheur Cron du worker, toutes les heures) → https://api.pisteo.app/etat
   // espacée : rien la nuit, toutes les 2 h en journée, toutes les heures tant qu'un service est en panne (voir etatDue)
-  async scheduled(ev, env, ctx) { ctx.waitUntil(Promise.all([stFold(env).catch(() => 0), etatDue(env).then(go => go && etatCheck(env))])); },
+  async scheduled(ev, env, ctx) { ctx.waitUntil(Promise.all([stFold(env).catch(() => 0).then(() => morningCheck(env)).catch(() => 0), etatDue(env).then(go => go && etatCheck(env))])); },
   async fetch(req, env, ctx) {
     const origin = req.headers.get('Origin') || '';
     const allowed = (env.ALLOWED_ORIGIN || '').split(',').map(s => s.trim()).filter(Boolean);
@@ -420,7 +424,10 @@ const ST_LABELS = {
   envoyer_parcours: '« Envoyer le parcours »', lien_partage: 'Lien de partage', qr_code: 'QR code', gpx_ouvrir: 'GPX ouvert', gpx_partage: 'GPX partagé / exporté', trace_enregistrer: 'Trace enregistrée (Mes traces)',
   strava_envoi_ok: 'Envois Strava réussis', strava_envoi_echec: 'Envois Strava échoués', strava_manuel: 'Import Strava manuel', strava_connecter: 'Connexion Strava', drive_ok: 'Sauvegardes Drive', drive_echec: 'Sauvegardes Drive échouées', drive_restaurer: 'Restaurations Drive',
   photo_ajouter: 'Photos ajoutées (bouton)', photo_camera: 'Photo prise', retour_trace_manuel: 'Retour à la trace (bouton)', retour_trace_auto: 'Retour à la trace (auto)', recalcul: 'Itinéraire recalculé', retour_depart: 'Ramène-moi au départ', reprendre_parcours: 'Reprendre le parcours',
-  signaler_osm: 'Signalement OSM', pip: 'Image dans l’image', eco_bouton: 'Économie de batterie', avis: '« Mon avis »', sortie_supprimee: 'Sorties jetées', terminer: '« Terminer »'
+  signaler_osm: 'Signalement OSM', pip: 'Image dans l’image', eco_bouton: 'Économie de batterie', avis: '« Mon avis »', sortie_supprimee: 'Sorties jetées', terminer: '« Terminer »',
+  prep_ouvre: '« Préparer la sortie » ouvert', prep_jours: 'Étapes : nombre de jours choisi', prep_horsligne: '« Tout préparer sans réseau »', prep_feuille: 'Feuille de route',
+  securite_proche: 'Proche prévenu (heure de retour)', securite_retard: 'Rappel : heure de retour dépassée', secours_ouvre: 'Fiche Secours ouverte', secours_appel: 'Appel des secours (bouton)', secours_position: 'Position envoyée (Secours)',
+  avis_reglages: 'Noter Pisteo (Réglages)', partage_appli: 'Partager Pisteo (Réglages)'
 };
 // période et filtre demandés : p = hier | 7 | 30 | 90 | all | custom (from, to) ; f = all | app | web ; g = jour | semaine | mois
 function stRange(url) {
@@ -748,6 +755,29 @@ async function etatTry([id, name, u, test, crit, backup]) {
   } catch (e) { return { id, name, ok: false, code: 0, err: String(e.message || e).slice(0, 80), ms: Date.now() - t0, crit: !!crit, backup }; }
 }
 async function etatCheck(env) { return etatStore(env, await Promise.all(ETAT.map(etatOne))); }
+// ---------- Alertes (ntfy.sh) ----------
+async function notify(env, title, message, priority = 'default', tab = '') {
+  if (!env.NTFY_TOPIC) return false;
+  const r = await fetch('https://ntfy.sh/', { method: 'POST', headers: { 'Content-Type': 'application/json' }, signal: AbortSignal.timeout(10000),
+    body: JSON.stringify({ topic: env.NTFY_TOPIC, title, message: String(message).slice(0, 3000), priority: { high: 4, default: 3, low: 2 }[priority] || 3, tags: [tab || 'pisteo'] }) });
+  return r.ok;
+}
+// chaque matin (premier passage après 8 h, heure de Paris) : erreurs de la veille chez les utilisateurs (ni robots ni Paul)
+async function morningCheck(env) {
+  if (!env.STATS || !env.NTFY_TOPIC || parisHour() < 8) return;
+  const day = new Date(Date.now() - 864e5).toISOString().slice(0, 10);
+  if (env.CATALOGUE && await env.CATALOGUE.get('matin') === day) return;
+  if (env.CATALOGUE) await env.CATALOGUE.put('matin', day, { expirationTtl: 5 * 86400 });
+  const rows = (await env.STATS.prepare("SELECT k, v FROM daily WHERE day = ?1 AND (k LIKE 'a|%' OR k LIKE 'w|%')").bind(day).all()).results || [];
+  const g = k => rows.filter(r => r.k.slice(2) === k).reduce((s, r) => s + r.v, 0);
+  const errs = rows.filter(r => r.k.slice(2).startsWith('c:err:')).map(r => [r.k.slice(8), r.v]).sort((a, b) => b[1] - a[1]);
+  const nErr = errs.reduce((s, e) => s + e[1], 0), dev = g('dev'), cut = g('c:sortie_coupee'), out = g('c:sortie_pied') + g('c:sortie_velo');
+  const lines = [];
+  if (nErr >= 3) lines.push(`${nErr} erreurs JavaScript : ` + errs.slice(0, 3).map(([k, v]) => `${k} (${v})`).join(' ; '));
+  if (cut >= 2 && out && cut / out >= .3) lines.push(`${cut} sorties sur ${out} avec une coupure GPS`);
+  if (!lines.length) return;
+  await notify(env, `⚠️ Pisteo : à regarder (${day.slice(8)}/${day.slice(5, 7)})`, `${dev} appareils hier.\n` + lines.join('\n'), 'default', 'stats');
+}
 async function etatStore(env, res) {
   const prev = (env.CATALOGUE && await env.CATALOGUE.get('etat', 'json')) || { res: [] };
   const now = new Date().toISOString();
@@ -757,6 +787,12 @@ async function etatStore(env, res) {
   }
   const out = { t: now, down: res.filter(r => !r.ok).map(r => r.id), res };
   if (env.CATALOGUE) await env.CATALOGUE.put('etat', JSON.stringify(out));
+  // alerte : une panne gênante commence, ou elle est finie
+  try {
+    const was = prev.t ? etatVerdict(prev).level : 'ok', v = etatVerdict(out);
+    if (v.level === 'act' && was !== 'act') await notify(env, '🔴 Pisteo : ' + v.title, v.text, 'high', 'etat');
+    else if (was === 'act' && v.level !== 'act') await notify(env, '✅ Pisteo : panne terminée', v.level === 'ok' ? 'Tous les services fonctionnent.' : v.title + ' : ' + v.text, 'default', 'etat');
+  } catch {}
   if (env.STATS) try {
     await stInit(env);
     const st = env.STATS.prepare('INSERT INTO etat_log (t, id, ok, ms) VALUES (?1, ?2, ?3, ?4)');
