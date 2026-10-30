@@ -5,7 +5,7 @@
 
 // La page et le code doivent être de la même version. Sinon (page gardée en cache
 // par le téléphone ou par GitHub), on recharge une page fraîche, au plus 3 fois.
-const APP_VERSION = 263;
+const APP_VERSION = 264;
 // lien « pisteo.app/?moi=1 » (ou ?moi=0) : cet appareil est compté à part dans les statistiques (développeur).
 // Lu avant tout rechargement de version, qui ne garde pas les paramètres de l'adresse.
 try {
@@ -7687,10 +7687,13 @@ function gdToken(interactive) {
     c.requestAccessToken({ prompt: '' });
   }));
 }
-async function gdFetch(url, opt = {}, interactive = false) {
+async function gdFetch(url, opt = {}, interactive = false, retry = true) {
   const t = await gdToken(interactive);
-  const r = await fetch(url, Object.assign({}, opt, { headers: Object.assign({ Authorization: 'Bearer ' + t }, opt.headers || {}) }));
-  if (r.status === 401) { gdTok = null; throw new Error('auth'); }
+  let r;
+  try { r = await fetch(url, Object.assign({}, opt, { headers: Object.assign({ Authorization: 'Bearer ' + t }, opt.headers || {}) })); }
+  catch (e) { throw new Error('réseau'); }
+  // jeton périmé (Android peut redonner un jeton déjà ancien) : on en redemande un, une fois
+  if (r.status === 401) { gdTok = null; if (retry) return gdFetch(url, opt, interactive, false); throw new Error('auth'); }
   if (!r.ok) throw new Error('HTTP ' + r.status);
   return r;
 }
@@ -7718,12 +7721,12 @@ function gdUI() {
   const ok = gdSupported(), d = +store.get('gdDate') || 0;
   $('gdNow').disabled = $('gdRestore').disabled = $('gdAutoChk').disabled = !ok;
   $('gdAutoChk').checked = store.get('gdAuto') === '1';
-  $('gdState').textContent = !ok ? tr('Mise à jour de l\'appli nécessaire') : d ? tr('Dernière sauvegarde :') + ' ' + new Date(d).toLocaleString(LOC, { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }) : tr('Pas encore utilisée');
+  $('gdState').textContent = !ok ? tr('Mise à jour de l\'appli nécessaire') : store.get('gdAuto') === '1' && store.get('gdNeed') === '1' ? tr('Sauvegarde automatique en pause : touche « Sauvegarder sur Drive » pour te reconnecter à Google') : d ? tr('Dernière sauvegarde :') + ' ' + new Date(d).toLocaleString(LOC, { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }) : tr('Pas encore utilisée');
 }
 const gdBtnBusy = (b, on) => b.classList.toggle('busy', on);
 $('gdNow').onclick = async () => {
   if (gdBusy) return; gdBusy = true; gdBtnBusy($('gdNow'), true); bkSay('Sauvegarde sur Google Drive…');
-  try { const d = await gdSave(true); bkSay(d ? 'Sauvegardé sur Google Drive : ' + bkCount(d.tracks) + '.' : 'Rien à sauvegarder pour l\'instant.'); if (d && store.get('gdAuto') == null) { store.set('gdAuto', '1'); } }
+  try { const d = await gdSave(true); store.set('gdNeed', ''); bkSay(d ? 'Sauvegardé sur Google Drive : ' + bkCount(d.tracks) + '.' : 'Rien à sauvegarder pour l\'instant.'); if (d && store.get('gdAuto') == null) { store.set('gdAuto', '1'); } }
   catch (e) { bkSay(gdErr(e)); }
   gdBusy = false; gdBtnBusy($('gdNow'), false); gdUI();
 };
@@ -7746,8 +7749,9 @@ async function gdAuto(now) {
   if (store.get('gdAuto') !== '1' || !gdSupported() || gdBusy || navigator.onLine === false) return;
   if (!now && Date.now() - (+store.get('gdDate') || 0) < 20 * 3600e3) return;
   gdBusy = true;
-  try { await gdSave(false); } catch { /* nouvel essai plus tard */ }
-  gdBusy = false;
+  // Google redemande l'accord : impossible sans un toucher → on le signale dans les réglages ; sinon nouvel essai plus tard
+  try { await gdSave(false); store.set('gdNeed', ''); } catch (e) { if (e.message === 'consent') store.set('gdNeed', '1'); }
+  gdBusy = false; gdUI();
 }
 setTimeout(() => gdAuto(false), 15000);
 
@@ -7919,7 +7923,12 @@ requestRejoin = _st('', requestRejoin, manual => stat(manual ? 'retour_trace_man
 reroute = _st('recalcul', reroute);
 stvUploadNow = (fn => async function () { try { const r = await fn.apply(this, arguments); stat('strava_envoi_ok'); return r; } catch (e) { stat('strava_envoi_echec'); throw e; } })(stvUploadNow);
 openStvManual = _st('strava_manuel', openStvManual);
-gdSave = (fn => async function () { try { const r = await fn.apply(this, arguments); stat('drive_ok'); return r; } catch (e) { stat('drive_echec'); throw e; } })(gdSave);
+gdSave = (fn => async function () { try { const r = await fn.apply(this, arguments); stat('drive_ok'); return r; } catch (e) {
+  stat('drive_echec');
+  // raison de l'échec, en catégories (jamais le texte complet) : accord, délai, jeton, réseau, code HTTP…
+  const m = String(e && e.message || ''), why = m === 'consent' ? 'accord' : m === 'timeout' ? 'delai' : m === 'auth' ? 'jeton' : m === 'réseau' || navigator.onLine === false ? 'reseau'
+    : /^HTTP \d+$/.test(m) ? 'http' + m.slice(5) : /refus|cancel|12501|16:/i.test(m) ? 'refus' : m === 'update' ? 'maj' : 'autre';
+  stat('drive_err_' + why); throw e; } })(gdSave);
 downloadPack = _st('', downloadPack, pack => stat('carte_' + (pack.cc || (pack.kind === 'dep' ? 'fr' : pack.kind || 'zone'))));
 setLayer = _st('', setLayer, (i, remember) => { if (remember !== false && LAYERS[i]) stat('fond_' + LAYERS[i].id); });
 shareGPX = _st('gpx_partage', shareGPX);

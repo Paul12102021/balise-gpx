@@ -147,6 +147,7 @@ const exact = {
   'Mise à jour de l\'appli nécessaire': 'App update needed',
   'Dernière sauvegarde :': 'Last backup:',
   'Pas encore utilisée': 'Not used yet',
+  'Sauvegarde automatique en pause : touche « Sauvegarder sur Drive » pour te reconnecter à Google': 'Automatic backup paused: tap “Back up to Drive” to reconnect to Google',
   'Sauvegarde sur Google Drive…': 'Backing up to Google Drive…',
   'Rien à sauvegarder pour l\'instant.': 'Nothing to back up yet.',
   'Recherche de ta sauvegarde sur Google Drive…': 'Looking for your backup on Google Drive…',
