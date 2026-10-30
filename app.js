@@ -5,7 +5,7 @@
 
 // La page et le code doivent être de la même version. Sinon (page gardée en cache
 // par le téléphone ou par GitHub), on recharge une page fraîche, au plus 3 fois.
-const APP_VERSION = 273;
+const APP_VERSION = 274;
 // lien « pisteo.app/?moi=1 » (ou ?moi=0) : cet appareil est compté à part dans les statistiques (développeur).
 // Lu avant tout rechargement de version, qui ne garde pas les paramètres de l'adresse.
 try {
@@ -7553,6 +7553,8 @@ if (AND) {
   $('btnPip').style.display = 'none'; // fenêtre réduite : pas encore dans l'appli Android
   let backAt = 0;
   window.pisteoBack = () => {
+    // petite fenêtre (nom d'un dossier…) : Retour l'annule, sans fermer le panneau dessous
+    if (!$('libDlg').hidden) { $('libDlgNo').click(); return true; }
     const open = [...document.querySelectorAll('.lib')].filter(x => !x.hidden);
     if (open.length) { open[open.length - 1].hidden = true; return true; }
     if (!$('more').hidden) { toggleMore(false); return true; }
