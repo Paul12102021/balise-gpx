@@ -947,3 +947,4 @@ body.wx-on:not(.side) .trackrow { justify-content: space-between; } /* les bouto
 .prep-check i.no { border: 2px solid var(--muted); }
 .prep-check small { display: block; color: var(--muted); font-size: 12.5px; }
 .prep-check i.info { border: 2px solid var(--line); color: var(--muted); font-family: Georgia, serif; }
+.prep-sec .btn.wide { width: 100%; } .prep-sec > small.note { display: block; margin-top: 6px; font-size: 12.5px; }

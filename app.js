@@ -8338,6 +8338,7 @@ async function prepOffline() {
   $('prepOffGo').hidden = !todo;
   return { saved, mapOk, graphOk, poiOk };
 }
+$('prepBook').onclick = () => prepRoadbook();
 $('prepOffGo').onclick = async () => {
   if (!track) return;
   stat('prep_horsligne');
@@ -8347,6 +8348,69 @@ $('prepOffGo').onclick = async () => {
   await openMaps();
   $('dlTrace').click();
 };
+// ---------- feuille de route : une page à garder ou imprimer (étapes, eau, refuges, secours) ----------
+const SOS_NUM = {
+  ign: [['112', 'Urgences (toute l\'Europe)'], ['15', 'SAMU'], ['18', 'Pompiers'], ['114', 'Urgences par SMS']],
+  es: [['112', 'Urgences']], de: [['112', 'Urgences']], be: [['112', 'Urgences']],
+  ch: [['144', 'Ambulance'], ['1414', 'Rega (secours en hélicoptère)'], ['112', 'Urgences']],
+  at: [['140', 'Secours en montagne'], ['144', 'Ambulance'], ['112', 'Urgences']],
+  gb: [['999', 'Urgences : demander la police, puis le secours en montagne'], ['112', 'Urgences']],
+  ca: [['911', 'Urgences']], us: [['911', 'Urgences']]
+};
+const sosFor = (lon, lat) => SOS_NUM[natAt(lon, lat)] || [['112', 'Urgences (Europe et nombreux pays)']];
+async function prepRoadbook() {
+  if (!track) return;
+  stat('prep_feuille');
+  const T = track, n = prepDays(), pois = Array.isArray(T.prepPois) ? T.prepPois : await prepPois(T).catch(() => null);
+  const stages = prepStages(n, pois), bike = prepBike(), e = escH, t = s => e(tr(s));
+  const s0 = T.pts[0], s1 = T.pts[T.pts.length - 1], ll = p => `${p.lat.toFixed(5)}, ${p.lon.toFixed(5)}`;
+  // profil : 300 points, étapes en pointillés
+  let svg = '';
+  if (T.hasEle) {
+    const N = 300, W = 700, H = 140, xs = [], es = [];
+    for (let k = 0; k <= N; k++) { const d = T.total * k / N, i = pointAt(T, d).i; xs.push(d); es.push(T.ele[Math.min(i, T.ele.length - 1)] ?? 0); }
+    const lo = Math.min(...es), hi = Math.max(...es), sy = v => H - 8 - (v - lo) / Math.max(1, hi - lo) * (H - 24), sx = d => d / T.total * W;
+    const path = es.map((v, k) => `${k ? 'L' : 'M'}${sx(xs[k]).toFixed(1)},${sy(v).toFixed(1)}`).join('');
+    svg = `<svg viewBox="0 0 ${W} ${H + 18}" class="prof"><path d="${path}L${W},${H}L0,${H}Z" fill="#f3d9c6"/><path d="${path}" fill="none" stroke="#d9541e" stroke-width="2"/>`
+      + stages.slice(0, -1).map(s => `<line x1="${sx(s.to)}" x2="${sx(s.to)}" y1="0" y2="${H}" stroke="#2F5E45" stroke-dasharray="4 3"/><text x="${sx(s.to) + 3}" y="12" font-size="11" fill="#2F5E45">${t('Jour')} ${s.n + 1}</text>`).join('')
+      + `<text x="0" y="${H + 14}" font-size="11" fill="#555">${Math.round(lo)} – ${Math.round(hi)} m</text><text x="${W}" y="${H + 14}" font-size="11" fill="#555" text-anchor="end">${fmtDist(T.total)}</text></svg>`;
+  }
+  const km = d => kmN(d) + kmU();
+  const stRows = stages.map(s => `<tr><td><b>${s.n}</b></td><td>${kmN(s.from)} → ${kmN(s.to)}</td><td>${fmtDist(s.dist)}</td>${T.hasEle ? `<td>${fmtM(s.up)}</td><td>${fmtM(s.down)}</td>` : ''}<td>${fmtDur(s.secs)}</td><td>${s.last ? t('Arrivée') : s.night ? `${POI[s.night.k][0]} ${t(POI_NAME[s.night.k])}${s.night.nm ? ' · ' + e(s.night.nm) : ''}` : '—'}</td></tr>`).join('');
+  const W = pois ? prepWaterGaps(pois) : null;
+  const gaps = W ? (W.gaps.length ? W.gaps.map(g => `<li>⚠️ ${km(g.from)} → ${km(g.to)} : <b>${fmtDist(g.to - g.from)}</b> ${t('sans point d\'eau potable connu')}${g.src.length ? ` (${g.src.length} ${t(g.src.length > 1 ? 'sources, eau non garantie' : 'source, eau non garantie')})` : ''}</li>`).join('') : `<li>✓ ${t('Pas de long tronçon sans point d\'eau potable connu')}</li>`) : `<li>${t('Points d\'eau inconnus pour cette zone')}</li>`;
+  const pl = pois ? pois.filter(p => p.k === 'w' || p.k === 's' || PREP_NIGHT[p.k]) : [];
+  const poiRows = pl.map(p => `<tr><td>${kmN(p.along)}</td><td>${POI[p.k][0]} ${t(POI[p.k][2])}</td><td>${e(p.nm || '')}</td><td>${p.d > 30 ? fmtDist(Math.round(p.d / 10) * 10) : '—'}</td></tr>`).join('');
+  const notes = (T.wpts || []).map(w => { const pr = project(T, w, true); return pr && pr.dist < 300 ? { along: pr.along, name: w.name || w.desc || '' } : null; }).filter(x => x && x.name).sort((a, b) => a.along - b.along);
+  const sos = sosFor(s0.lon, s0.lat);
+  let link = ''; try { link = await routeLink(T.name, T.pts, { desc: T.desc, wpts: T.wpts }, 300); } catch {}
+  let qr = '';
+  try { const q = qrcode(0, 'L'); q.addData(link); q.make(); const m = q.getModuleCount(); let r = ''; for (let y = 0; y < m; y++) for (let x = 0; x < m; x++) if (q.isDark(y, x)) r += `M${x},${y}h1v1h-1z`; qr = `<svg viewBox="-2 -2 ${m + 4} ${m + 4}" class="qr"><rect x="-2" y="-2" width="${m + 4}" height="${m + 4}" fill="#fff"/><path d="${r}"/></svg>`; } catch {}
+  let html = `<!doctype html><html lang="${LANG}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${e(T.name || 'Pisteo')} · ${t('Feuille de route')}</title>
+<style>body{font:14px/1.45 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;color:#17201c;max-width:780px;margin:0 auto;padding:16px}h1{font-size:22px;margin:0 0 2px}h2{font-size:15px;text-transform:uppercase;letter-spacing:.05em;color:#2F5E45;border-bottom:2px solid #2F5E45;padding-bottom:3px;margin:20px 0 8px}
+.sub{color:#555;margin:0 0 10px}.sum{display:flex;flex-wrap:wrap;gap:6px 18px;font-size:15px}.sum b{font-size:17px}table{width:100%;border-collapse:collapse;font-variant-numeric:tabular-nums}td,th{text-align:left;padding:5px 6px;border-bottom:1px solid #ddd;vertical-align:top}th{font-size:12px;color:#555;font-weight:600}td{white-space:nowrap}td:last-child{white-space:normal}a{word-break:break-all}
+.prof{width:100%;height:auto;display:block;margin:8px 0}ul{margin:0;padding-left:18px}.sos{display:grid;grid-template-columns:auto 1fr;gap:4px 12px;font-size:15px}.sos b{font-size:18px}.qrbox{display:flex;gap:14px;align-items:center}.qr{width:120px;height:120px;flex:none}.note{color:#555;font-size:12.5px}
+.bar{position:sticky;top:0;background:#fff;padding:6px 0;margin-bottom:6px}.bar button{font:inherit;padding:8px 14px;border-radius:10px;border:0;background:#2F5E45;color:#fff}@media print{.bar{display:none}body{padding:0}h2{break-after:avoid}tr{break-inside:avoid}}</style></head><body>
+<div class="bar"><button onclick="window.print()">${t('Imprimer ou enregistrer en PDF')}</button></div>
+<h1>${e(T.name || tr('Parcours'))}</h1><p class="sub">${t('Feuille de route Pisteo')} · ${e(new Date().toLocaleDateString(LOC, { day: 'numeric', month: 'long', year: 'numeric' }))} · ${t(bike ? 'à vélo' : 'à pied')}</p>
+<div class="sum"><span>${t('Distance')} <b>${fmtDist(T.total)}</b></span>${T.hasEle ? `<span>${t('D+')} <b>${fmtM(T.totalUp)}</b></span><span>${t('D−')} <b>${fmtM(T.totalDown)}</b></span>` : ''}<span>${t(bike ? 'Temps à vélo' : 'Temps de marche')} <b>${fmtDur(effTo(T.total))}</b></span>${n > 1 ? `<span><b>${n}</b> ${t('jours')}</span>` : ''}</div>
+${svg}
+<h2>${t(n > 1 ? 'Étapes' : 'Parcours')}</h2><table><tr><th>${t('Jour')}</th><th>${kmU().trim()}</th><th>${t('Distance')}</th>${T.hasEle ? `<th>${t('D+')}</th><th>${t('D−')}</th>` : ''}<th>${t('Temps')}</th><th>${t('Fin')}</th></tr>${stRows}</table>
+<p class="note">${t(bike ? 'Temps à vélo estimé selon ton allure, sans les pauses.' : 'Temps de marche estimé selon ton allure, sans les pauses.')}</p>
+<h2>${t('Eau')}</h2><ul>${gaps}</ul>
+${poiRows ? `<h2>${t('Points d\'eau et refuges')}</h2><table><tr><th>${kmU().trim()}</th><th>${t('Type')}</th><th>${t('Nom')}</th><th>${t('Écart')}</th></tr>${poiRows}</table><p class="note">${t('Données OpenStreetMap : vérifie sur place, et emporte de quoi tenir.')}</p>` : ''}
+${notes.length ? `<h2>${t('Points notés')}</h2><table>${notes.map(x => `<tr><td>${kmN(x.along)}</td><td>${e(x.name)}</td></tr>`).join('')}</table>` : ''}
+<h2>${t('Secours')}</h2><div class="sos">${sos.map(([num, l]) => `<b>${num}</b><span>${t(l)}</span>`).join('')}</div>
+<p>${t('Départ')} : ${ll(s0)}<br>${t('Arrivée')} : ${ll(s1)}</p><p class="note">${t('Avant de partir, laisse cette feuille ou le lien du parcours à un proche, avec ton heure de retour prévue.')}</p>
+${link ? `<h2>${t('Ouvrir le parcours')}</h2><div class="qrbox">${qr}<p class="note">${t('À scanner pour ouvrir le parcours dans Pisteo')}<br><a href="${e(link)}">${e(link.length > 70 ? link.slice(0, 70) + '…' : link)}</a></p></div>` : ''}
+</body></html>`;
+  // séparateur décimal de la langue (hors dessins)
+  if (DICT && DICT.decimal !== ',') html = html.split(/(<svg[\s\S]*?<\/svg>)/).map((x, i) => i % 2 ? x : x.replace(/(\d),(\d{1,2})(?!\d)/g, '$1.$2')).join('');
+  const fname = (T.name || 'parcours').replace(/[\\/:*?"<>|]+/g, ' ').trim().slice(0, 60) + ' - ' + tr('feuille de route') + '.html';
+  if (AND && AND.openWith) { try { AND.openWith(fname, 'text/html', html, tr('Ouvrir la feuille de route avec')); return; } catch {} }
+  const w = window.open(URL.createObjectURL(new Blob([html], { type: 'text/html' })), '_blank');
+  if (!w) { const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([html], { type: 'text/html' })); a.download = fname; a.click(); }
+}
 function prepUpdate() {
   const show = !!track && !nav && track.total > 2000;
   $('btnPrep').hidden = !show;
