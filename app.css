@@ -997,3 +997,6 @@ body.wx-on:not(.side) .trackrow { justify-content: space-between; } /* les bouto
 .ret-time button { min-width: 48px; min-height: 40px; border: 1px solid var(--line); border-radius: 12px; background: var(--panel); color: var(--go-ink); font: 700 14px system-ui, sans-serif; cursor: pointer; }
 .ret-time button:active, .ret-days button:active { opacity: .7; }
 .ret-pick .note { font-size: 12.5px; }
+.stage-mk.drag { cursor: grab; padding: 0 8px; min-width: 30px; height: 26px; line-height: 22px; font-size: 13px; touch-action: none; }
+.stage-mk.drag::after { content: ''; position: absolute; inset: -12px; }
+.stage-mk.on { cursor: grabbing; background: #d9541e; white-space: nowrap; }

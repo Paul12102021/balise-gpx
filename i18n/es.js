@@ -481,6 +481,9 @@ const exact = {
   'Merci ! Une note sur le Play Store aide beaucoup Pisteo à se faire connaître.': '¡Gracias! Una valoración en Play Store ayuda mucho a que Pisteo se dé a conocer.',
   'Noter Pisteo': 'Valorar Pisteo',
   // ---- préparer la sortie
+  "glisser pour déplacer": "arrastra para mover",
+  "Ajuster les étapes sur la carte": "Ajustar las etapas en el mapa",
+  "Fais glisser les repères J1, J2… le long de la trace.": "Arrastra los marcadores D1, D2… a lo largo del track.",
   "Jour du retour": "Día de vuelta",
   "Une heure plus tôt": "Una hora antes",
   "Un quart d'heure plus tôt": "Un cuarto de hora antes",

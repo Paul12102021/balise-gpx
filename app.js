@@ -5,7 +5,7 @@
 
 // La page et le code doivent être de la même version. Sinon (page gardée en cache
 // par le téléphone ou par GitHub), on recharge une page fraîche, au plus 3 fois.
-const APP_VERSION = 270;
+const APP_VERSION = 271;
 // lien « pisteo.app/?moi=1 » (ou ?moi=0) : cet appareil est compté à part dans les statistiques (développeur).
 // Lu avant tout rechargement de version, qui ne garde pas les paramètres de l'adresse.
 try {
@@ -8274,15 +8274,40 @@ let prepMks = [], prepSeq = 0;
 function prepHintSet(n, dry) {
   $('prepHint').innerHTML = [n > 1 ? `${n} <span>jours</span>` : '', dry ? '⚠️ <span>eau</span>' : ''].filter(Boolean).join(' · ');
 }
+// repères J1, J2… : on les fait glisser le long de la trace pour changer la longueur des étapes
 function prepMarkers(stages) {
   prepMks.forEach(m => m.remove()); prepMks = [];
   if (!stages || stages.length < 2 || nav) return;
-  for (const s of stages.slice(0, -1)) {
-    const p = pointAt(track, s.to), e = document.createElement('div');
-    e.className = 'stage-mk'; e.textContent = (LANG === 'fr' ? 'J' : LANG === 'es' ? 'D' : 'D') + s.n;
-    e.title = tr('Fin du jour') + ' ' + s.n;
-    prepMks.push(new maplibregl.Marker({ element: e }).setLngLat([p.lon, p.lat]).addTo(map));
-  }
+  const n = stages.length, ends = stages.slice(0, -1).map(s => s.to), J = LANG === 'fr' ? 'J' : 'D';
+  const nights = Array.isArray(track.prepPois) ? track.prepPois.filter(p => PREP_NIGHT[p.k]) : [];
+  ends.forEach((at, i) => {
+    const p = pointAt(track, at), e = document.createElement('div');
+    e.className = 'stage-mk drag'; e.textContent = J + (i + 1);
+    e.title = tr('Fin du jour') + ' ' + (i + 1) + ' · ' + tr('glisser pour déplacer');
+    const mk = new maplibregl.Marker({ element: e, draggable: true }).setLngLat([p.lon, p.lat]).addTo(map);
+    const lo = i ? ends[i - 1] + 500 : 500, hi = i < ends.length - 1 ? ends[i + 1] - 500 : track.total - 500;
+    let cur = at;
+    // pendant le glisser : le repère reste collé à la trace et affiche le km et la longueur de l'étape
+    mk.on('drag', () => {
+      const ll = mk.getLngLat(), pr = project(track, { lat: ll.lat, lon: ll.lng }, true); if (!pr) return;
+      cur = clamp(pr.along, lo, hi);
+      const q = pointAt(track, cur); mk.setLngLat([q.lon, q.lat]);
+      e.textContent = `${J}${i + 1} · ${kmN(cur)}`;
+      e.classList.add('on');
+    });
+    mk.on('dragend', () => {
+      e.classList.remove('on');
+      // un refuge, une cabane ou un abri tout proche (300 m) : on s'y arrête
+      const near = nights.filter(q => q.along > lo && q.along < hi && Math.abs(q.along - cur) <= 300).sort((a, b) => Math.abs(a.along - cur) - Math.abs(b.along - cur))[0];
+      if (near) cur = near.along;
+      const a = ends.slice(); a[i] = Math.round(cur);
+      store.set(prepEndsKey(n), JSON.stringify(a)); stat('prep_etape_carte');
+      const st = prepStages(n, Array.isArray(track.prepPois) ? track.prepPois : null), d = k => `${tr('Jour')} ${k + 1} : ${fmtDist(st[k].dist)}`;
+      toast(`${d(i)} · ${d(i + 1)}${near ? ' · ' + POI[near.k][0] + ' ' + (near.nm || tr(POI_NAME[near.k])) : ''}`, 5000, { label: tr('↩ Préparer'), run: prepOpen });
+      prepRender();
+    });
+    prepMks.push(mk);
+  });
 }
 async function prepRender() {
   if (!track) return;
@@ -8312,6 +8337,7 @@ async function prepRender() {
       return `<li><b><span>${escH(tr('Jour'))}</span> ${s.n}</b> · <b>${fmtDist(s.dist)}</b>${track.hasEle ? ` · <span>D+</span> ${fmtM(s.up)} · <span>D−</span> ${fmtM(s.down)}` : ''} · ${fmtDur(s.secs)}<br><span class="pl-km">${kmN(s.from)} → ${kmN(s.to)}${kmU()}</span>${night}${ctl}</li>`;
     }).join('') + (n > 1 && stages.some(s => s.own) ? `<li class="pl-reset"><button id="prepReset">↺ <span>${escH(tr('Recalculer les étapes automatiquement'))}</span></button></li>` : '');
     prepStagesWire(stages, n);
+    $('prepOnMap').hidden = n < 2;
     prepMarkers(stages);
     prepHintSet(n, false);
     return stages;
@@ -8734,6 +8760,13 @@ function prepUpdate() {
 $('btnPrep').onclick = () => { stat('prep_ouvre'); prepOpen(); };
 $('prepClose').onclick = () => { $('prepSheet').hidden = true; };
 $('prepSheet').onclick = e => { if (e.target === $('prepSheet')) $('prepSheet').hidden = true; };
+// ajuster sur la carte : on montre toute la trace, les repères J1, J2… se font glisser
+$('prepOnMap').onclick = () => {
+  if (!track) return;
+  prepLeave('Fais glisser les repères J1, J2… le long de la trace.');
+  const lats = track.pts.map(p => p.lat), lons = track.pts.map(p => p.lon);
+  map.fitBounds([[Math.min(...lons), Math.min(...lats)], [Math.max(...lons), Math.max(...lats)]], { padding: { top: 90, bottom: Math.round(innerHeight * .42), left: 30, right: 30 }, duration: 600 });
+};
 $('prepDays').onchange = e => { store.set(prepKey(), e.target.value); stat('prep_jours'); prepRender(); };
 function prepStagesWire(stages, n) {
   const save = a => { store.set(prepEndsKey(n), JSON.stringify(a.map(v => Math.round(v)))); stat('prep_etape_modifiee'); prepRender(); };
