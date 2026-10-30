@@ -5,7 +5,18 @@
 
 // La page et le code doivent être de la même version. Sinon (page gardée en cache
 // par le téléphone ou par GitHub), on recharge une page fraîche, au plus 3 fois.
-const APP_VERSION = 262;
+const APP_VERSION = 263;
+// lien « pisteo.app/?moi=1 » (ou ?moi=0) : cet appareil est compté à part dans les statistiques (développeur).
+// Lu avant tout rechargement de version, qui ne garde pas les paramètres de l'adresse.
+try {
+  const mm = location.search.match(/[?&]moi=([01])/);
+  if (mm) {
+    if (mm[1] === '1') localStorage.setItem('statMoi', '1'); else localStorage.removeItem('statMoi');
+    sessionStorage.setItem('moiToast', mm[1]);
+    const q = location.search.replace(/([?&])moi=[01](&|$)/, '$1').replace(/[?&]$/, '');
+    history.replaceState(null, '', location.pathname + q + location.hash);
+  }
+} catch {}
 try {
   const meta = document.querySelector('meta[name="balise-version"]');
   const pageV = meta ? +meta.content : 0;
@@ -7760,6 +7771,7 @@ function stat(name, n = 1) {
   try {
     const all = statLoad(), d = statDay(), day = all[d] || (all[d] = {});
     const k = String(name).replace(/[^\w:.\-]/g, '_').slice(0, 60);
+    if (k === 'nav' || k === 'sortie_pied' || k === 'sortie_velo') store.set('statActif', '1');
     if (Object.keys(day).length > 150 && !(k in day)) return;
     day[k] = Math.round(((day[k] || 0) + n) * 10) / 10;
     store.set('stats', JSON.stringify(all));
@@ -7776,6 +7788,11 @@ function statDims(d) {
     night: store.get('alertNight') === '1' ? 'on' : 'off', lit: store.get('litNight') === '1' ? 'on' : 'off',
     strava: (() => { try { return stvOn() ? 'oui' : 'non'; } catch { return 'non'; } })(), drive: store.get('gdAuto') === '1' ? 'auto' : 'non',
     layer: (LAYERS[layerIdx] || {}).id || '?', age: statAge(d),
+    // provenance : robot de test Google (Firebase Test Lab), toi (appareil marqué) ou un utilisateur
+    src: (() => { try { if (AND && AND.testLab && AND.testLab()) return 'robot'; } catch {} return store.get('statMoi') === '1' ? 'moi' : 'humain'; })(),
+    // a déjà lancé une navigation ou gardé une sortie sur cet appareil ; nombre de jours où l'appli a été ouverte
+    actif: store.get('statActif') === '1' ? 'oui' : 'non',
+    jours: (n => n <= 1 ? 'j1' : n <= 6 ? 'j2-6' : n <= 13 ? 'j7-13' : 'j14plus')(+(store.get('statJours') || 1)),
     os: (m => m ? 'android' + m[1] : '')(ua.match(/Android (\d+)/)) || (m => m ? 'ios' + m[1] : '')(ua.match(/OS (\d+)_\d+.* like Mac OS X/)) || 'autre'
   };
 }
@@ -7804,8 +7821,24 @@ async function statFlush() {
 // heure d'utilisation (heure du téléphone), comptée à chaque ouverture ou retour dans l'appli
 const statHour = () => stat('heure_' + String(new Date().getHours()).padStart(2, '0'));
 stat('open'); statHour();
+// jours d'ouverture de l'appli sur cet appareil (compté à partir de la version 263)
+const statOpenDay = () => { const d = statDay(); if (store.get('statLastDay') !== d) { store.set('statLastDay', d); store.set('statJours', String(+(store.get('statJours') || 0) + 1)); } };
+statOpenDay();
+// appareil du développeur : 7 touches rapides sur « Version … » en bas des réglages (ou le lien ?moi=1)
+{
+  const moiMsg = on => toast(on ? 'Statistiques : cet appareil est compté à part (« Moi »).' : 'Statistiques : cet appareil est de nouveau compté comme un utilisateur.', 4500);
+  try { const t = sessionStorage.getItem('moiToast'); if (t) { sessionStorage.removeItem('moiToast'); setTimeout(() => moiMsg(t === '1'), 1500); } } catch {}
+  let taps = 0, last = 0;
+  $('note').addEventListener('click', () => {
+    const n = Date.now(); taps = n - last < 1500 ? taps + 1 : 1; last = n;
+    if (taps < 7) return;
+    taps = 0; const on = store.get('statMoi') !== '1';
+    try { if (on) localStorage.setItem('statMoi', '1'); else localStorage.removeItem('statMoi'); } catch {}
+    moiMsg(on);
+  });
+}
 setTimeout(statFlush, 8000); setInterval(statFlush, 3600e3);
-document.addEventListener('visibilitychange', () => { if (!document.hidden) { stat('resume'); statHour(); statFlush(); } });
+document.addEventListener('visibilitychange', () => { if (!document.hidden) { stat('resume'); statHour(); statOpenDay(); statFlush(); } });
 // boutons touchés (un compteur par bouton utile)
 const STAT_BTN = {
   btnNav: 'nav_btn', btnNew: 'autre_trajet', destLoop: 'boucle_ouvrir', lpGo: 'boucle', lbAgain: 'boucle_autre', lbEdit: 'boucle_modifier', lbKeep: 'boucle_garder', lbGo: 'boucle_naviguer',

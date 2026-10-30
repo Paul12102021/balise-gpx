@@ -18,6 +18,7 @@ import android.os.Bundle;
 import android.os.Environment;
 import android.os.PowerManager;
 import android.provider.MediaStore;
+import android.provider.Settings;
 import android.speech.tts.TextToSpeech;
 import android.speech.tts.UtteranceProgressListener;
 import android.view.View;
@@ -599,6 +600,13 @@ public class MainActivity extends Activity {
 
         @JavascriptInterface
         public boolean ttsAvailable() { return ttsReady; }
+
+        // robot de test Google (rapport de pré-lancement, Firebase Test Lab) : compté à part dans les statistiques
+        @JavascriptInterface
+        public boolean testLab() {
+            try { return "true".equals(Settings.System.getString(getContentResolver(), "firebase.test.lab")); }
+            catch (Exception e) { return false; }
+        }
 
         @JavascriptInterface
         public void keepAwake(boolean on) {

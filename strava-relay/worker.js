@@ -373,7 +373,8 @@ async function stFold(env) {
   ]);
   return m;
 }
-// Rangement par provenance : « a| » = appli Android, « w| » = site web (navigateur).
+// Rangement par provenance : « a| » = appli Android, « w| » = site web (navigateur),
+// « r| » = robots de test Google, « m| » = appareils du développeur (depuis la version 263 ; avant, ils sont mêlés à a| et w|).
 // Les lignes sans préfixe datent d'avant ce rangement : elles ne comptent que dans « Tout ».
 // u:… = appareils ayant fait l'action dans la journée (entonnoir) ; x:ver=…/x:plat=… = sorties et coupures GPS par version / appareil.
 const ST_FUNNEL = [
@@ -403,7 +404,8 @@ async function statsIn(req, env, json) {
     const p = `x:${dn}=${dims[dn]}:`; rows.push([p + 'dev', 1]);
     for (const [k, v] of [['sortie', out], ['coupee', c.sortie_coupee], ['coupure_min', c.coupure_min], ['batt_pct', c.batt_pct], ['batt_h', c.batt_h]]) if (v) rows.push([p + k, v]);
   }
-  const grp = dims.plat === 'android' ? 'a|' : 'w|';
+  // robots de test Google (« r| ») et appareils du développeur (« m| ») rangés à part, hors des chiffres des utilisateurs
+  const grp = dims.src === 'robot' ? 'r|' : dims.src === 'moi' ? 'm|' : dims.plat === 'android' ? 'a|' : 'w|';
   // fidélité : rangée au premier jour de l'appareil (sa « cohorte ») ; m = jalon atteint (1, 7 ou 30 jours après)
   const ret = [], r = b.ret, f = r && typeof r.first === 'string' && /^\d{4}-\d\d-\d\d$/.test(r.first) ? r.first : null;
   if (f && f <= day && Date.parse(f) > t - 400 * 864e5 && Array.isArray(r.m)) for (const m of new Set(r.m)) if ([1, 7, 30].includes(m)) ret.push([f, 'ret:j' + m]);
@@ -432,13 +434,14 @@ function stRange(url) {
   else if (p === 'all') from = '2000-01-01';
   else { p = ['7', '30', '90'].includes(p) ? p : '30'; from = iso(Date.now() - +p * D); }
   const len = Math.round((Date.parse(to) - Date.parse(from)) / D) + 1;
-  const f = ['app', 'web'].includes(sp.get('f')) ? sp.get('f') : 'all';
+  const f = ['app', 'web', 'robots', 'moi'].includes(sp.get('f')) ? sp.get('f') : 'all';
   return { p, from, to, len, f, g: sp.get('g'), prevFrom: iso(Date.parse(from) - len * D), prevTo: iso(Date.parse(from) - D) };
 }
 // clé enregistrée → clé de base, ou null si elle n'entre pas dans le filtre
 function stKey(k, f) {
   const g = k[1] === '|' ? k[0] : '';
-  if ((f === 'app' && g !== 'a') || (f === 'web' && g !== 'w')) return null;
+  const want = { app: 'a', web: 'w', robots: 'r', moi: 'm' }[f];
+  if (want ? g !== want : g === 'r' || g === 'm') return null;
   return g ? k.slice(2) : k;
 }
 async function stTotals(env, a, b, f) {
@@ -447,7 +450,7 @@ async function stTotals(env, a, b, f) {
   return o;
 }
 async function stDaily(env, a, b, f, keys) {
-  const all = keys.flatMap(k => [k, 'a|' + k, 'w|' + k]).map(k => `'${k.replace(/'/g, "''")}'`).join(',');
+  const all = keys.flatMap(k => [k, 'a|' + k, 'w|' + k, 'r|' + k, 'm|' + k]).map(k => `'${k.replace(/'/g, "''")}'`).join(',');
   const o = {};
   for (const r of (await env.STATS.prepare(`SELECT day, k, SUM(v) s FROM daily WHERE day >= ?1 AND day <= ?2 AND k IN (${all}) GROUP BY day, k`).bind(a, b).all()).results) {
     const k = stKey(r.k, f); if (!k) continue; const d = o[r.day] || (o[r.day] = {}); d[k] = (d[k] || 0) + r.s;
@@ -562,21 +565,21 @@ ${kpi('Calcul d’une boucle', g(T, 'c:boucle_calculs') ? (g(T, 'c:boucle_second
     return [`Revenus après ${m} jour${m > 1 ? 's' : ''}`, n ? pc(r, n) : '–', n ? `${fmt(r)} sur ${fmt(n)}` : 'pas encore assez de recul']; });
   const fidel = g(T, 'd:age:nouveau') ? kv('Fidélité des nouveaux appareils', ret, 'Parmi les appareils arrivés pendant la période, part de ceux qui ont rouvert l’appli au moins 1, 7 ou 30 jours après leur premier jour. Seuls comptent ceux arrivés assez tôt.') : '';
   const feats = Object.entries(ST_LABELS).map(([key, l]) => [l, g(T, 'c:' + key)]);
-  const dimNames = { plat: 'Appli / navigateur', os: 'Système', pays: 'Pays', lang: 'Langue', ver: 'Version', mode: 'Mode', screen: 'Écran', strava: 'Strava connecté', drive: 'Sauvegarde Drive', theme: 'Thème', voice: 'Voix', eco: 'Économie batterie', poi: 'Points utiles', night: 'Alerte nuit', lit: 'De nuit : éclairé', units: 'Unités', layer: 'Fond de carte' };
+  const dimNames = { actif: 'A déjà navigué ou gardé une sortie', jours: 'Jours d’ouverture de l’appli', plat: 'Appli / navigateur', os: 'Système', pays: 'Pays', lang: 'Langue', ver: 'Version', mode: 'Mode', screen: 'Écran', strava: 'Strava connecté', drive: 'Sauvegarde Drive', theme: 'Thème', voice: 'Voix', eco: 'Économie batterie', poi: 'Points utiles', night: 'Alerte nuit', lit: 'De nuit : éclairé', units: 'Unités', layer: 'Fond de carte' };
   const dims = Object.entries(dimNames).map(([d, l]) => { const arr = pref(`d:${d}:`); if (!arr.length) return ''; arr.sort((a, b) => b[1] - a[1]);
     return `<div class="dim"><b>${l}</b>${arr.map(([v, c]) => `<span>${esc(v)} <i>${Math.round(c / devDays * 100)} %</i></span>`).join('')}</div>`; }).join('');
   const known = new Set(Object.keys(ST_LABELS).map(x => 'c:' + x));
   const others = Object.entries(T).filter(([key]) => key.startsWith('c:') && !known.has(key) && !/^c:(err:|carte_|fond_|heure_|svc_|perf_|gps_|batt_|boucle_introuvable|boucle_echec_serveur|boucle_sans_reseau|boucle_calculs|boucle_secondes|sortie_hors_ligne|sortie_pied|sortie_velo|sortie_coupee|coupure_min|km_|minutes_sortie|open|resume)/.test(key)).map(([key, v]) => [key.slice(2), v]);
   // filtres
   const chip = (on, href, l) => `<a class="${on ? 'on' : ''}" href="${href}">${l}</a>`;
-  const filt = [['all', 'Tout'], ['app', '📱 Appli'], ['web', '🌐 Site web']].map(([x, l]) => chip(x === f, link({ f: x }), l)).join('');
+  const filt = [['all', '👥 Utilisateurs'], ['app', '📱 Appli'], ['web', '🌐 Site web'], ['robots', '🤖 Robots Google'], ['moi', '🧑‍💻 Moi']].map(([x, l]) => chip(x === f, link({ f: x }), l)).join('');
   const pers = [['hier', 'Hier'], ['7', '7 jours'], ['30', '30 jours'], ['90', '90 jours'], ['all', 'Tout']].map(([x, l]) => chip(x === R.p, link({ p: x, from: null, to: null, g: null }), l)).join('')
     + `<a href="${link({ csv: 1 })}" style="margin-left:auto">⬇ Excel</a>`;
   const yest = new Date(Date.now() - 864e5).toISOString().slice(0, 10);
   const form = `<details class="dates"${R.p === 'custom' ? ' open' : ''}><summary>📅 Choisir les dates</summary><form method="get"><input type="hidden" name="key" value="${esc(decodeURIComponent(k))}"><input type="hidden" name="tab" value="stats"><input type="hidden" name="p" value="custom"><input type="hidden" name="f" value="${f}">
 <label>Du <input type="date" name="from" value="${R.from > '2020' ? R.from : ''}" max="${yest}"></label><label>au <input type="date" name="to" value="${R.to}" max="${yest}"></label><button>Afficher</button></form></details>`;
   const per = R.len === 1 ? 'Le ' + stDate(R.from, true) : R.p === 'all' ? 'Depuis le début' : `Du ${stDate(R.from, R.from.slice(0, 4) !== R.to.slice(0, 4))} au ${stDate(R.to, true)}`;
-  const fl = { all: '', app: ' · appli Android', web: ' · site web' }[f];
+  const fl = { all: '', app: ' · appli Android', web: ' · site web', robots: ' · robots de test Google', moi: ' · tes appareils' }[f];
   const prevNote = R.p === 'all' ? '' : ` <span class="note">(▲▼ par rapport aux ${R.len} jours d’avant)</span>`;
   return nav + `<main><style>.per{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:6px}.per a,.mini a{background:var(--chip);border-radius:999px;padding:5px 12px;font-weight:600;font-size:13px;color:var(--ink);text-decoration:none}.per a.on,.mini a.on{background:var(--go);color:#fff}
 .mini{display:flex;gap:4px}.mini a{padding:3px 9px;font-size:12px}.hd{display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:6px}.hd h3{margin:0!important}
@@ -589,7 +592,7 @@ ${kpi('Calcul d’une boucle', g(T, 'c:boucle_calculs') ? (g(T, 'c:boucle_second
 .leg{display:flex;gap:12px;flex-wrap:wrap;font-size:12px;color:var(--mut)}.leg i{display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:4px}
 .dim{margin:6px 0;font-size:13px;display:flex;flex-wrap:wrap;gap:6px;align-items:center}.dim b{width:100%;font-size:12px;color:var(--mut)}.dim span{background:var(--chip);border-radius:8px;padding:2px 8px}.dim i{font-style:normal;color:var(--mut)}
 .note{font-size:12px;color:var(--mut)}</style>
-<div class="per">${filt}</div><div class="per">${pers}</div>${form}
+<div class="per">${filt}</div><div class="per">${pers}</div>${form}${f === 'moi' ? '<p class="note">Pour compter un appareil ici : touche 7 fois de suite « Version … » en bas des réglages de Pisteo (appli ou site), ou ouvre <a href="https://pisteo.app/?moi=1">pisteo.app/?moi=1</a>. Même geste pour annuler. En navigation privée, la marque s’efface à la fermeture de la fenêtre.</p>' : f === 'robots' ? '<p class="note">Téléphones de test de Google (rapport de pré-lancement), reconnus par l’appli Android à partir de la version 2.5.1.</p>' : ''}
 <div class="range">${per}${fl}${prevNote}</div>${g(T, 'dev') ? '' : '<p class="note">Aucune donnée pour cette période' + (f === 'all' ? '' : ' et ce filtre (le classement appli / site web existe depuis le 29 octobre 2026)') + '.</p>'}${kpis}${chart}
 ${funnel}${detail}${fiab}${fidel}${pays}${ages}${hours}${versions}
 ${barList('Fonctions utilisées', feats)}
