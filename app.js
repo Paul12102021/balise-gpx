@@ -5,7 +5,7 @@
 
 // La page et le code doivent être de la même version. Sinon (page gardée en cache
 // par le téléphone ou par GitHub), on recharge une page fraîche, au plus 3 fois.
-const APP_VERSION = 271;
+const APP_VERSION = 272;
 // lien « pisteo.app/?moi=1 » (ou ?moi=0) : cet appareil est compté à part dans les statistiques (développeur).
 // Lu avant tout rechargement de version, qui ne garde pas les paramètres de l'adresse.
 try {
@@ -7850,6 +7850,7 @@ $('depSheet').onclick = e => { if (e.target === $('depSheet')) $('depSheet').hid
 $('depOk').onclick = async () => {
   $('depSheet').hidden = true;
   wxDep = depPick && depPick > Date.now() + 60e3 ? { key: trKey(), t: depPick } : null;
+  try { store.set(prepDepKey(), String(wxDep ? wxDep.t : 0)); store.set(prepRetOwnKey(), ''); } catch {}
   wxOn = false; await toggleWx(); trChipsUpdate(); updateStats();
   if (wxShown()) toast('🕗 ' + tr('Départ') + ' ' + depLabel(), 2500);
 };
@@ -8309,6 +8310,71 @@ function prepMarkers(stages) {
     prepMks.push(mk);
   });
 }
+// ---------- départ prévu : jour et heure, gardés par trace (0 = maintenant) ----------
+// partagé avec l'heure de départ de la météo ; les jours suivants partent à la même heure (8:00 si le premier départ est l'après-midi ou « maintenant »)
+const prepDepKey = () => 'prepDep|' + trKey(), prepRetOwnKey = () => 'prepRetOwn|' + trKey();
+const q15 = ms => Math.ceil(ms / 9e5) * 9e5;
+function prepDepDefault() {
+  const d = new Date(); if (d.getHours() * 60 + d.getMinutes() > 7 * 60 + 30) d.setDate(d.getDate() + 1);
+  d.setHours(8, 0, 0, 0); return d.getTime();
+}
+function prepDepRaw() {
+  const w = depAt(); if (w) return w;
+  const v = store.get(prepDepKey());
+  if (v === '0') return 0;
+  return +v > Date.now() ? +v : prepDepDefault();
+}
+const prepDepT = () => prepDepRaw() || Math.floor(Date.now() / 6e4) * 6e4;
+function prepDepSet(v) {
+  if (v) v = Math.max(v, q15(Date.now()));
+  store.set(prepDepKey(), String(v || 0)); store.set(prepRetOwnKey(), ''); stat('prep_depart');
+  wxDep = v && v > Date.now() + 60e3 ? { key: trKey(), t: v } : null;
+  try { if (wxShown()) { wxOn = false; toggleWx(); } updateStats(); } catch {}
+  prepRender();
+}
+// début et arrivée de chaque jour (pauses comprises : + 30 %), et coucher du soleil à l'arrivée
+function prepTimes(stages) {
+  const raw = prepDepRaw(), dep = prepDepT(), d = new Date(dep), h = d.getHours();
+  const same = raw && h >= 4 && h < 12, mm = same ? h * 60 + d.getMinutes() : 8 * 60;
+  let prev = 0;
+  return stages.map((s, i) => {
+    let start = dep;
+    // jour suivant : le lendemain de l'arrivée de la veille (au moins 8 h de repos), à l'heure de départ des jours suivants
+    if (i) { const x = new Date(prev); x.setHours(0, mm, 0, 0); while (x.getTime() < prev + 8 * 3600e3) x.setDate(x.getDate() + 1); start = x.getTime(); }
+    const arr = start + s.secs * 1300, e = pointAt(track, s.to), sun = sunTimes(arr, e.lat, e.lon); prev = arr;
+    return { start, arr, set: sun ? sun.set : null, dark: !!(sun && arr > sun.set), next: mm };
+  });
+}
+const dayLab = ms => { const t0 = new Date(); t0.setHours(0, 0, 0, 0); const k = Math.round((new Date(ms).setHours(0, 0, 0, 0) - t0) / 864e5); return k === 0 ? tr('Aujourd\'hui') : k === 1 ? tr('Demain') : new Date(ms).toLocaleDateString(LOC, { weekday: 'short', day: 'numeric', month: 'short' }); };
+function prepDepUI(times) {
+  const raw = prepDepRaw(), dep = prepDepT(), t0 = new Date(); t0.setHours(0, 0, 0, 0);
+  const sel = raw ? new Date(raw).setHours(0, 0, 0, 0) : 'now', days = [];
+  for (let k = 0; k < 14; k++) { const d = new Date(t0); d.setDate(d.getDate() + k); days.push(d.getTime()); }
+  if (raw && !days.includes(sel)) days.push(sel);
+  const lab = (d, k) => k === 0 ? tr('Aujourd\'hui') : k === 1 ? tr('Demain') : new Date(d).toLocaleDateString(LOC, { weekday: 'short', day: 'numeric' });
+  $('prepDepDays').innerHTML = `<button role="option" data-d="now" class="${sel === 'now' ? 'on' : ''}">${escH(tr('Maintenant'))}</button>`
+    + days.map((d, k) => `<button role="option" data-d="${d}" class="${d === sel ? 'on' : ''}">${escH(lab(d, k))}</button>`).join('');
+  $('prepDepTime').textContent = hm(dep);
+  $('prepDepSum').textContent = raw ? new Date(raw).toLocaleString(LOC, { weekday: 'long', day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit' }) : tr('Maintenant');
+  const last = times[times.length - 1], end = track.pts[track.pts.length - 1];
+  let info = `🏁 <span>${escH(tr('Arrivée prévue'))}</span> <b>${escH(times.length > 1 ? dayLab(last.arr) + ' ' : '')}${escH(tr('vers'))} ${hm(last.arr)}</b> <span>${escH(tr('(pauses comprises)'))}</span>`;
+  if (times.length > 1) info += `<br><span>${escH(tr('Les jours suivants : départ à'))}</span> ${String(Math.floor(last.next / 60)).padStart(2, '0')}:${String(last.next % 60).padStart(2, '0')}`;
+  const dark = times.filter(x => x.dark);
+  if (dark.length) info += `<br><span class="warn">🌙 ${escH(tr(times.length > 1 ? (dark.length > 1 ? 'Arrivée après le coucher du soleil certains jours : pars plus tôt ou raccourcis l\'étape' : 'Arrivée après le coucher du soleil un jour : pars plus tôt ou raccourcis l\'étape') : 'Arrivée après le coucher du soleil'))}${times.length < 2 ? ` (${hm(last.set)})` : ''}</span>`;
+  else if (times.length < 2 && last.set) info += `<br><span>🌅 ${escH(tr('Coucher du soleil'))} ${hm(last.set)}</span>`;
+  $('prepDepInfo').innerHTML = info;
+  $('prepDepDays').querySelectorAll('button').forEach(b => b.onclick = () => {
+    if (b.dataset.d === 'now') { prepDepSet(0); return; }
+    const d = new Date(+b.dataset.d), o = new Date(raw || prepDepDefault()); d.setHours(o.getHours(), o.getMinutes(), 0, 0);
+    prepDepSet(d.getTime());
+  });
+  const on = $('prepDepDays').querySelector('.on'); if (on) on.scrollIntoView({ block: 'nearest', inline: 'center' });
+}
+document.querySelectorAll('#prepDepTimeRow button').forEach(b => b.onclick = () => {
+  const base = prepDepRaw() || q15(Date.now());
+  prepDepSet(Math.round((base + +b.dataset.t * 60000) / 9e5) * 9e5);
+});
+let prepEdit = -1; // jour dont les réglages de fin d'étape sont ouverts
 async function prepRender() {
   if (!track) return;
   const mine = track, seq = ++prepSeq, n = prepDays(), sel = $('prepDays');
@@ -8320,7 +8386,8 @@ async function prepRender() {
   document.querySelector('.prep-foot').textContent = tr(bike ? 'Temps à vélo estimé selon ton allure, sans les pauses.' : 'Temps de marche estimé selon ton allure, sans les pauses.');
   $('prepWater').innerHTML = `<p class="note">${escH(tr('Recherche des points d\'eau…'))}</p>`;
   const draw = pois => {
-    const stages = prepStages(n, pois);
+    const stages = prepStages(n, pois), times = prepTimes(stages);
+    prepDepUI(times);
     $('prepStages').innerHTML = n < 2 ? '' : stages.map(s => {
       const night = s.last ? `<span class="pl-night">🏁 <span>${escH(tr('Arrivée'))}</span></span>`
         : s.night ? `<span class="pl-night">${POI[s.night.k][0]} <span>${escH(tr(POI_NAME[s.night.k]))}</span>${s.night.nm ? ' · ' + escH(s.night.nm) : ''}${s.night.d > 80 ? ` <span class="pl-km">(${fmtDist(Math.round(s.night.d / 10) * 10)} <span>${escH(tr('de la trace'))}</span>)</span>` : ''}</span>`
@@ -8334,7 +8401,10 @@ async function prepRender() {
         ctl = `<div class="pl-ctl" data-i="${s.n - 1}"><span>${escH(tr('Fin d\'étape'))}</span><button data-mv="-5000">−5</button><button data-mv="-1000">−1</button><b>${kmN(s.to)}${kmU()}</b><button data-mv="1000">+1</button><button data-mv="5000">+5</button></div>`
           + (near.length ? `<div class="pl-near" data-i="${s.n - 1}">${near.map(p => `<button data-at="${Math.round(p.along)}">${POI[p.k][0]} ${escH(p.nm || tr(POI_NAME[p.k]))} · km ${kmN(p.along)}</button>`).join('')}</div>` : '');
       }
-      return `<li><b><span>${escH(tr('Jour'))}</span> ${s.n}</b> · <b>${fmtDist(s.dist)}</b>${track.hasEle ? ` · <span>D+</span> ${fmtM(s.up)} · <span>D−</span> ${fmtM(s.down)}` : ''} · ${fmtDur(s.secs)}<br><span class="pl-km">${kmN(s.from)} → ${kmN(s.to)}${kmU()}</span>${night}${ctl}</li>`;
+      const tm = times[s.n - 1], open = prepEdit === s.n - 1;
+      const when = `<span class="pl-when">${escH(dayLab(tm.start))} · ${hm(tm.start)} → ${hm(tm.arr)}${tm.dark ? ` <span class="pl-dark">🌙 ${escH(tr('après le coucher du soleil'))} (${hm(tm.set)})</span>` : ''}</span>`;
+      const adj = ctl ? `<button class="pl-edit" data-i="${s.n - 1}">${escH(tr(open ? 'Fermer' : 'Déplacer la fin d\'étape'))} ${open ? '▴' : '▾'}</button><div class="pl-adj"${open ? '' : ' hidden'}>${ctl}</div>` : '';
+      return `<li><b><span>${escH(tr('Jour'))}</span> ${s.n}</b> · <b>${fmtDist(s.dist)}</b>${track.hasEle ? ` · <span class="nw"><span>D+</span> ${fmtM(s.up)}</span> · <span class="nw"><span>D−</span> ${fmtM(s.down)}</span>` : ''} · <span class="nw">${fmtDur(s.secs)}</span>${when}<span class="pl-km">${kmN(s.from)} → ${kmN(s.to)}${kmU()}</span>${night}${adj}</li>`;
     }).join('') + (n > 1 && stages.some(s => s.own) ? `<li class="pl-reset"><button id="prepReset">↺ <span>${escH(tr('Recalculer les étapes automatiquement'))}</span></button></li>` : '');
     prepStagesWire(stages, n);
     $('prepOnMap').hidden = n < 2;
@@ -8352,14 +8422,15 @@ async function prepRender() {
     return;
   }
   const W = prepWaterGaps(pois);
-  const gapHtml = W.gaps.map(gp => {
+  const gapRows = W.gaps.map(gp => {
     const where = gp.start && gp.end ? `<span>${escH(tr('Sur tout le parcours'))}</span>`
       : gp.start ? `<span>${escH(tr('Départ'))}</span> → ${kmN(gp.to)}${kmU()}`
       : gp.end ? `${kmN(gp.from)}${kmU()} → <span>${escH(tr('arrivée'))}</span>`
       : `${kmN(gp.from)} → ${kmN(gp.to)}${kmU()}`;
     const src = gp.src.length ? `<br><small>💧 ${gp.src.length} <span>${escH(tr(gp.src.length > 1 ? 'sources sur ce tronçon (eau non garantie)' : 'source sur ce tronçon (eau non garantie)'))}</span></small>` : '';
-    return `<p class="gap">⚠️ ${where} : <b>${fmtDist(gp.to - gp.from)}</b> <span>${escH(tr('sans point d\'eau potable connu'))}</span>${src}</p>`;
+    return `<span class="gap-row">${where} : <b>${fmtDist(gp.to - gp.from)}</b>${src}</span>`;
   }).join('');
+  const gapHtml = gapRows ? `<div class="gap"><b>⚠️ ${escH(tr(W.gaps.length > 1 ? 'Tronçons sans point d\'eau potable connu' : 'Tronçon sans point d\'eau potable connu'))}</b>${gapRows}<small>${escH(tr('Prévois de quoi boire pour ces tronçons.'))}</small></div>` : '';
   $('prepWater').innerHTML = (gapHtml || `<p class="ok">✓ <span>${escH(tr(W.n ? 'Un point d\'eau potable au moins tous les' : 'Parcours court : pas de long tronçon sans eau'))}</span>${W.n ? ' ' + fmtDist(W.lim) : ''}</p>`)
     + `<p class="note">${W.n} <span>${escH(tr(W.n > 1 ? 'points d\'eau potable à moins de 250 m de la trace' : 'point d\'eau potable à moins de 250 m de la trace'))}</span>. <span>${escH(tr('Données OpenStreetMap : vérifie sur place, et emporte de quoi tenir.'))}</span></p>`;
   if (W.gaps.length) prepHintSet(n, true);
@@ -8395,14 +8466,50 @@ async function prepDaysSave(folder) {
   return ids.length;
 }
 const prepSig = () => { const st = prepStages(prepDays(), track && Array.isArray(track.prepPois) ? track.prepPois : null); return st.map(s => Math.round(s.to)).join(','); };
+// commune d'un point : Photon (partout), sinon geo.api.gouv.fr (France), sinon communes téléchargées pour la recherche sans réseau
+async function townAt(p) {
+  const get = async u => { const c = new AbortController(), k = setTimeout(() => c.abort(), 4000); try { const r = await fetch(u, { signal: c.signal }); return r.ok ? await r.json() : null; } finally { clearTimeout(k); } };
+  try {
+    const j = await get(`https://photon.komoot.io/reverse?lat=${p.lat.toFixed(5)}&lon=${p.lon.toFixed(5)}&limit=1${LANG === 'fr' || LANG === 'en' ? '&lang=' + LANG : ''}`);
+    const q = j && j.features && j.features[0] && j.features[0].properties;
+    const n = q && (q.city || q.town || q.village || (q.osm_key === 'place' ? q.name : null) || q.district);
+    if (n) return n;
+  } catch {}
+  try { const j = await get(`https://geo.api.gouv.fr/communes?lat=${p.lat.toFixed(5)}&lon=${p.lon.toFixed(5)}&fields=nom&format=json`); if (j && j[0] && j[0].nom) return j[0].nom; } catch {}
+  try { let b = null, bd = 10000; for (const c of await loadPlaces()) { const d = hav(p, c); if (d < bd) { bd = d; b = c; } } if (b) return b.nom; } catch {}
+  return null;
+}
+// nom proposé pour le dossier d'une sortie : « Ville de départ → ville d'arrivée », ou « Boucle de … »
+async function prepTripName(T) {
+  const a = T.pts[0], b = T.pts[T.pts.length - 1], loop = hav(a, b) < 1500;
+  const [x, y] = await Promise.all([townAt(a), loop ? null : townAt(b)]);
+  if (x && y && x !== y) return `${x} → ${y}`;
+  if (x) return loop ? `${tr('Boucle de')} ${x}` : x;
+  return T.name || tr('Parcours');
+}
 async function prepKeep() {
   if (!track) return false;
   const id = trKey(), mine = track, n = prepDays();
-  const saved = store.get('gpx'), text = saved && saved.includes('<trkpt') ? saved : loopGPX(mine.pts, mine.name);
+  // plusieurs jours : un nouveau dossier pour cette sortie (nom proposé : les villes), gardé ensuite pour elle ;
+  // un jour : « Sorties préparées », ou le dossier où la trace est déjà rangée
+  let f = null;
   const old = await idb('readonly', st => st.get(id)).catch(() => null);
+  if (n > 1) {
+    const trip = store.get(prepTripKey());
+    if (trip && trip !== PREP_FOLDER()) f = trip;
+    else {
+      toast('Recherche des villes de départ et d\'arrivée…', 2500);
+      const def = (await prepTripName(mine)).slice(0, 40);
+      if (track !== mine) return false;
+      const nm = await libDialog({ title: 'Dossier de la sortie', text: 'Un nouveau dossier pour cette sortie, avec la trace entière et une trace par jour.', value: def, ok: 'Créer', ask: true });
+      if (!nm || track !== mine) return false;
+      const have = libFolders(await listRecent().catch(() => []));
+      f = nm; for (let k = 2; have.includes(f); k++) f = `${nm.slice(0, 35)} (${k})`;
+      stat('prep_dossier' + (nm === def ? '' : '_renomme'));
+    }
+  } else f = (old && old.folder) || PREP_FOLDER();
+  const saved = store.get('gpx'), text = saved && saved.includes('<trkpt') ? saved : loopGPX(mine.pts, mine.name);
   if (!old) await saveRecent(mine, text);
-  // plusieurs jours : dossier au nom de la sortie ; sinon « Sorties préparées » ; une trace déjà rangée reste dans son dossier
-  const f = (old && old.folder) || (n > 1 ? (mine.name || tr('Parcours')).slice(0, 40) : PREP_FOLDER());
   await libPatch([id], it => { it.folder = f; it.pos = 0; });
   const fs = libFoldersStored(); if (!fs.includes(f)) { fs.push(f); libSaveFolders(fs); }
   store.set(prepTripKey(), f);
@@ -8445,7 +8552,7 @@ async function prepOffline() {
       const h = Math.max(0, (b.level * 100 - 10) / rate), ok = h >= need;
       battRow = row(ok, 'Batterie', `${Math.round(b.level * 100)} % · ${escH(tr('environ'))} ${fmtDur(h * 3600)} ${escH(tr('de navigation'))} · ${escH(tr(st.length > 1 ? 'jour le plus long' : 'il en faut'))} ${fmtDur(need * 3600)}${ok ? '' : ' · ' + escH(tr('recharge ou prends une batterie externe'))}${st.length > 1 ? `<br>${escH(tr('Sans recharge sur'))} ${st.length} ${escH(tr('jours'))} : ${fmtDur(needAll * 3600)} (${Math.round(needAll * rate)} %)` : ''}<br>${rateTxt}`, 'batt');
     } else {
-      battRow = row('info', 'Batterie', `${escH(tr(b ? 'En charge.' : 'Niveau inconnu.'))} ${escH(tr(st.length > 1 ? 'Jour le plus long' : 'Il en faut'))} ${fmtDur(need * 3600)}, ${escH(tr('soit'))} ${Math.round(need * rate)} % ${escH(tr('de batterie'))}${st.length > 1 ? ` · ${st.length} ${escH(tr('jours'))} : ${Math.round(needAll * rate)} %` : ''}<br>${rateTxt}`, 'batt');
+      battRow = row('info', 'Batterie', `${escH(tr(b ? 'En charge.' : 'Niveau inconnu.'))} ${escH(tr(st.length > 1 ? 'Jour le plus long' : 'Il en faut'))} ${fmtDur(need * 3600)}, ${escH(tr('soit'))} ${Math.round(need * rate)} % ${escH(tr('de batterie'))}${st.length > 1 ? `<br>${escH(tr('Sur'))} ${st.length} ${escH(tr('jours sans recharge'))} : ${needAll * rate > 100 ? `${(needAll * rate / 100).toFixed(1).replace('.', ',')} ${escH(tr('charges complètes : prends une batterie externe'))}` : Math.round(needAll * rate) + ' %'}` : ''}<br>${rateTxt}`, 'batt');
     }
   } catch {}
   $('prepOff').innerHTML = [
@@ -8522,7 +8629,7 @@ function prepLeave(msg) {
   $('prepSheet').hidden = true; prepBack = true;
   toast(msg, 6000, { label: tr('↩ Préparer'), run: prepOpen });
 }
-function prepOpen() { prepBack = false; if (!track) return; $('prepSheet').hidden = false; prepRender(); }
+function prepOpen() { prepBack = false; if (!track) return; if ($('prepSheet').hidden) prepEdit = -1; $('prepSheet').hidden = false; prepRender(); }
 // téléchargement lancé d'ici : la liste se met à jour quand il se termine
 let prepDlWas = false;
 setInterval(() => { const d = !!dl; if (d !== prepDlWas) { prepDlWas = d; if (!$('prepSheet').hidden) prepOffline(); } }, 3000);
@@ -8533,7 +8640,7 @@ $('prepBook').onclick = () => prepRoadbook();
 $('prepOffGo').onclick = async () => {
   if (!track) return;
   stat('prep_horsligne');
-  await prepKeep();
+  if (!await prepKeep()) { prepOffline(); return; }
   prepMapDl();
 };
 // ---------- feuille de route : une page à garder ou imprimer (étapes, eau, refuges, secours) ----------
@@ -8550,7 +8657,7 @@ async function prepRoadbook() {
   if (!track) return;
   stat('prep_feuille');
   const T = track, n = prepDays(), pois = Array.isArray(T.prepPois) ? T.prepPois : await prepPois(T).catch(() => null);
-  const stages = prepStages(n, pois), bike = prepBike(), e = escH, t = s => e(tr(s));
+  const stages = prepStages(n, pois), times = prepTimes(stages), bike = prepBike(), e = escH, t = s => e(tr(s));
   const km = d => kmN(d) + kmU(), s0 = T.pts[0], s1 = T.pts[T.pts.length - 1], ll = p => `${p.lat.toFixed(5)}, ${p.lon.toFixed(5)}`;
   const W = pois ? prepWaterGaps(pois) : null, pl = pois ? pois.filter(p => p.k === 'w' || p.k === 's' || PREP_NIGHT[p.k]) : [];
   const notes = (T.wpts || []).map(w => { const pr = project(T, w, true); return pr && pr.dist < 300 ? { along: pr.along, name: w.name || w.desc || '' } : null; }).filter(x => x && x.name);
@@ -8577,7 +8684,9 @@ async function prepRoadbook() {
     const inDay = pl.filter(p => p.along >= s.from - 1 && p.along <= s.to + 1), gaps = W ? W.gaps.filter(g => g.to > s.from && g.from < s.to) : [];
     const noteL = notes.filter(x => x.along >= s.from && x.along <= s.to);
     const end = s.last ? `🏁 ${t('Arrivée')}` : s.night ? `${POI[s.night.k][0]} ${t(POI_NAME[s.night.k])}${s.night.nm ? ' · <b>' + e(s.night.nm) + '</b>' : ''}` : `🌙 ${t('Nuit : lieu à trouver (pas de refuge ni d\'abri repéré)')}`;
+    const tm = times[s.n - 1], dl = new Date(tm.start).toLocaleDateString(LOC, { weekday: 'long', day: 'numeric', month: 'long' });
     return `<section class="day"><header><span class="dn">${n > 1 ? `${t('Jour')} ${s.n}` : t('Parcours')}</span><span class="km">${km(s.from)} → ${km(s.to)}</span></header>
+<p class="when">📅 <b>${e(dl)}</b> · ${t('départ')} ${hm(tm.start)} · ${t('arrivée vers')} ${hm(tm.arr)}${tm.set ? ` · 🌅 ${hm(tm.set)}` : ''}</p>${tm.dark ? `<p class="warn">🌙 ${t('Arrivée après le coucher du soleil : prévois une frontale, ou pars plus tôt.')}</p>` : ''}
 <div class="tiles">${tile(fmtDist(s.dist), 'Distance')}${T.hasEle ? tile(fmtM(s.up), 'D+') + tile(fmtM(s.down), 'D−') : ''}${tile(fmtDur(s.secs), bike ? 'à vélo' : 'de marche')}</div><p class="note pz">${t('Avec les pauses : environ')} ${fmtDur(s.secs * 1.3)}</p>
 ${prof(s.from, s.to, 700, 120)}
 ${gaps.length ? gaps.map(g => `<p class="warn">⚠️ ${km(Math.max(g.from, s.from))} → ${km(Math.min(g.to, s.to))} : ${t('pas de point d\'eau potable connu')}${g.src.length ? ` (${g.src.length} ${t(g.src.length > 1 ? 'sources, eau non garantie' : 'source, eau non garantie')})` : ''} — ${t('prévoir de quoi boire')}</p>`).join('') : ''}
@@ -8589,7 +8698,7 @@ ${noteL.length ? `<ul class="pts notes">${noteL.map(x => `<li><b>${km(x.along)}<
   let link = ''; try { link = await routeLink(T.name, T.pts, { desc: T.desc, wpts: T.wpts }, 300); } catch {}
   let qr = '';
   try { const q = qrcode(0, 'L'); q.addData(link); q.make(); const m = q.getModuleCount(); let r = ''; for (let y = 0; y < m; y++) for (let x = 0; x < m; x++) if (q.isDark(y, x)) r += `M${x},${y}h1v1h-1z`; qr = `<svg viewBox="-2 -2 ${m + 4} ${m + 4}" class="qr"><rect x="-2" y="-2" width="${m + 4}" height="${m + 4}" fill="#fff"/><path d="${r}"/></svg>`; } catch {}
-  const dateTxt = new Date().toLocaleDateString(LOC, { day: 'numeric', month: 'long', year: 'numeric' });
+  const dateTxt = new Date(times[0].start).toLocaleDateString(LOC, { day: 'numeric', month: 'long', year: 'numeric' }) + (n > 1 ? ' → ' + new Date(times[n - 1].start).toLocaleDateString(LOC, { day: 'numeric', month: 'long' }) : '');
   let html = `<!doctype html><html lang="${LANG}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${e(T.name || 'Pisteo')} · ${t('Feuille de route')}</title>
 <style>
 *{box-sizing:border-box}body{margin:0;background:#eef1ea;color:#17201c;font:14px/1.45 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
@@ -8607,7 +8716,7 @@ h2{font-size:12.5px;letter-spacing:.07em;text-transform:uppercase;color:#2F5E45;
 .dn{font-size:20px;font-weight:800;color:#2F5E45}.km{color:#5d6963;font-variant-numeric:tabular-nums}
 .warn{margin:8px 0 0;padding:8px 10px;border-radius:10px;background:#fbefd8;color:#5b3d00;font-size:13.5px}
 .pts{list-style:none;margin:8px 0 0;padding:0}.pts li{padding:5px 0;border-top:1px solid #edf0ea;font-size:13.5px}.pts b{display:inline-block;min-width:58px;font-variant-numeric:tabular-nums}.pts i{color:#6b746f;font-style:normal;font-size:12px}
-.end{margin:10px 0 0;padding:9px 12px;border-radius:12px;background:#e6efe8;font-size:14px}
+.when{margin:8px 0 0;font-size:14px}.end{margin:10px 0 0;padding:9px 12px;border-radius:12px;background:#e6efe8;font-size:14px}
 .sos{border:2px solid #c62828}.sos h2{color:#c62828}.nums{display:grid;grid-template-columns:auto 1fr;gap:4px 14px;align-items:center}.nums b{font-size:24px;color:#c62828;font-variant-numeric:tabular-nums}
 .coords{margin:10px 0 0;font-variant-numeric:tabular-nums}.note{color:#5d6963;font-size:12.5px}
 .qrbox{display:flex;gap:14px;align-items:center}.qr{width:118px;height:118px;flex:none}a{color:#2F5E45;word-break:break-all}
@@ -8637,15 +8746,17 @@ const dtLocal = ms => { const d = new Date(ms), z = n => String(n).padStart(2, '
 // retour prévu par défaut : départ (heure choisie pour la météo, sinon maintenant) + temps estimé + 30 % de pauses ;
 // sur plusieurs jours : le dernier jour à la même heure d'arrivée
 function prepRetDefault() {
-  const start = depAt() || Date.now(), n = prepDays();
-  const last = prepStages(n, Array.isArray(track.prepPois) ? track.prepPois : null).pop();
-  let t = start + effTo(track.total) * 1300;
-  if (n > 1) { const d = new Date(start + (n - 1) * 864e5); d.setHours(8, 30, 0, 0); t = d.getTime() + last.secs * 1300; }
-  return Math.ceil(t / 9e5) * 9e5;
+  const tm = prepTimes(prepStages(prepDays(), Array.isArray(track.prepPois) ? track.prepPois : null));
+  return q15(tm[tm.length - 1].arr);
 }
 function prepSafety() {
   let ret = null; try { ret = JSON.parse(store.get('sosReturn') || 'null'); } catch {}
-  prepRetT = ret && ret.key === trKey() && ret.t > Date.now() ? ret.t : prepRetDefault(); prepRetUI();
+  const own = +store.get(prepRetOwnKey()), told = ret && ret.key === trKey() && ret.t > Date.now();
+  prepRetT = told ? ret.t : own > Date.now() ? own : prepRetDefault(); prepRetUI();
+  $('prepRetNote').innerHTML = told ? escH(tr('Heure envoyée à ton proche.'))
+    : own > Date.now() ? `${escH(tr('Réglée à la main.'))} <button id="prepRetAuto" class="linkbtn">↺ ${escH(tr('Caler sur l\'arrivée prévue'))}</button>`
+    : escH(tr('Calée sur l\'arrivée prévue, pauses comprises. Envoyée à un proche avec le parcours.'));
+  const ra = $('prepRetAuto'); if (ra) ra.onclick = () => { store.set(prepRetOwnKey(), ''); prepSafety(); };
   $('prepTellInfo').innerHTML = ret && ret.key === trKey() && ret.t > Date.now() - 864e5
     ? `✓ <span>${escH(tr('Proche prévenu · retour prévu'))}</span> ${escH(new Date(ret.t).toLocaleString(LOC, { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }))}` : '';
 }
@@ -8665,7 +8776,7 @@ $('prepTell').onclick = async () => {
   const C = LANG === 'fr' ? ' : ' : ': ';
   let msg = [
     `${tr('Je pars sur ce parcours')}${C}${track.name || tr('Parcours')} (${fmtDist(track.total)}${track.hasEle ? ', ' + tr('D+') + ' ' + fmtM(track.totalUp) : ''}${n > 1 ? ', ' + n + ' ' + tr('jours') : ''}, ${tr(prepBike() ? 'à vélo' : 'à pied')}).`,
-    `${tr('Départ')}${C}${s0.lat.toFixed(5)}, ${s0.lon.toFixed(5)}.`,
+    `${tr('Départ')}${C}${prepDepRaw() ? when(prepDepRaw()) + ', ' : ''}${s0.lat.toFixed(5)}, ${s0.lon.toFixed(5)}.`,
     `${tr('Retour prévu')}${C}${when(ret)}.`,
     `${tr('Sans nouvelles de moi le')} ${when(late)}, ${tr('appelle le')} ${num} ${tr('et donne-leur ce parcours')}${C.trimEnd()}`,
     link
@@ -8690,13 +8801,13 @@ function prepRetUI() {
   $('prepRetSum').textContent = new Date(prepRetT).toLocaleString(LOC, { weekday: 'long', day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit' });
   $('prepRetDays').querySelectorAll('button').forEach(b => b.onclick = () => {
     const d = new Date(+b.dataset.d), o = new Date(prepRetT); d.setHours(o.getHours(), o.getMinutes(), 0, 0);
-    prepRetT = d.getTime(); $('prepTellInfo').textContent = ''; prepRetUI();
+    prepRetT = d.getTime(); store.set(prepRetOwnKey(), String(prepRetT)); $('prepTellInfo').textContent = ''; prepSafety();
   });
   const on = $('prepRetDays').querySelector('.on'); if (on) on.scrollIntoView({ block: 'nearest', inline: 'center' });
 }
-document.querySelectorAll('.ret-time button').forEach(b => b.onclick = () => {
+document.querySelectorAll('#prepRetTimeRow button').forEach(b => b.onclick = () => {
   prepRetT = Math.max(Date.now(), prepRetT + +b.dataset.t * 60000); prepRetT = Math.round(prepRetT / 9e5) * 9e5;
-  $('prepTellInfo').textContent = ''; prepRetUI();
+  store.set(prepRetOwnKey(), String(prepRetT)); $('prepTellInfo').textContent = ''; prepSafety();
 });
 // secours : position actuelle (ou départ de la trace), numéros du pays, appel et envoi de la position
 function openSos() {
@@ -8767,7 +8878,7 @@ $('prepOnMap').onclick = () => {
   const lats = track.pts.map(p => p.lat), lons = track.pts.map(p => p.lon);
   map.fitBounds([[Math.min(...lons), Math.min(...lats)], [Math.max(...lons), Math.max(...lats)]], { padding: { top: 90, bottom: Math.round(innerHeight * .42), left: 30, right: 30 }, duration: 600 });
 };
-$('prepDays').onchange = e => { store.set(prepKey(), e.target.value); stat('prep_jours'); prepRender(); };
+$('prepDays').onchange = e => { prepEdit = -1; store.set(prepRetOwnKey(), ''); store.set(prepKey(), e.target.value); stat('prep_jours'); prepRender(); };
 function prepStagesWire(stages, n) {
   const save = a => { store.set(prepEndsKey(n), JSON.stringify(a.map(v => Math.round(v)))); stat('prep_etape_modifiee'); prepRender(); };
   const ends = () => stages.slice(0, -1).map(s => s.to);
@@ -8778,6 +8889,7 @@ function prepStagesWire(stages, n) {
   $('prepStages').querySelectorAll('.pl-near button').forEach(b => b.onclick = () => {
     const i = +b.closest('.pl-near').dataset.i, a = ends(); a[i] = +b.dataset.at; save(a);
   });
+  $('prepStages').querySelectorAll('.pl-edit').forEach(b => b.onclick = () => { prepEdit = prepEdit === +b.dataset.i ? -1 : +b.dataset.i; prepRender(); });
   const r = $('prepReset'); if (r) r.onclick = () => { store.set(prepEndsKey(n), ''); prepRender(); };
 }
 trChipsUpdate = (fn => function () { const r = fn.apply(this, arguments); try { prepUpdate(); } catch {} return r; })(trChipsUpdate);

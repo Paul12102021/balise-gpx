@@ -1000,3 +1000,20 @@ body.wx-on:not(.side) .trackrow { justify-content: space-between; } /* les bouto
 .stage-mk.drag { cursor: grab; padding: 0 8px; min-width: 30px; height: 26px; line-height: 22px; font-size: 13px; touch-action: none; }
 .stage-mk.drag::after { content: ''; position: absolute; inset: -12px; }
 .stage-mk.on { cursor: grabbing; background: #d9541e; white-space: nowrap; }
+
+/* v272 : départ prévu, horaires des étapes, réglages de fin d'étape repliés, eau en un seul encadré */
+.nw { white-space: nowrap; }
+.prep-list .pl-when { display: block; margin-top: 3px; font-size: 13px; font-weight: 600; color: var(--go-ink); }
+.prep-list .pl-when::first-letter { text-transform: uppercase; }
+.prep-list .pl-dark, #prepDepInfo .warn { color: #a35a00; font-weight: 600; }
+.prep-list .pl-km { display: block; }
+.pl-edit { display: block; margin: 6px 0 0; padding: 4px 0; border: 0; background: none; color: var(--go-ink); font: 600 13px system-ui, sans-serif; cursor: pointer; }
+.pl-adj[hidden] { display: none; }
+#prepDepInfo { display: block; font-size: 13px; line-height: 1.45; }
+#prepDepInfo b { color: var(--ink); }
+#prepRetNote .linkbtn { padding: 0; border: 0; background: none; color: var(--go-ink); font: 600 12.5px system-ui, sans-serif; cursor: pointer; }
+.prep-water .gap { display: flex; flex-direction: column; gap: 4px; }
+.prep-water .gap-row { padding-left: 22px; }
+.prep-water .gap > small { margin-top: 2px; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .prep-list .pl-dark, :root:not([data-theme="light"]) #prepDepInfo .warn { color: #ffc46b; } }
+:root[data-theme="dark"] .prep-list .pl-dark, :root[data-theme="dark"] #prepDepInfo .warn { color: #ffc46b; }

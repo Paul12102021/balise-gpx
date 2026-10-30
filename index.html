@@ -9,13 +9,13 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<meta name="balise-version" content="271">
+<meta name="balise-version" content="272">
 <title>Pisteo</title>
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" href="icon.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
 <link rel="stylesheet" href="vendor/maplibre-gl.css">
-<link rel="stylesheet" href="app.css?v=271">
+<link rel="stylesheet" href="app.css?v=272">
 </head>
 <body>
 <div id="map" aria-label="Carte"></div>
@@ -298,6 +298,19 @@
     </div>
     <p id="prepSum" class="lib-sum"></p>
     <section class="prep-sec">
+      <h4>Départ</h4>
+      <div class="ret-pick">
+        <div class="ret-head"><span>Départ prévu</span><b id="prepDepSum"></b></div>
+        <div class="ret-days" id="prepDepDays" role="listbox" aria-label="Jour du départ"></div>
+        <div class="ret-time" id="prepDepTimeRow">
+          <button data-t="-60" aria-label="Une heure plus tôt">−1 h</button><button data-t="-15" aria-label="Un quart d'heure plus tôt">−15</button>
+          <b id="prepDepTime">–</b>
+          <button data-t="15" aria-label="Un quart d'heure plus tard">+15</button><button data-t="60" aria-label="Une heure plus tard">+1 h</button>
+        </div>
+        <small id="prepDepInfo" class="note"></small>
+      </div>
+    </section>
+    <section class="prep-sec">
       <h4>Étapes</h4>
       <div class="set-group">
         <div class="row">
@@ -324,12 +337,12 @@
       <div class="ret-pick">
         <div class="ret-head"><span>Retour prévu</span><b id="prepRetSum"></b></div>
         <div class="ret-days" id="prepRetDays" role="listbox" aria-label="Jour du retour"></div>
-        <div class="ret-time">
+        <div class="ret-time" id="prepRetTimeRow">
           <button data-t="-60" aria-label="Une heure plus tôt">−1 h</button><button data-t="-15" aria-label="Un quart d'heure plus tôt">−15</button>
           <b id="prepRetTime">–</b>
           <button data-t="15" aria-label="Un quart d'heure plus tard">+15</button><button data-t="60" aria-label="Une heure plus tard">+1 h</button>
         </div>
-        <small class="note">Envoyé à un proche avec le parcours.</small>
+        <small class="note" id="prepRetNote">Envoyé à un proche avec le parcours.</small>
       </div>
       <div class="prep-btns">
         <button id="prepTell" class="btn go">Prévenir un proche</button>
@@ -958,8 +971,8 @@
 
 <script src="vendor/maplibre-gl.js"></script>
 <script src="vendor/qrcode.js"></script>
-<script src="i18n/en.js?v=271"></script>
-<script src="i18n/es.js?v=271"></script>
-<script src="app.js?v=271"></script>
+<script src="i18n/en.js?v=272"></script>
+<script src="i18n/es.js?v=272"></script>
+<script src="app.js?v=272"></script>
 </body>
 </html>
