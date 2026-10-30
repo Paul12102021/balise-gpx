@@ -8327,11 +8327,26 @@ async function prepOffline() {
   const poiOk = Array.isArray(mine.prepPois);
   const row = (ok, title, sub) => `<li><i class="${ok === 'info' ? 'info' : ok ? 'ok' : 'no'}">${ok === 'info' ? 'i' : ok ? '✓' : ''}</i><span><span>${escH(tr(title))}</span>${sub ? `<small>${sub}</small>` : ''}</span></li>`;
   const when = pack ? `${fmtMo(pack.bytes / 1024)} · ${fmtDate(pack.date)}` : '';
+  // batterie : heures de navigation possibles (10 % gardés en réserve) face au jour le plus long, pauses comprises
+  let battRow = '';
+  try {
+    const b = await battGet(), rate = +store.get('battRate') || 10, learned = !!store.get('battRate');
+    const st = prepStages(prepDays(), Array.isArray(mine.prepPois) ? mine.prepPois : null);
+    const need = Math.max(...st.map(s => s.secs)) * 1.3 / 3600, needAll = st.reduce((a, s) => a + s.secs, 0) * 1.3 / 3600;
+    const rateTxt = `≈ ${String(rate).replace('.', ',')} %/h ${escH(tr(learned ? 'sur ce téléphone' : 'estimation par défaut, affinée après tes sorties'))}`;
+    if (b && !b.charging) {
+      const h = Math.max(0, (b.level * 100 - 10) / rate), ok = h >= need;
+      battRow = row(ok, 'Batterie', `${Math.round(b.level * 100)} % · ${escH(tr('environ'))} ${fmtDur(h * 3600)} ${escH(tr('de navigation'))} · ${escH(tr(st.length > 1 ? 'jour le plus long' : 'il en faut'))} ${fmtDur(need * 3600)}${ok ? '' : ' · ' + escH(tr('recharge ou prends une batterie externe'))}${st.length > 1 ? `<br>${escH(tr('Sans recharge sur'))} ${st.length} ${escH(tr('jours'))} : ${fmtDur(needAll * 3600)} (${Math.round(needAll * rate)} %)` : ''}<br>${rateTxt}`);
+    } else {
+      battRow = row('info', 'Batterie', `${escH(tr(b ? 'En charge.' : 'Niveau inconnu.'))} ${escH(tr(st.length > 1 ? 'Jour le plus long' : 'Il en faut'))} ${fmtDur(need * 3600)}, ${escH(tr('soit'))} ${Math.round(need * rate)} % ${escH(tr('de batterie'))}${st.length > 1 ? ` · ${st.length} ${escH(tr('jours'))} : ${Math.round(needAll * rate)} %` : ''}<br>${rateTxt}`);
+    }
+  } catch {}
   $('prepOff').innerHTML = [
     row(saved, 'Trace gardée dans Mes traces', saved ? '' : escH(tr('Pour la rouvrir même si l\'appli redémarre'))),
     row(mapOk, 'Carte le long de la trace', mapOk ? when : pack ? escH(tr('Téléchargement incomplet')) : escH(tr('Pas encore téléchargée'))),
     row(graphOk, 'Chemins pour revenir sur la trace', graphOk ? `${pack.graph.km} km` : escH(tr('Itinéraire de retour calculé même sans réseau'))),
     row(poiOk, 'Points d\'eau et refuges', poiOk ? `${mine.prepPois.length} <span>${escH(tr('près de la trace'))}</span>` : escH(tr('Indisponibles pour cette zone'))),
+    battRow,
     row('info', 'Météo', escH(tr('Regarde-la avant de partir : elle ne se met pas à jour sans réseau.'))),
   ].join('');
   const todo = !saved || !mapOk || !graphOk;
@@ -8751,7 +8766,9 @@ endActivity = (fn => async function (keep) {
     if (keep && rec.length > 1) {
       if (store.get('statOffline') === '1') stat('sortie_hors_ligne');
       const b0 = (() => { try { return JSON.parse(store.get('statBatt') || 'null'); } catch { return null; } })(), b = b0 && b0.t ? await battGet() : null;
-      if (b && !b.charging && b0.l > b.level) { const h = (Date.now() - b0.t) / 3600e3; if (h >= 0.25 && h < 24) { stat('batt_pct', Math.round((b0.l - b.level) * 100)); stat('batt_h', Math.round(h * 100) / 100); } }
+      if (b && !b.charging && b0.l > b.level) { const h = (Date.now() - b0.t) / 3600e3; if (h >= 0.25 && h < 24) { stat('batt_pct', Math.round((b0.l - b.level) * 100)); stat('batt_h', Math.round(h * 100) / 100);
+        // consommation de ce téléphone, gardée pour l'estimation avant départ (moyenne glissante, en %/h)
+        if (h >= 0.5) { const r = clamp((b0.l - b.level) * 100 / h, 1, 60), o = +store.get('battRate') || 0; store.set('battRate', String(Math.round((o ? o * .6 + r * .4 : r) * 10) / 10)); } } }
     }
     store.set('statBatt', ''); store.set('statOffline', '');
   } catch {}
