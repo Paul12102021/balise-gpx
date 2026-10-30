@@ -8294,6 +8294,7 @@ async function prepRender() {
   let pois = null; try { pois = await prepPois(mine); } catch {}
   if (track !== mine || seq !== prepSeq) return;
   draw(pois);
+  prepOffline();
   if (!pois) {
     $('prepWater').innerHTML = `<p class="note">${escH(tr(navigator.onLine === false ? 'Hors connexion : points d\'eau indisponibles pour le moment.' : 'Points d\'eau connus en France et dans les pays voisins seulement : pas de données ici.'))}</p>`;
     return;
@@ -8311,6 +8312,41 @@ async function prepRender() {
     + `<p class="note">${W.n} <span>${escH(tr(W.n > 1 ? 'points d\'eau potable à moins de 250 m de la trace' : 'point d\'eau potable à moins de 250 m de la trace'))}</span>. <span>${escH(tr('Données OpenStreetMap : vérifie sur place, et emporte de quoi tenir.'))}</span></p>`;
   if (W.gaps.length) prepHintSet(n, true);
 }
+// partir sans réseau : trace gardée, carte et chemins le long de la trace, points utiles
+async function prepOffline() {
+  const mine = track; if (!mine) return;
+  const id = trKey(), lats = mine.pts.map(p => p.lat), lons = mine.pts.map(p => p.lon);
+  const bb = [Math.min(...lons), Math.min(...lats), Math.max(...lons), Math.max(...lats)];
+  const [recent, packs] = await Promise.all([listRecent().catch(() => []), listPacks()]);
+  if (track !== mine) return;
+  const saved = recent.some(it => it.id === id);
+  const own = packs.find(p => p.id === 'trace:' + id);
+  const covers = p => p.bbox && p.bbox[0] <= bb[0] && p.bbox[1] <= bb[1] && p.bbox[2] >= bb[2] && p.bbox[3] >= bb[3];
+  const pack = own && own.complete ? own : packs.find(p => p.complete && covers(p)) || own;
+  const mapOk = !!(pack && pack.complete), graphOk = !!(pack && pack.graph && !pack.graph.partial);
+  const poiOk = Array.isArray(mine.prepPois);
+  const row = (ok, title, sub) => `<li><i class="${ok === 'info' ? 'info' : ok ? 'ok' : 'no'}">${ok === 'info' ? 'i' : ok ? '✓' : ''}</i><span><span>${escH(tr(title))}</span>${sub ? `<small>${sub}</small>` : ''}</span></li>`;
+  const when = pack ? `${fmtMo(pack.bytes / 1024)} · ${fmtDate(pack.date)}` : '';
+  $('prepOff').innerHTML = [
+    row(saved, 'Trace gardée dans Mes traces', saved ? '' : escH(tr('Pour la rouvrir même si l\'appli redémarre'))),
+    row(mapOk, 'Carte le long de la trace', mapOk ? when : pack ? escH(tr('Téléchargement incomplet')) : escH(tr('Pas encore téléchargée'))),
+    row(graphOk, 'Chemins pour revenir sur la trace', graphOk ? `${pack.graph.km} km` : escH(tr('Itinéraire de retour calculé même sans réseau'))),
+    row(poiOk, 'Points d\'eau et refuges', poiOk ? `${mine.prepPois.length} <span>${escH(tr('près de la trace'))}</span>` : escH(tr('Indisponibles pour cette zone'))),
+    row('info', 'Météo', escH(tr('Regarde-la avant de partir : elle ne se met pas à jour sans réseau.'))),
+  ].join('');
+  const todo = !saved || !mapOk || !graphOk;
+  $('prepOffGo').hidden = !todo;
+  return { saved, mapOk, graphOk, poiOk };
+}
+$('prepOffGo').onclick = async () => {
+  if (!track) return;
+  stat('prep_horsligne');
+  if (!$('btnSaveTr').classList.contains('done')) { try { $('btnSaveTr').click(); } catch {} }
+  if (navigator.onLine === false) { toast('Pas de connexion : télécharge la carte avant de partir, en Wi-Fi si possible.', 5000); return; }
+  $('prepSheet').hidden = true;
+  await openMaps();
+  $('dlTrace').click();
+};
 function prepUpdate() {
   const show = !!track && !nav && track.total > 2000;
   $('btnPrep').hidden = !show;
