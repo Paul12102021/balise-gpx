@@ -5,7 +5,7 @@
 
 // La page et le code doivent être de la même version. Sinon (page gardée en cache
 // par le téléphone ou par GitHub), on recharge une page fraîche, au plus 3 fois.
-const APP_VERSION = 274;
+const APP_VERSION = 275;
 // lien « pisteo.app/?moi=1 » (ou ?moi=0) : cet appareil est compté à part dans les statistiques (développeur).
 // Lu avant tout rechargement de version, qui ne garde pas les paramètres de l'adresse.
 try {
@@ -8385,13 +8385,11 @@ function pillCenter(strip) {
 let prepEdit = -1; // jour dont les réglages de fin d'étape sont ouverts
 async function prepRender() {
   if (!track) return;
-  const mine = track, seq = ++prepSeq, n = prepDays(), sel = $('prepDays');
-  const max = Math.max(10, prepAutoDays() + 4, n);
-  sel.innerHTML = Array.from({ length: max }, (_, i) => `<option value="${i + 1}">${i + 1}</option>`).join('');
-  sel.value = String(n);
+  const mine = track, seq = ++prepSeq, n = prepDays();
+  $('prepDaysV').textContent = n + ' ' + tr(n > 1 ? 'jours' : 'jour');
+  $('prepDaysM').disabled = n <= 1; $('prepDaysP').disabled = n >= 30;
   const bike = prepBike(), E = effTo(track.total);
   $('prepSum').innerHTML = `<b>${fmtDist(track.total)}</b>${track.hasEle ? ` · <span>D+</span> <b>${fmtM(track.totalUp)}</b> · <span>D−</span> <b>${fmtM(track.totalDown)}</b>` : ''} · <span>${tr(bike ? 'à vélo' : 'à pied')}</span> <b>${fmtDur(E)}</b>`;
-  document.querySelector('.prep-foot').textContent = tr(bike ? 'Temps à vélo estimé selon ton allure, sans les pauses.' : 'Temps de marche estimé selon ton allure, sans les pauses.');
   $('prepWater').innerHTML = `<p class="note">${escH(tr('Recherche des points d\'eau…'))}</p>`;
   const draw = pois => {
     const stages = prepStages(n, pois), times = prepTimes(stages);
@@ -8399,7 +8397,7 @@ async function prepRender() {
     $('prepStages').innerHTML = n < 2 ? '' : stages.map(s => {
       const night = s.last ? `<span class="pl-night">🏁 <span>${escH(tr('Arrivée'))}</span></span>`
         : s.night ? `<span class="pl-night">${POI[s.night.k][0]} <span>${escH(tr(POI_NAME[s.night.k]))}</span>${s.night.nm ? ' · ' + escH(s.night.nm) : ''}${s.night.d > 80 ? ` <span class="pl-km">(${fmtDist(Math.round(s.night.d / 10) * 10)} <span>${escH(tr('de la trace'))}</span>)</span>` : ''}</span>`
-        : `<span class="pl-night none">🌙 <span>${escH(tr(pois ? 'Pas de refuge ni d\'abri repéré à cet endroit' : 'Lieux pour la nuit inconnus ici'))}</span></span>`;
+        : `<span class="pl-night none">🌙 <span>${escH(tr(pois ? 'Pas de refuge ni d\'abri ici' : 'Lieux pour la nuit inconnus ici'))}</span></span>`;
       // fin d'étape réglable : ± 1 ou 5 km, ou un lieu pour la nuit proche (à ± 35 % de l'effort d'une journée)
       let ctl = '';
       if (!s.last) {
@@ -8411,8 +8409,9 @@ async function prepRender() {
       }
       const tm = times[s.n - 1], open = prepEdit === s.n - 1;
       const when = `<span class="pl-when">${escH(dayLab(tm.start))} · ${hm(tm.start)} → ${hm(tm.arr)}${tm.dark ? ` <span class="pl-dark">🌙 ${escH(tr('après le coucher du soleil'))} (${hm(tm.set)})</span>` : ''}</span>`;
-      const adj = ctl ? `<button class="pl-edit" data-i="${s.n - 1}">${escH(tr(open ? 'Fermer' : 'Déplacer la fin d\'étape'))} ${open ? '▴' : '▾'}</button><div class="pl-adj"${open ? '' : ' hidden'}>${ctl}</div>` : '';
-      return `<li><b><span>${escH(tr('Jour'))}</span> ${s.n}</b> · <b>${fmtDist(s.dist)}</b>${track.hasEle ? ` · <span class="nw"><span>D+</span> ${fmtM(s.up)}</span> · <span class="nw"><span>D−</span> ${fmtM(s.down)}</span>` : ''} · <span class="nw">${fmtDur(s.secs)}</span>${when}<span class="pl-km">${kmN(s.from)} → ${kmN(s.to)}${kmU()}</span>${night}${adj}</li>`;
+      const edit = ctl ? `<button class="pl-edit" data-i="${s.n - 1}" aria-expanded="${open}">${escH(tr(open ? 'OK' : 'Changer'))} ${open ? '▴' : '▾'}</button>` : '';
+      const adj = ctl ? `<div class="pl-adj"${open ? '' : ' hidden'}><span class="pl-km">${escH(tr('Jour'))} ${s.n} : ${kmN(s.from)} → ${kmN(s.to)}${kmU()}</span>${ctl}</div>` : '';
+      return `<li><b><span>${escH(tr('Jour'))}</span> ${s.n}</b> · <b>${fmtDist(s.dist)}</b>${track.hasEle ? ` · <span class="nw"><span>D+</span> ${fmtM(s.up)}</span> · <span class="nw"><span>D−</span> ${fmtM(s.down)}</span>` : ''} · <span class="nw">${fmtDur(s.secs)}</span>${when}<div class="pl-end">${night}${edit}</div>${adj}</li>`;
     }).join('') + (n > 1 && stages.some(s => s.own) ? `<li class="pl-reset"><button id="prepReset">↺ <span>${escH(tr('Recalculer les étapes automatiquement'))}</span></button></li>` : '');
     prepStagesWire(stages, n);
     $('prepOnMap').hidden = n < 2;
@@ -8439,8 +8438,7 @@ async function prepRender() {
     return `<span class="gap-row">${where} : <b>${fmtDist(gp.to - gp.from)}</b>${src}</span>`;
   }).join('');
   const gapHtml = gapRows ? `<div class="gap"><b>⚠️ ${escH(tr(W.gaps.length > 1 ? 'Tronçons sans point d\'eau potable connu' : 'Tronçon sans point d\'eau potable connu'))}</b>${gapRows}<small>${escH(tr('Prévois de quoi boire pour ces tronçons.'))}</small></div>` : '';
-  $('prepWater').innerHTML = (gapHtml || `<p class="ok">✓ <span>${escH(tr(W.n ? 'Un point d\'eau potable au moins tous les' : 'Parcours court : pas de long tronçon sans eau'))}</span>${W.n ? ' ' + fmtDist(W.lim) : ''}</p>`)
-    + `<p class="note">${W.n} <span>${escH(tr(W.n > 1 ? 'points d\'eau potable à moins de 250 m de la trace' : 'point d\'eau potable à moins de 250 m de la trace'))}</span>. <span>${escH(tr('Données OpenStreetMap : vérifie sur place, et emporte de quoi tenir.'))}</span></p>`;
+  $('prepWater').innerHTML = gapHtml || `<p class="ok">✓ <span>${escH(tr(W.n ? 'Un point d\'eau potable au moins tous les' : 'Parcours court : pas de long tronçon sans eau'))}</span>${W.n ? ' ' + fmtDist(W.lim) : ''}</p>`;
   if (W.gaps.length) prepHintSet(n, true);
   prepPoiList();
 }
@@ -8532,6 +8530,7 @@ async function prepTripSync() {
   if (store.get(prepTripKey() + '|sig') === prepSig()) return;
   await prepDaysSave(f);
 }
+let prepOffOpen = false;
 async function prepOffline() {
   const mine = track; if (!mine) return;
   const id = trKey(), lats = mine.pts.map(p => p.lat), lons = mine.pts.map(p => p.lon);
@@ -8549,31 +8548,38 @@ async function prepOffline() {
   // chaque ligne se touche : elle fait ce qui manque (ou montre le détail)
   const row = (ok, title, sub, act) => `<li><button class="prep-row" data-act="${act}"><i class="${ok === 'info' ? 'info' : ok ? 'ok' : 'no'}">${ok === 'info' ? 'i' : ok ? '✓' : ''}</i><span><span>${escH(tr(title))}</span>${sub ? `<small>${sub}</small>` : ''}</span><em>${ok === true ? '' : escH(tr(ok === 'info' ? 'Voir' : 'Faire'))}</em></button></li>`;
   const when = pack ? `${fmtMo(pack.bytes / 1024)} · ${fmtDate(pack.date)}` : '';
-  // batterie : heures de navigation possibles (10 % gardés en réserve) face au jour le plus long, pauses comprises
-  let battRow = '';
+  // batterie, en une ligne : heures de navigation possibles (10 % gardés en réserve) face au jour le plus long, pauses comprises
+  let batt = null;
   try {
-    const b = await battGet(), rate = +store.get('battRate') || 10, learned = !!store.get('battRate');
+    const b = await battGet(), rate = +store.get('battRate') || 10;
     const st = prepStages(prepDays(), Array.isArray(mine.prepPois) ? mine.prepPois : null);
     const need = Math.max(...st.map(s => s.secs)) * 1.3 / 3600, needAll = st.reduce((a, s) => a + s.secs, 0) * 1.3 / 3600;
-    const rateTxt = `≈ ${String(rate).replace('.', ',')} %/h ${escH(tr(learned ? 'sur ce téléphone' : 'estimation par défaut, affinée après tes sorties'))}`;
+    const multi = st.length > 1 && needAll * rate > 100 ? ` · ${escH(tr('sur'))} ${st.length} ${escH(tr('jours'))} ≈ ${(needAll * rate / 100).toFixed(1).replace('.', ',')} ${escH(tr('charges : batterie externe'))}` : '';
     if (b && !b.charging) {
       const h = Math.max(0, (b.level * 100 - 10) / rate), ok = h >= need;
-      battRow = row(ok, 'Batterie', `${Math.round(b.level * 100)} % · ${escH(tr('environ'))} ${fmtDur(h * 3600)} ${escH(tr('de navigation'))} · ${escH(tr(st.length > 1 ? 'jour le plus long' : 'il en faut'))} ${fmtDur(need * 3600)}${ok ? '' : ' · ' + escH(tr('recharge ou prends une batterie externe'))}${st.length > 1 ? `<br>${escH(tr('Sans recharge sur'))} ${st.length} ${escH(tr('jours'))} : ${fmtDur(needAll * 3600)} (${Math.round(needAll * rate)} %)` : ''}<br>${rateTxt}`, 'batt');
-    } else {
-      battRow = row('info', 'Batterie', `${escH(tr(b ? 'En charge.' : 'Niveau inconnu.'))} ${escH(tr(st.length > 1 ? 'Jour le plus long' : 'Il en faut'))} ${fmtDur(need * 3600)}, ${escH(tr('soit'))} ${Math.round(need * rate)} % ${escH(tr('de batterie'))}${st.length > 1 ? `<br>${escH(tr('Sur'))} ${st.length} ${escH(tr('jours sans recharge'))} : ${needAll * rate > 100 ? `${(needAll * rate / 100).toFixed(1).replace('.', ',')} ${escH(tr('charges complètes : prends une batterie externe'))}` : Math.round(needAll * rate) + ' %'}` : ''}<br>${rateTxt}`, 'batt');
-    }
+      batt = { ok: ok && !multi, html: `🔋 ${Math.round(b.level * 100)} % · ${escH(tr(ok ? 'assez pour le jour le plus long' : 'pas assez pour'))}${ok ? '' : ' ' + fmtDur(need * 3600) + ' · ' + escH(tr('recharge'))}${multi}` };
+    } else batt = { ok: !multi, html: `🔋 ${escH(tr(st.length > 1 ? 'Jour le plus long' : 'Il faut'))} ≈ ${Math.round(need * rate)} % ${escH(tr('de batterie'))}${multi}` };
   } catch {}
-  $('prepOff').innerHTML = [
+  const rows = [
     row(saved, prepDays() > 1 ? 'Traces gardées dans Mes traces' : 'Trace gardée dans Mes traces', saved ? `📁 ${escH(it.folder)}${prepDays() > 1 && store.get(prepTripKey()) ? ` · <span>${escH(tr('trace entière + une trace par jour'))}</span>` : ''}` : escH(tr(prepDays() > 1 ? 'Un dossier pour la sortie : la trace entière et une trace par jour' : 'Rangée dans un dossier, pour ne pas être effacée')), 'keep'),
     row(mapOk, 'Carte le long de la trace', dl ? escH(tr('Téléchargement en cours…')) : mapOk ? when : pack ? escH(tr('Téléchargement incomplet')) : escH(tr('Pas encore téléchargée')), dl ? 'maps' : 'map'),
     row(graphOk, 'Chemins pour revenir sur la trace', graphOk ? `${pack.graph.km} km` : dl ? escH(tr('Après la carte')) : escH(tr('Itinéraire de retour calculé même sans réseau')), dl ? 'maps' : 'map'),
     row(poiOk, 'Points d\'eau et refuges', poiOk ? `${mine.prepPois.length} <span>${escH(tr('près de la trace, gardés sur le téléphone : visibles même sans réseau'))}</span>` : escH(tr('Indisponibles pour cette zone')), 'poi'),
-    battRow,
     row('info', 'Météo', escH(tr('Regarde-la avant de partir : elle ne se met pas à jour sans réseau.')), 'wx'),
-  ].join('');
-  $('prepOff').querySelectorAll('.prep-row').forEach(bt => bt.onclick = () => prepAct(bt.dataset.act, { saved, mapOk, graphOk, poiOk, it }));
+  ];
+  $('prepOff').innerHTML = rows.join('');
+  const st = { saved, mapOk, graphOk, poiOk, it };
+  $('prepOff').querySelectorAll('.prep-row').forEach(bt => bt.onclick = () => prepAct(bt.dataset.act, st));
+  // résumé : « 2 sur 4 prêts », ce qui manque, un seul bouton
+  const parts = [[saved, 'trace gardée'], [mapOk, 'carte'], [graphOk, 'chemins'], [poiOk, 'points d\'eau']], done = parts.filter(p => p[0]).length;
+  const miss = parts.filter(p => !p[0]).map(p => tr(p[1]));
+  $('prepOffSum').innerHTML = `<i class="${done === 4 ? 'ok' : 'no'}">${done === 4 ? '✓' : done}</i><span><b>${done === 4 ? escH(tr('Prêt à partir sans réseau')) : `${done} ${escH(tr('sur'))} 4 ${escH(tr('prêts'))}`}</b>${dl ? `<small>${escH(tr('Téléchargement de la carte en cours…'))}</small>` : miss.length ? `<small>${escH(tr('Manque'))} : ${escH(miss.join(', '))}</small>` : ''}</span>`;
   const todo = !saved || !mapOk || !graphOk;
-  $('prepOffGo').hidden = !todo;
+  $('prepOffGo').hidden = !todo || !!dl;
+  $('prepOffBatt').hidden = !batt;
+  if (batt) { $('prepOffBatt').innerHTML = batt.html; $('prepOffBatt').classList.toggle('warn', !batt.ok); }
+  $('prepOffMore').innerHTML = `${prepOffOpen ? '▾' : '▸'} <span>${escH(tr(prepOffOpen ? 'Masquer le détail' : 'Détail'))}</span>`;
+  $('prepOff').hidden = !prepOffOpen;
   return { saved, mapOk, graphOk, poiOk };
 }
 async function prepMapDl() {
@@ -8611,7 +8617,8 @@ function prepPoiList(open) {
   btn.hidden = !pois || !pois.length;
   if (!pois || !pois.length) { list.hidden = true; return; }
   if (open != null) list.hidden = !open;
-  btn.innerHTML = `${list.hidden ? '▸' : '▾'} <span>${escH(tr(list.hidden ? 'Voir les points d\'eau et refuges' : 'Masquer la liste'))}</span> (${pois.length})`;
+  const nw = pois.filter(p => p.k === 'w').length, nn = pois.filter(p => PREP_NIGHT[p.k]).length;
+  btn.innerHTML = list.hidden ? `▸ <span>${escH(tr('Voir'))}</span> ${nw} <span>${escH(tr(nw > 1 ? 'points d\'eau' : 'point d\'eau'))}</span>${nn ? ` · ${nn} <span>${escH(tr(nn > 1 ? 'refuges ou abris' : 'refuge ou abri'))}</span>` : ''}` : `▾ <span>${escH(tr('Masquer la liste'))}</span>`;
   if (list.hidden) return;
   const st = prepStages(prepDays(), track.prepPois);
   let day = 0, html = '';
@@ -8620,7 +8627,7 @@ function prepPoiList(open) {
     if (st.length > 1 && !html.includes(`data-day="${day}"`)) html += `<li class="pp-day" data-day="${day}"><span>${escH(tr('Jour'))}</span> ${day + 1}</li>`;
     html += `<li><button class="pp-row" data-a="${Math.round(p.along)}" data-k="${p.k}"><b>${kmN(p.along)}${kmU()}</b><span>${POI[p.k][0]} ${escH(tr(POI[p.k][2]))}${p.nm ? ' · ' + escH(p.nm) : ''}</span><small>${p.d > 30 ? fmtDist(Math.round(p.d / 10) * 10) : ''}</small></button></li>`;
   }
-  list.innerHTML = html;
+  list.innerHTML = html + `<li class="pp-note">${escH(tr('Données OpenStreetMap : vérifie sur place, et emporte de quoi tenir.'))}</li>`;
   list.querySelectorAll('.pp-row').forEach(b => b.onclick = () => {
     const p = pois.find(q => Math.round(q.along) === +b.dataset.a && q.k === b.dataset.k); if (!p) return;
     const q = pointAt(track, p.along);
@@ -8645,6 +8652,10 @@ setInterval(() => { const d = !!dl; if (d !== prepDlWas) { prepDlWas = d; if (!$
 for (const id of ['maps', 'lib']) new MutationObserver(() => { if ($(id).hidden && !$('prepSheet').hidden) prepOffline(); }).observe($(id), { attributes: true, attributeFilter: ['hidden'] });
 
 $('prepBook').onclick = () => prepRoadbook();
+$('prepOffMore').onclick = () => { prepOffOpen = !prepOffOpen; prepOffline(); };
+$('prepOffBatt').onclick = () => prepAct('batt', {});
+// retour prévu : une ligne ; le choix du jour et de l'heure s'ouvre avec « Modifier »
+$('prepRetEdit').onclick = () => { const p = $('prepRetPick'); p.hidden = !p.hidden; $('prepRetEdit').textContent = tr(p.hidden ? 'Modifier' : 'OK'); if (!p.hidden) pillCenter($('prepRetDays')); };
 $('prepOffGo').onclick = async () => {
   if (!track) return;
   stat('prep_horsligne');
@@ -8876,7 +8887,7 @@ function prepUpdate() {
   if (n > 1 && track.prepFor !== track.id) { track.prepFor = track.id; prepRender(); }
   else if (n < 2) prepMarkers(null);
 }
-$('btnPrep').onclick = () => { stat('prep_ouvre'); prepOpen(); };
+$('btnPrep').onclick = () => { stat('prep_ouvre'); if ($('prepSheet').hidden) { prepOffOpen = false; $('prepRetPick').hidden = true; $('prepRetEdit').textContent = tr('Modifier'); $('prepSheet').querySelector('.lib-panel').scrollTop = 0; } prepOpen(); };
 $('prepClose').onclick = () => { $('prepSheet').hidden = true; };
 $('prepSheet').onclick = e => { if (e.target === $('prepSheet')) $('prepSheet').hidden = true; };
 // ajuster sur la carte : on montre toute la trace, les repères J1, J2… se font glisser
@@ -8886,7 +8897,8 @@ $('prepOnMap').onclick = () => {
   const lats = track.pts.map(p => p.lat), lons = track.pts.map(p => p.lon);
   map.fitBounds([[Math.min(...lons), Math.min(...lats)], [Math.max(...lons), Math.max(...lats)]], { padding: { top: 90, bottom: Math.round(innerHeight * .42), left: 30, right: 30 }, duration: 600 });
 };
-$('prepDays').onchange = e => { prepEdit = -1; store.set(prepRetOwnKey(), ''); store.set(prepKey(), e.target.value); stat('prep_jours'); prepRender(); };
+const prepDaysBy = k => { const n = clamp(prepDays() + k, 1, 30); if (n === prepDays() && store.get(prepKey())) return; prepEdit = -1; store.set(prepRetOwnKey(), ''); store.set(prepKey(), String(n)); stat('prep_jours'); prepRender(); };
+$('prepDaysM').onclick = () => prepDaysBy(-1); $('prepDaysP').onclick = () => prepDaysBy(1);
 function prepStagesWire(stages, n) {
   const save = a => { store.set(prepEndsKey(n), JSON.stringify(a.map(v => Math.round(v)))); stat('prep_etape_modifiee'); prepRender(); };
   const ends = () => stages.slice(0, -1).map(s => s.to);

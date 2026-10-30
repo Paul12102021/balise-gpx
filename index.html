@@ -9,13 +9,13 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<meta name="balise-version" content="274">
+<meta name="balise-version" content="275">
 <title>Pisteo</title>
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" href="icon.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
 <link rel="stylesheet" href="vendor/maplibre-gl.css">
-<link rel="stylesheet" href="app.css?v=274">
+<link rel="stylesheet" href="app.css?v=275">
 </head>
 <body>
 <div id="map" aria-label="Carte"></div>
@@ -311,12 +311,8 @@
       </div>
     </section>
     <section class="prep-sec">
-      <h4>Étapes</h4>
-      <div class="set-group">
-        <div class="row">
-          <label for="prepDays">Nombre de jours<br><small>Coupé à effort égal ; fin d'étape près d'un refuge ou d'un abri quand il y en a un</small></label>
-          <select id="prepDays"></select>
-        </div>
+      <div class="prep-h"><h4>Étapes</h4>
+        <div class="prep-step" role="group" aria-label="Nombre de jours"><button id="prepDaysM" aria-label="Un jour de moins">−</button><b id="prepDaysV">1 jour</b><button id="prepDaysP" aria-label="Un jour de plus">+</button></div>
       </div>
       <ol id="prepStages" class="prep-list"></ol>
       <button id="prepOnMap" class="prep-more" hidden>🗺️ <span>Ajuster les étapes sur la carte</span></button>
@@ -329,33 +325,31 @@
     </section>
     <section class="prep-sec">
       <h4>Partir sans réseau</h4>
-      <ul id="prepOff" class="prep-check"></ul>
-      <button id="prepOffGo" class="btn go wide" hidden>Tout préparer pour partir sans réseau</button>
+      <div id="prepOffSum" class="off-sum"></div>
+      <button id="prepOffGo" class="btn go wide" hidden>Tout préparer</button>
+      <button id="prepOffBatt" class="off-batt" hidden></button>
+      <button id="prepOffMore" class="prep-more">▸ <span>Détail</span></button>
+      <ul id="prepOff" class="prep-check" hidden></ul>
     </section>
     <section class="prep-sec">
-      <h4>Sécurité</h4>
-      <div class="ret-pick">
-        <div class="ret-head"><span>Retour prévu</span><b id="prepRetSum"></b></div>
+      <h4>Avant de partir</h4>
+      <div class="ret-line"><span>Retour prévu</span><b id="prepRetSum"></b><button id="prepRetEdit" type="button">Modifier</button></div>
+      <div class="ret-pick" id="prepRetPick" hidden>
         <div class="ret-days" id="prepRetDays" role="listbox" aria-label="Jour du retour"></div>
         <div class="ret-time" id="prepRetTimeRow">
           <button data-t="-60" aria-label="Une heure plus tôt">−1 h</button><button data-t="-15" aria-label="Un quart d'heure plus tôt">−15</button>
           <b id="prepRetTime">–</b>
           <button data-t="15" aria-label="Un quart d'heure plus tard">+15</button><button data-t="60" aria-label="Une heure plus tard">+1 h</button>
         </div>
-        <small class="note" id="prepRetNote">Envoyé à un proche avec le parcours.</small>
-      </div>
-      <div class="prep-btns">
-        <button id="prepTell" class="btn go">Prévenir un proche</button>
-        <button id="prepSosBtn" class="btn">Numéros de secours</button>
+        <small class="note" id="prepRetNote"></small>
       </div>
       <small id="prepTellInfo" class="note"></small>
+      <div class="prep-acts">
+        <button id="prepTell" class="btn go"><span class="ic">📨</span>Prévenir un proche</button>
+        <button id="prepBook" class="btn"><span class="ic">📄</span>Feuille de route</button>
+        <button id="prepSosBtn" class="btn"><span class="ic">🆘</span>Secours</button>
+      </div>
     </section>
-    <section class="prep-sec">
-      <h4>Feuille de route</h4>
-      <button id="prepBook" class="btn wide">Feuille de route à garder ou imprimer</button>
-      <small class="note">Étapes, profil, eau, refuges, numéros de secours et QR code du parcours.</small>
-    </section>
-    <p class="note prep-foot">Temps de marche estimé selon ton allure, sans les pauses.</p>
   </div>
 </div>
 <div id="sosSheet" class="lib" hidden>
@@ -971,8 +965,8 @@
 
 <script src="vendor/maplibre-gl.js"></script>
 <script src="vendor/qrcode.js"></script>
-<script src="i18n/en.js?v=274"></script>
-<script src="i18n/es.js?v=274"></script>
-<script src="app.js?v=274"></script>
+<script src="i18n/en.js?v=275"></script>
+<script src="i18n/es.js?v=275"></script>
+<script src="app.js?v=275"></script>
 </body>
 </html>
