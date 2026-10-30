@@ -5,7 +5,7 @@
 
 // La page et le code doivent être de la même version. Sinon (page gardée en cache
 // par le téléphone ou par GitHub), on recharge une page fraîche, au plus 3 fois.
-const APP_VERSION = 275;
+const APP_VERSION = 276;
 // lien « pisteo.app/?moi=1 » (ou ?moi=0) : cet appareil est compté à part dans les statistiques (développeur).
 // Lu avant tout rechargement de version, qui ne garde pas les paramètres de l'adresse.
 try {
@@ -1272,13 +1272,16 @@ async function libPatch(ids, fn) {
   }
 }
 // petite fenêtre de l'appli (à la place de celles du navigateur) : un nom à saisir, ou une confirmation
-function libDialog({ title, text, value, ok, danger, ask }) {
+function libDialog({ title, text, value, ok, danger, ask, alt }) {
   return new Promise(done => {
     const w = $('libDlg'), inp = $('libDlgIn'), sug = $('libDlgSug');
     $('libDlgTitle').textContent = tr(title);
     $('libDlgText').textContent = text ? tr(text) : ''; $('libDlgText').hidden = !text;
     inp.hidden = !ask; sug.hidden = !ask; sug.innerHTML = '';
     $('libDlgOk').textContent = tr(ok); $('libDlgOk').className = 'btn ' + (danger ? 'danger' : 'go');
+    // 3e choix (ex. : supprimer aussi les traces du dossier) : les boutons passent les uns sous les autres
+    $('libDlgAlt').hidden = !alt; $('libDlgAlt').textContent = alt ? tr(alt) : ''; w.classList.toggle('three', !!alt);
+    $('libDlgAlt').onclick = () => finish('alt');
     const finish = v => { w.hidden = true; w.onclick = null; inp.onkeydown = null; done(v); };
     const valid = () => { $('libDlgOk').disabled = ask && !inp.value.trim(); };
     if (ask) {
@@ -1377,10 +1380,21 @@ $('libFoldRen').onclick = async () => {
 };
 $('libFoldDel').onclick = async () => {
   const f = libFolder, all = (await listRecent()).filter(it => !isRec(it)), inF = all.filter(it => it.folder === f);
-  if (!await libDialog({ title: 'Supprimer le dossier « ' + f + ' » ?', text: inF.length ? 'Ses traces sont gardées : elles reviennent dans « Mes traces ».' : '', ok: 'Supprimer', danger: true })) return;
+  const n = inF.length;
+  const r = await libDialog(n
+    ? { title: 'Supprimer le dossier « ' + f + ' » ?', text: n > 1 ? `Il contient ${n} traces.` : 'Il contient 1 trace.', ok: n > 1 ? 'Garder les traces' : 'Garder la trace', alt: n > 1 ? `Supprimer aussi les ${n} traces` : 'Supprimer aussi la trace' }
+    : { title: 'Supprimer le dossier « ' + f + ' » ?', ok: 'Supprimer', danger: true });
+  if (!r) return;
   libSaveFolders(libFolders(all).filter(x => x !== f));
-  await libPatch(inF.map(it => it.id), it => { delete it.folder; delete it.pos; });
-  libFolder = null; renderLib();
+  if (r === 'alt') {
+    for (const it of inF) await idb('readwrite', st => st.delete(it.id)).catch(() => {});
+    stat('dossier_suppr_traces');
+    toast(n > 1 ? `${n} traces supprimées` : 'Trace supprimée', 2500);
+  } else {
+    await libPatch(inF.map(it => it.id), it => { delete it.folder; delete it.pos; });
+    if (n) toast(n > 1 ? 'Dossier supprimé : ses traces sont dans « Mes traces »' : 'Dossier supprimé : sa trace est dans « Mes traces »', 3000);
+  }
+  libFolder = null; renderLib(); refreshSaveBtn();
 };
 // appui long puis glisser : changer l'ordre, ou lâcher sur un dossier pour l'y ranger
 const libDrag = { li: null, timer: 0, x0: 0, y0: 0, dy: 0, top0: 0, over: null, justDropped: false, scroll: 0 };

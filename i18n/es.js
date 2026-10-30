@@ -8,6 +8,14 @@ const plural = (n, one, many) => n + ' ' + (+n > 1 ? many : one);
 const kmEs = (n, half) => half ? (n ? (n === 1 ? 'un kilómetro y medio' : n + ' kilómetros y medio') : 'medio kilómetro') : (n === 1 ? 'un kilómetro' : n + ' kilómetros');
 const lowFirst = s => s.charAt(0).toLowerCase() + s.slice(1);
 const exact = {
+  // ---- suppression d'un dossier (v276)
+  "Garder les traces": "Conservar las rutas",
+  "Garder la trace": "Conservar la ruta",
+  "Supprimer aussi la trace": "Eliminar también la ruta",
+  "Il contient 1 trace.": "Contiene 1 ruta.",
+  "Trace supprimée": "Ruta eliminada",
+  "Dossier supprimé : ses traces sont dans « Mes traces »": "Carpeta eliminada: sus rutas están en «Mis rutas»",
+  "Dossier supprimé : sa trace est dans « Mes traces »": "Carpeta eliminada: su ruta está en «Mis rutas»",
   // ---- préparer la sortie simplifiée (v275)
   "Pas de refuge ni d'abri ici": "Sin refugio ni abrigo aquí",
   "jour": "día",
@@ -736,6 +744,9 @@ const exact = {
   "Reste appuyé sur une trace puis glisse-la pour changer l'ordre, ou lâche-la sur un dossier pour l'y ranger.": "Mantén pulsado un track y arrástralo para cambiar el orden, o suéltalo sobre una carpeta para guardarlo allí.",
 };
 const patterns = [
+  [/^Il contient (\d+) traces\.$/, m => 'Contiene ' + m[1] + ' rutas.'],
+  [/^Supprimer aussi les (\d+) traces$/, m => 'Eliminar también las ' + m[1] + ' rutas'],
+  [/^(\d+) traces supprimées$/, m => m[1] + ' rutas eliminadas'],
   [/^Supprimer le dossier « (.+) » \?$/, '¿Eliminar la carpeta «$1»?'],
   [/^Rangée dans « (.+) »$/, 'Guardado en «$1»'],
   [/^(\d+) traces · (.+)$/, '$1 tracks · $2'],

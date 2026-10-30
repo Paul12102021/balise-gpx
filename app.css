@@ -1052,3 +1052,6 @@ body.wx-on:not(.side) .trackrow { justify-content: space-between; } /* les bouto
 .prep-acts .btn { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; min-height: 58px; padding: 6px 4px; font-size: 13px; line-height: 1.15; text-align: center; }
 .prep-acts .ic { font-size: 18px; line-height: 1; }
 .ret-line > span { width: 100%; margin-bottom: -4px; }
+.lib-dlg.three .lib-dlg-btns { grid-template-columns: 1fr; }
+.lib-dlg.three #libDlgNo { order: 3; }
+#libDlgAlt[hidden] { display: none; }

@@ -8,6 +8,14 @@ const km = (n, half) => n === 1 && !half ? '1 kilometre' : (half ? n + '.5' : n)
 const nd = s => String(s).replace(/\.$/, '');
 const plural = (n, one, many) => n + ' ' + (+n > 1 ? many : one);
 const exact = {
+  // ---- suppression d'un dossier (v276)
+  "Garder les traces": "Keep the tracks",
+  "Garder la trace": "Keep the track",
+  "Supprimer aussi la trace": "Delete the track too",
+  "Il contient 1 trace.": "It contains 1 track.",
+  "Trace supprimée": "Track deleted",
+  "Dossier supprimé : ses traces sont dans « Mes traces »": "Folder deleted: its tracks are back in “My tracks”",
+  "Dossier supprimé : sa trace est dans « Mes traces »": "Folder deleted: its track is back in “My tracks”",
   // ---- préparer la sortie simplifiée (v275)
   "Pas de refuge ni d'abri ici": "No hut or shelter here",
   "jour": "day",
@@ -735,6 +743,9 @@ const exact = {
 };
 const D = '(\\d+(?:[.,]\\d+)?)';
 const patterns = [
+  [/^Il contient (\d+) traces\.$/, m => 'It contains ' + m[1] + ' tracks.'],
+  [/^Supprimer aussi les (\d+) traces$/, m => 'Delete the ' + m[1] + ' tracks too'],
+  [/^(\d+) traces supprimées$/, m => m[1] + ' tracks deleted'],
   [/^Supprimer le dossier « (.+) » \?$/, 'Delete the folder “$1”?'],
   [/^Rangée dans « (.+) »$/, 'Filed in “$1”'],
   [/^(\d+) traces · (.+)$/, '$1 tracks · $2'],
