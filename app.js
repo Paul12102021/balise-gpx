@@ -5,7 +5,7 @@
 
 // La page et le code doivent être de la même version. Sinon (page gardée en cache
 // par le téléphone ou par GitHub), on recharge une page fraîche, au plus 3 fois.
-const APP_VERSION = 269;
+const APP_VERSION = 270;
 // lien « pisteo.app/?moi=1 » (ou ?moi=0) : cet appareil est compté à part dans les statistiques (développeur).
 // Lu avant tout rechargement de version, qui ne garde pas les paramètres de l'adresse.
 try {
@@ -7556,6 +7556,7 @@ if (AND) {
     const open = [...document.querySelectorAll('.lib')].filter(x => !x.hidden);
     if (open.length) { open[open.length - 1].hidden = true; return true; }
     if (!$('more').hidden) { toggleMore(false); return true; }
+    if (prepBack && track && !nav) { prepOpen(); return true; }
     // rien d'ouvert : un 1er appui prévient, un 2e dans les 2,5 s met l'appli en arrière-plan (évite les sorties par erreur)
     if (Date.now() - backAt > 2500) {
       backAt = Date.now();
@@ -8217,10 +8218,25 @@ function prepAutoDays() {
 }
 function prepDays() { const v = +store.get(prepKey()); return v >= 1 && v <= 30 ? v : prepAutoDays(); }
 // découpe en n étapes à effort égal ; chaque fin d'étape se cale sur un lieu pour la nuit à ± 15 % de l'effort d'une journée
+// fins d'étape choisies à la main (mètres le long de la trace), gardées par trace et par nombre de jours
+const prepEndsKey = n => 'prepEnds|' + trKey() + '|' + n;
+function prepEndsGet(n) {
+  try { const a = JSON.parse(store.get(prepEndsKey(n)) || 'null');
+    if (Array.isArray(a) && a.length === n - 1 && a.every((v, i) => typeof v === 'number' && v > 0 && v < track.total && (!i || v > a[i - 1]))) return a; } catch {}
+  return null;
+}
+// lieu pour la nuit le plus proche d'une fin d'étape (à moins de 600 m le long de la trace)
+function prepNightAt(at, nights) {
+  let best = null, bs = Infinity;
+  for (const p of nights) { const s = Math.abs(p.along - at) - PREP_NIGHT[p.k] * 30 + p.d / 4; if (Math.abs(p.along - at) <= 600 && s < bs) { bs = s; best = p; } }
+  return best;
+}
 function prepStages(n, pois) {
   const E = effTo(track.total), day = E / n, nights = (pois || []).filter(p => PREP_NIGHT[p.k]);
   const ends = []; let prev = 0;
-  for (let j = 1; j < n; j++) {
+  const own = n > 1 ? prepEndsGet(n) : null;
+  if (own) for (const at of own) ends.push({ along: at, night: prepNightAt(at, nights), own: true });
+  else for (let j = 1; j < n; j++) {
     const want = day * j, d0 = distForEff(want);
     let best = null, bestScore = Infinity;
     for (const p of nights) {
@@ -8236,7 +8252,7 @@ function prepStages(n, pois) {
   let from = 0;
   return ends.map((e, i) => {
     const a = infoAt(from), b = infoAt(e.along);
-    const st = { n: i + 1, from, to: e.along, dist: e.along - from, up: a.upLeft - b.upLeft, down: a.downLeft - b.downLeft, secs: baseSecs(from, e.along), night: e.night, last: !!e.last };
+    const st = { n: i + 1, from, to: e.along, dist: e.along - from, up: a.upLeft - b.upLeft, down: a.downLeft - b.downLeft, secs: baseSecs(from, e.along), night: e.night, last: !!e.last, own: !!e.own };
     from = e.along; return st;
   });
 }
@@ -8284,8 +8300,18 @@ async function prepRender() {
       const night = s.last ? `<span class="pl-night">🏁 <span>${escH(tr('Arrivée'))}</span></span>`
         : s.night ? `<span class="pl-night">${POI[s.night.k][0]} <span>${escH(tr(POI_NAME[s.night.k]))}</span>${s.night.nm ? ' · ' + escH(s.night.nm) : ''}${s.night.d > 80 ? ` <span class="pl-km">(${fmtDist(Math.round(s.night.d / 10) * 10)} <span>${escH(tr('de la trace'))}</span>)</span>` : ''}</span>`
         : `<span class="pl-night none">🌙 <span>${escH(tr(pois ? 'Pas de refuge ni d\'abri repéré à cet endroit' : 'Lieux pour la nuit inconnus ici'))}</span></span>`;
-      return `<li><b><span>${escH(tr('Jour'))}</span> ${s.n}</b> · <b>${fmtDist(s.dist)}</b>${track.hasEle ? ` · <span>D+</span> ${fmtM(s.up)} · <span>D−</span> ${fmtM(s.down)}` : ''} · ${fmtDur(s.secs)}<br><span class="pl-km">${kmN(s.from)} → ${kmN(s.to)}${kmU()}</span>${night}</li>`;
-    }).join('');
+      // fin d'étape réglable : ± 1 ou 5 km, ou un lieu pour la nuit proche (à ± 35 % de l'effort d'une journée)
+      let ctl = '';
+      if (!s.last) {
+        const E1 = effTo(track.total) / n, here = effTo(s.to), lo = stages[s.n - 2] ? stages[s.n - 2].to : 0, hi = stages[s.n].to;
+        const near = (pois || []).filter(p => PREP_NIGHT[p.k] && p.along > lo + 500 && p.along < hi - 500 && Math.abs(p.along - s.to) > 300 && Math.abs(effTo(p.along) - here) < E1 * .35)
+          .sort((a, b) => Math.abs(a.along - s.to) - Math.abs(b.along - s.to)).slice(0, 4).sort((a, b) => a.along - b.along);
+        ctl = `<div class="pl-ctl" data-i="${s.n - 1}"><span>${escH(tr('Fin d\'étape'))}</span><button data-mv="-5000">−5</button><button data-mv="-1000">−1</button><b>${kmN(s.to)}${kmU()}</b><button data-mv="1000">+1</button><button data-mv="5000">+5</button></div>`
+          + (near.length ? `<div class="pl-near" data-i="${s.n - 1}">${near.map(p => `<button data-at="${Math.round(p.along)}">${POI[p.k][0]} ${escH(p.nm || tr(POI_NAME[p.k]))} · km ${kmN(p.along)}</button>`).join('')}</div>` : '');
+      }
+      return `<li><b><span>${escH(tr('Jour'))}</span> ${s.n}</b> · <b>${fmtDist(s.dist)}</b>${track.hasEle ? ` · <span>D+</span> ${fmtM(s.up)} · <span>D−</span> ${fmtM(s.down)}` : ''} · ${fmtDur(s.secs)}<br><span class="pl-km">${kmN(s.from)} → ${kmN(s.to)}${kmU()}</span>${night}${ctl}</li>`;
+    }).join('') + (n > 1 && stages.some(s => s.own) ? `<li class="pl-reset"><button id="prepReset">↺ <span>${escH(tr('Recalculer les étapes automatiquement'))}</span></button></li>` : '');
+    prepStagesWire(stages, n);
     prepMarkers(stages);
     prepHintSet(n, false);
     return stages;
@@ -8311,23 +8337,59 @@ async function prepRender() {
   $('prepWater').innerHTML = (gapHtml || `<p class="ok">✓ <span>${escH(tr(W.n ? 'Un point d\'eau potable au moins tous les' : 'Parcours court : pas de long tronçon sans eau'))}</span>${W.n ? ' ' + fmtDist(W.lim) : ''}</p>`)
     + `<p class="note">${W.n} <span>${escH(tr(W.n > 1 ? 'points d\'eau potable à moins de 250 m de la trace' : 'point d\'eau potable à moins de 250 m de la trace'))}</span>. <span>${escH(tr('Données OpenStreetMap : vérifie sur place, et emporte de quoi tenir.'))}</span></p>`;
   if (W.gaps.length) prepHintSet(n, true);
+  prepPoiList();
 }
 // partir sans réseau : trace gardée, carte et chemins le long de la trace, points utiles
 // les traces préparées sont rangées dans un dossier à part de « Mes traces » : hors des 30 dernières traces ouvertes, qui s'effacent
 const PREP_FOLDER = () => tr('Sorties préparées');
+// sortie sur plusieurs jours : un dossier à son nom, avec la trace entière et une trace par jour (à ouvrir le matin de chaque étape)
+const prepTripKey = () => 'prepTrip|' + trKey();
+function prepSlice(from, to) {
+  const P = track.pts, C = track.cum, out = [];
+  const a = pointAt(track, from), b = pointAt(track, to);
+  out.push({ lat: a.lat, lon: a.lon, ele: P[a.i].ele });
+  for (let i = a.i + 1; i <= b.i; i++) if (C[i] > from && C[i] < to) out.push(P[i]);
+  out.push({ lat: b.lat, lon: b.lon, ele: P[Math.min(b.i + 1, P.length - 1)].ele });
+  return out;
+}
+async function prepDaysSave(folder) {
+  const n = prepDays(), mine = track;
+  let old = []; try { old = JSON.parse(store.get(prepTripKey() + '|ids') || '[]'); } catch {}
+  for (const id of old) await idb('readwrite', st => st.delete(id)).catch(() => {});
+  const ids = [];
+  if (n > 1) {
+    const st = prepStages(n, Array.isArray(mine.prepPois) ? mine.prepPois : null);
+    for (const s of st) {
+      const pts = prepSlice(s.from, s.to), nm = `${mine.name || tr('Parcours')} · ${tr('Jour')} ${s.n}`, p = makePath(pts, nm);
+      if (await saveRecent(p, loopGPX(pts, nm), false, { folder, pos: s.n })) ids.push(nm + '|' + Math.round(p.total));
+    }
+  }
+  store.set(prepTripKey() + '|ids', JSON.stringify(ids));
+  store.set(prepTripKey() + '|sig', prepSig());
+  return ids.length;
+}
+const prepSig = () => { const st = prepStages(prepDays(), track && Array.isArray(track.prepPois) ? track.prepPois : null); return st.map(s => Math.round(s.to)).join(','); };
 async function prepKeep() {
   if (!track) return false;
-  const id = trKey(), mine = track;
+  const id = trKey(), mine = track, n = prepDays();
   const saved = store.get('gpx'), text = saved && saved.includes('<trkpt') ? saved : loopGPX(mine.pts, mine.name);
   const old = await idb('readonly', st => st.get(id)).catch(() => null);
   if (!old) await saveRecent(mine, text);
-  const f = (old && old.folder) || PREP_FOLDER();
-  if (!old || !old.folder) {
-    await libPatch([id], it => { it.folder = f; delete it.pos; });
-    const fs = libFoldersStored(); if (!fs.includes(f)) { fs.push(f); libSaveFolders(fs); }
-  }
+  // plusieurs jours : dossier au nom de la sortie ; sinon « Sorties préparées » ; une trace déjà rangée reste dans son dossier
+  const f = (old && old.folder) || (n > 1 ? (mine.name || tr('Parcours')).slice(0, 40) : PREP_FOLDER());
+  await libPatch([id], it => { it.folder = f; it.pos = 0; });
+  const fs = libFoldersStored(); if (!fs.includes(f)) { fs.push(f); libSaveFolders(fs); }
+  store.set(prepTripKey(), f);
+  await prepDaysSave(f);
   refreshSaveBtn();
   return f;
+}
+// étapes modifiées après coup : les traces du jour suivent
+async function prepTripSync() {
+  if (!track) return;
+  const f = store.get(prepTripKey()); if (!f) return;
+  if (store.get(prepTripKey() + '|sig') === prepSig()) return;
+  await prepDaysSave(f);
 }
 async function prepOffline() {
   const mine = track; if (!mine) return;
@@ -8335,7 +8397,9 @@ async function prepOffline() {
   const bb = [Math.min(...lons), Math.min(...lats), Math.max(...lons), Math.max(...lats)];
   const [recent, packs] = await Promise.all([listRecent().catch(() => []), listPacks()]);
   if (track !== mine) return;
-  const it = recent.find(x => x.id === id), saved = !!(it && it.folder);
+  const it = recent.find(x => x.id === id);
+  let saved = !!(it && it.folder);
+  if (saved && prepDays() > 1) { await prepTripSync(); saved = !!store.get(prepTripKey()) && store.get(prepTripKey() + '|sig') === prepSig(); }
   const own = packs.find(p => p.id === 'trace:' + id);
   const covers = p => p.bbox && p.bbox[0] <= bb[0] && p.bbox[1] <= bb[1] && p.bbox[2] >= bb[2] && p.bbox[3] >= bb[3];
   const pack = own && own.complete ? own : packs.find(p => p.complete && covers(p)) || own;
@@ -8359,10 +8423,10 @@ async function prepOffline() {
     }
   } catch {}
   $('prepOff').innerHTML = [
-    row(saved, 'Trace gardée dans Mes traces', saved ? `📁 ${escH(it.folder)}` : escH(tr('Rangée dans un dossier, pour ne pas être effacée')), 'keep'),
-    row(mapOk, 'Carte le long de la trace', mapOk ? when : pack ? escH(tr('Téléchargement incomplet')) : escH(tr('Pas encore téléchargée')), 'map'),
-    row(graphOk, 'Chemins pour revenir sur la trace', graphOk ? `${pack.graph.km} km` : escH(tr('Itinéraire de retour calculé même sans réseau')), 'map'),
-    row(poiOk, 'Points d\'eau et refuges', poiOk ? `${mine.prepPois.length} <span>${escH(tr('près de la trace'))}</span>` : escH(tr('Indisponibles pour cette zone')), 'poi'),
+    row(saved, prepDays() > 1 ? 'Traces gardées dans Mes traces' : 'Trace gardée dans Mes traces', saved ? `📁 ${escH(it.folder)}${prepDays() > 1 && store.get(prepTripKey()) ? ` · <span>${escH(tr('trace entière + une trace par jour'))}</span>` : ''}` : escH(tr(prepDays() > 1 ? 'Un dossier pour la sortie : la trace entière et une trace par jour' : 'Rangée dans un dossier, pour ne pas être effacée')), 'keep'),
+    row(mapOk, 'Carte le long de la trace', dl ? escH(tr('Téléchargement en cours…')) : mapOk ? when : pack ? escH(tr('Téléchargement incomplet')) : escH(tr('Pas encore téléchargée')), dl ? 'maps' : 'map'),
+    row(graphOk, 'Chemins pour revenir sur la trace', graphOk ? `${pack.graph.km} km` : dl ? escH(tr('Après la carte')) : escH(tr('Itinéraire de retour calculé même sans réseau')), dl ? 'maps' : 'map'),
+    row(poiOk, 'Points d\'eau et refuges', poiOk ? `${mine.prepPois.length} <span>${escH(tr('près de la trace, gardés sur le téléphone : visibles même sans réseau'))}</span>` : escH(tr('Indisponibles pour cette zone')), 'poi'),
     battRow,
     row('info', 'Météo', escH(tr('Regarde-la avant de partir : elle ne se met pas à jour sans réseau.')), 'wx'),
   ].join('');
@@ -8373,31 +8437,72 @@ async function prepOffline() {
 }
 async function prepMapDl() {
   if (navigator.onLine === false) { toast('Pas de connexion : télécharge la carte avant de partir, en Wi-Fi si possible.', 5000); return; }
-  $('prepSheet').hidden = true;
+  // le panneau Préparer reste ouvert dessous : « Retour » ou « Fermer » y ramène
   await openMaps();
   $('dlTrace').click();
 }
 async function prepAct(act, s) {
   stat('prep_ligne_' + act);
   if (act === 'keep') {
-    if (s.saved) { $('prepSheet').hidden = true; libFolder = s.it.folder; openLib(); return; }
+    if (s.saved) { libFolder = s.it.folder; openLib(); return; }
     const f = await prepKeep();
-    if (f) toast(tr('Rangée dans « ' + f + ' »'), 3000, { label: tr('Voir'), run: () => { $('prepSheet').hidden = true; libFolder = f; openLib(); } });
+    if (f) toast(tr('Rangée dans « ' + f + ' »'), 3000, { label: tr('Voir'), run: () => { libFolder = f; openLib(); } });
     prepOffline();
+  } else if (act === 'maps') { openMaps();
   } else if (act === 'map') {
-    if (s.mapOk && s.graphOk) { $('prepSheet').hidden = true; openMaps(); return; }
+    if (s.mapOk && s.graphOk) { openMaps(); return; }
     prepMapDl();
   } else if (act === 'poi') {
     if (track && !s.poiOk) { delete track.prepPois; prepRender(); }
-    else if (track) { $('prepSheet').hidden = true; if (!poiOn()) { store.set('poi', '1'); $('optPoi').checked = true; } poiUpdate(); toast('Points d\'eau et refuges : sur la carte, en zoomant le long de la trace.', 4000); }
+    else prepPoiList(true);
   } else if (act === 'batt') {
     if (eco === 'max') toast('Économie de batterie déjà activée : écran noir entre les virages.', 4000);
     else toast('Pour tenir plus longtemps : économie de batterie (écran noir entre les virages, la carte revient aux virages).', 7000, { label: tr('Activer'), run: () => setEco('max') });
   } else if (act === 'wx') {
-    $('prepSheet').hidden = true;
+    prepLeave('Météo du parcours sur le profil.');
     if (!$('btnWx').hidden && !$('btnWx').classList.contains('on')) $('btnWx').click();
   }
 }
+// liste des points d'eau et refuges le long de la trace, rangés par jour ; toucher un point le montre sur la carte
+function prepPoiList(open) {
+  const pois = track && Array.isArray(track.prepPois) ? track.prepPois.filter(p => p.k === 'w' || p.k === 's' || PREP_NIGHT[p.k]) : null;
+  const btn = $('prepPoiBtn'), list = $('prepPoiList');
+  btn.hidden = !pois || !pois.length;
+  if (!pois || !pois.length) { list.hidden = true; return; }
+  if (open != null) list.hidden = !open;
+  btn.innerHTML = `${list.hidden ? '▸' : '▾'} <span>${escH(tr(list.hidden ? 'Voir les points d\'eau et refuges' : 'Masquer la liste'))}</span> (${pois.length})`;
+  if (list.hidden) return;
+  const st = prepStages(prepDays(), track.prepPois);
+  let day = 0, html = '';
+  for (const p of pois) {
+    while (st.length > 1 && day < st.length && p.along > st[day].to + 1) day++;
+    if (st.length > 1 && !html.includes(`data-day="${day}"`)) html += `<li class="pp-day" data-day="${day}"><span>${escH(tr('Jour'))}</span> ${day + 1}</li>`;
+    html += `<li><button class="pp-row" data-a="${Math.round(p.along)}" data-k="${p.k}"><b>${kmN(p.along)}${kmU()}</b><span>${POI[p.k][0]} ${escH(tr(POI[p.k][2]))}${p.nm ? ' · ' + escH(p.nm) : ''}</span><small>${p.d > 30 ? fmtDist(Math.round(p.d / 10) * 10) : ''}</small></button></li>`;
+  }
+  list.innerHTML = html;
+  list.querySelectorAll('.pp-row').forEach(b => b.onclick = () => {
+    const p = pois.find(q => Math.round(q.along) === +b.dataset.a && q.k === b.dataset.k); if (!p) return;
+    const q = pointAt(track, p.along);
+    if (!poiOn()) { store.set('poi', '1'); $('optPoi').checked = true; }
+    prepLeave(`${POI[p.k][0]} ${tr(POI[p.k][2])}${p.nm ? ' · ' + p.nm : ''} · km ${kmN(p.along)}`);
+    map.flyTo({ center: [q.lon, q.lat], zoom: 15 });
+  });
+  if (open) setTimeout(() => btn.scrollIntoView({ behavior: 'smooth', block: 'start' }), 50);
+}
+$('prepPoiBtn').onclick = () => prepPoiList($('prepPoiList').hidden);
+// quitter le panneau pour regarder la carte ou le profil : « Retour » (ou le bouton du message) y ramène
+let prepBack = false;
+function prepLeave(msg) {
+  $('prepSheet').hidden = true; prepBack = true;
+  toast(msg, 6000, { label: tr('↩ Préparer'), run: prepOpen });
+}
+function prepOpen() { prepBack = false; if (!track) return; $('prepSheet').hidden = false; prepRender(); }
+// téléchargement lancé d'ici : la liste se met à jour quand il se termine
+let prepDlWas = false;
+setInterval(() => { const d = !!dl; if (d !== prepDlWas) { prepDlWas = d; if (!$('prepSheet').hidden) prepOffline(); } }, 3000);
+// en revenant de Mes cartes ou de Mes traces : la liste se met à jour
+for (const id of ['maps', 'lib']) new MutationObserver(() => { if ($(id).hidden && !$('prepSheet').hidden) prepOffline(); }).observe($(id), { attributes: true, attributeFilter: ['hidden'] });
+
 $('prepBook').onclick = () => prepRoadbook();
 $('prepOffGo').onclick = async () => {
   if (!track) return;
@@ -8420,47 +8525,80 @@ async function prepRoadbook() {
   stat('prep_feuille');
   const T = track, n = prepDays(), pois = Array.isArray(T.prepPois) ? T.prepPois : await prepPois(T).catch(() => null);
   const stages = prepStages(n, pois), bike = prepBike(), e = escH, t = s => e(tr(s));
-  const s0 = T.pts[0], s1 = T.pts[T.pts.length - 1], ll = p => `${p.lat.toFixed(5)}, ${p.lon.toFixed(5)}`;
-  // profil : 300 points, étapes en pointillés
-  let svg = '';
-  if (T.hasEle) {
-    const N = 300, W = 700, H = 140, xs = [], es = [];
-    for (let k = 0; k <= N; k++) { const d = T.total * k / N, i = pointAt(T, d).i; xs.push(d); es.push(T.ele[Math.min(i, T.ele.length - 1)] ?? 0); }
-    const lo = Math.min(...es), hi = Math.max(...es), sy = v => H - 8 - (v - lo) / Math.max(1, hi - lo) * (H - 24), sx = d => d / T.total * W;
+  const km = d => kmN(d) + kmU(), s0 = T.pts[0], s1 = T.pts[T.pts.length - 1], ll = p => `${p.lat.toFixed(5)}, ${p.lon.toFixed(5)}`;
+  const W = pois ? prepWaterGaps(pois) : null, pl = pois ? pois.filter(p => p.k === 'w' || p.k === 's' || PREP_NIGHT[p.k]) : [];
+  const notes = (T.wpts || []).map(w => { const pr = project(T, w, true); return pr && pr.dist < 300 ? { along: pr.along, name: w.name || w.desc || '' } : null; }).filter(x => x && x.name);
+  // profil entre deux distances : remplissage dégradé, points d'eau (bleu) et refuges sous la courbe, étapes en bandes
+  const eleAt = d => { const i = pointAt(T, d).i; return T.ele[Math.min(i, T.ele.length - 1)] ?? 0; };
+  let gid = 0;
+  const prof = (from, to, Wd, H, bands) => {
+    if (!T.hasEle || to - from < 50) return '';
+    const N = 240, xs = [], es = [];
+    for (let k = 0; k <= N; k++) { const d = from + (to - from) * k / N; xs.push(d); es.push(eleAt(d)); }
+    let lo = Math.min(...es), hi = Math.max(...es); if (hi - lo < 60) { const m = (hi + lo) / 2; lo = m - 30; hi = m + 30; }
+    const top = 16, bot = H - 20, sy = v => bot - (v - lo) / (hi - lo) * (bot - top), sx = d => (d - from) / (to - from) * Wd, id = 'g' + (++gid);
     const path = es.map((v, k) => `${k ? 'L' : 'M'}${sx(xs[k]).toFixed(1)},${sy(v).toFixed(1)}`).join('');
-    svg = `<svg viewBox="0 0 ${W} ${H + 18}" class="prof"><path d="${path}L${W},${H}L0,${H}Z" fill="#f3d9c6"/><path d="${path}" fill="none" stroke="#d9541e" stroke-width="2"/>`
-      + stages.slice(0, -1).map(s => `<line x1="${sx(s.to)}" x2="${sx(s.to)}" y1="0" y2="${H}" stroke="#2F5E45" stroke-dasharray="4 3"/><text x="${sx(s.to) + 3}" y="12" font-size="11" fill="#2F5E45">${t('Jour')} ${s.n + 1}</text>`).join('')
-      + `<text x="0" y="${H + 14}" font-size="11" fill="#555">${Math.round(lo)} – ${Math.round(hi)} m</text><text x="${W}" y="${H + 14}" font-size="11" fill="#555" text-anchor="end">${fmtDist(T.total)}</text></svg>`;
-  }
-  const km = d => kmN(d) + kmU();
-  const stRows = stages.map(s => `<tr><td><b>${s.n}</b></td><td>${kmN(s.from)} → ${kmN(s.to)}</td><td>${fmtDist(s.dist)}</td>${T.hasEle ? `<td>${fmtM(s.up)}</td><td>${fmtM(s.down)}</td>` : ''}<td>${fmtDur(s.secs)}</td><td>${s.last ? t('Arrivée') : s.night ? `${POI[s.night.k][0]} ${t(POI_NAME[s.night.k])}${s.night.nm ? ' · ' + e(s.night.nm) : ''}` : '—'}</td></tr>`).join('');
-  const W = pois ? prepWaterGaps(pois) : null;
-  const gaps = W ? (W.gaps.length ? W.gaps.map(g => `<li>⚠️ ${km(g.from)} → ${km(g.to)} : <b>${fmtDist(g.to - g.from)}</b> ${t('sans point d\'eau potable connu')}${g.src.length ? ` (${g.src.length} ${t(g.src.length > 1 ? 'sources, eau non garantie' : 'source, eau non garantie')})` : ''}</li>`).join('') : `<li>✓ ${t('Pas de long tronçon sans point d\'eau potable connu')}</li>`) : `<li>${t('Points d\'eau inconnus pour cette zone')}</li>`;
-  const pl = pois ? pois.filter(p => p.k === 'w' || p.k === 's' || PREP_NIGHT[p.k]) : [];
-  const poiRows = pl.map(p => `<tr><td>${kmN(p.along)}</td><td>${POI[p.k][0]} ${t(POI[p.k][2])}</td><td>${e(p.nm || '')}</td><td>${p.d > 30 ? fmtDist(Math.round(p.d / 10) * 10) : '—'}</td></tr>`).join('');
-  const notes = (T.wpts || []).map(w => { const pr = project(T, w, true); return pr && pr.dist < 300 ? { along: pr.along, name: w.name || w.desc || '' } : null; }).filter(x => x && x.name).sort((a, b) => a.along - b.along);
+    let s = `<svg viewBox="0 0 ${Wd} ${H}" class="prof" preserveAspectRatio="none"><defs><linearGradient id="${id}" x1="0" x2="0" y1="0" y2="1"><stop offset="0" stop-color="#e9783a" stop-opacity=".55"/><stop offset="1" stop-color="#e9783a" stop-opacity=".06"/></linearGradient></defs>`;
+    if (bands) bands.forEach((b, i) => { if (i % 2) s += `<rect x="${sx(b.from)}" y="0" width="${sx(b.to) - sx(b.from)}" height="${bot}" fill="#2F5E45" opacity=".06"/>`; s += `<text x="${(sx(b.from) + sx(b.to)) / 2}" y="11" font-size="10.5" font-weight="700" fill="#2F5E45" text-anchor="middle">${t('Jour')} ${b.n}</text>`; if (i) s += `<line x1="${sx(b.from)}" x2="${sx(b.from)}" y1="14" y2="${bot}" stroke="#2F5E45" stroke-width="1" stroke-dasharray="3 3" opacity=".6"/>`; });
+    s += `<path d="${path}L${Wd},${bot}L0,${bot}Z" fill="url(#${id})"/><path d="${path}" fill="none" stroke="#d9541e" stroke-width="2" stroke-linejoin="round"/>`;
+    for (const p of pl) if (p.along >= from && p.along <= to) s += p.k === 'w' || p.k === 's' ? `<circle cx="${sx(p.along).toFixed(1)}" cy="${bot + 5}" r="3" fill="${p.k === 'w' ? '#2f80ed' : '#8fb8de'}"/>` : `<rect x="${(sx(p.along) - 3).toFixed(1)}" y="${bot + 2}" width="6" height="6" rx="1" fill="#8a5a3b"/>`;
+    s += `<text x="2" y="${H - 1}" font-size="10" fill="#6b746f">${Math.round(lo)} m</text><text x="${Wd - 2}" y="${H - 1}" font-size="10" fill="#6b746f" text-anchor="end">${Math.round(hi)} m max</text></svg>`;
+    return s;
+  };
+  const tile = (v, l) => `<div class="tl"><b>${v}</b><span>${t(l)}</span></div>`;
+  const poiLine = p => `<li><b>${km(p.along)}</b> ${POI[p.k][0]} ${t(POI[p.k][2])}${p.nm ? ' · ' + e(p.nm) : ''}${p.d > 60 ? ` <i>${fmtDist(Math.round(p.d / 10) * 10)} ${t('de la trace')}</i>` : ''}</li>`;
+  const dayCards = stages.map(s => {
+    const inDay = pl.filter(p => p.along >= s.from - 1 && p.along <= s.to + 1), gaps = W ? W.gaps.filter(g => g.to > s.from && g.from < s.to) : [];
+    const noteL = notes.filter(x => x.along >= s.from && x.along <= s.to);
+    const end = s.last ? `🏁 ${t('Arrivée')}` : s.night ? `${POI[s.night.k][0]} ${t(POI_NAME[s.night.k])}${s.night.nm ? ' · <b>' + e(s.night.nm) + '</b>' : ''}` : `🌙 ${t('Nuit : lieu à trouver (pas de refuge ni d\'abri repéré)')}`;
+    return `<section class="day"><header><span class="dn">${n > 1 ? `${t('Jour')} ${s.n}` : t('Parcours')}</span><span class="km">${km(s.from)} → ${km(s.to)}</span></header>
+<div class="tiles">${tile(fmtDist(s.dist), 'Distance')}${T.hasEle ? tile(fmtM(s.up), 'D+') + tile(fmtM(s.down), 'D−') : ''}${tile(fmtDur(s.secs), bike ? 'à vélo' : 'de marche')}</div><p class="note pz">${t('Avec les pauses : environ')} ${fmtDur(s.secs * 1.3)}</p>
+${prof(s.from, s.to, 700, 120)}
+${gaps.length ? gaps.map(g => `<p class="warn">⚠️ ${km(Math.max(g.from, s.from))} → ${km(Math.min(g.to, s.to))} : ${t('pas de point d\'eau potable connu')}${g.src.length ? ` (${g.src.length} ${t(g.src.length > 1 ? 'sources, eau non garantie' : 'source, eau non garantie')})` : ''} — ${t('prévoir de quoi boire')}</p>`).join('') : ''}
+${inDay.length ? `<ul class="pts">${inDay.map(poiLine).join('')}</ul>` : ''}
+${noteL.length ? `<ul class="pts notes">${noteL.map(x => `<li><b>${km(x.along)}</b> 📍 ${e(x.name)}</li>`).join('')}</ul>` : ''}
+<p class="end">${end}</p></section>`;
+  }).join('');
   const sos = sosFor(s0.lon, s0.lat);
   let link = ''; try { link = await routeLink(T.name, T.pts, { desc: T.desc, wpts: T.wpts }, 300); } catch {}
   let qr = '';
   try { const q = qrcode(0, 'L'); q.addData(link); q.make(); const m = q.getModuleCount(); let r = ''; for (let y = 0; y < m; y++) for (let x = 0; x < m; x++) if (q.isDark(y, x)) r += `M${x},${y}h1v1h-1z`; qr = `<svg viewBox="-2 -2 ${m + 4} ${m + 4}" class="qr"><rect x="-2" y="-2" width="${m + 4}" height="${m + 4}" fill="#fff"/><path d="${r}"/></svg>`; } catch {}
+  const dateTxt = new Date().toLocaleDateString(LOC, { day: 'numeric', month: 'long', year: 'numeric' });
   let html = `<!doctype html><html lang="${LANG}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${e(T.name || 'Pisteo')} · ${t('Feuille de route')}</title>
-<style>body{font:14px/1.45 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;color:#17201c;max-width:780px;margin:0 auto;padding:16px}h1{font-size:22px;margin:0 0 2px}h2{font-size:15px;text-transform:uppercase;letter-spacing:.05em;color:#2F5E45;border-bottom:2px solid #2F5E45;padding-bottom:3px;margin:20px 0 8px}
-.sub{color:#555;margin:0 0 10px}.sum{display:flex;flex-wrap:wrap;gap:6px 18px;font-size:15px}.sum b{font-size:17px}table{width:100%;border-collapse:collapse;font-variant-numeric:tabular-nums}td,th{text-align:left;padding:5px 6px;border-bottom:1px solid #ddd;vertical-align:top}th{font-size:12px;color:#555;font-weight:600}td{white-space:nowrap}td:last-child{white-space:normal}a{word-break:break-all}
-.prof{width:100%;height:auto;display:block;margin:8px 0}ul{margin:0;padding-left:18px}.sos{display:grid;grid-template-columns:auto 1fr;gap:4px 12px;font-size:15px}.sos b{font-size:18px}.qrbox{display:flex;gap:14px;align-items:center}.qr{width:120px;height:120px;flex:none}.note{color:#555;font-size:12.5px}
-.bar{position:sticky;top:0;background:#fff;padding:6px 0;margin-bottom:6px}.bar button{font:inherit;padding:8px 14px;border-radius:10px;border:0;background:#2F5E45;color:#fff}@media print{.bar{display:none}body{padding:0}h2{break-after:avoid}tr{break-inside:avoid}}</style></head><body>
-<div class="bar"><button onclick="window.print()">${t('Imprimer ou enregistrer en PDF')}</button></div>
-<h1>${e(T.name || tr('Parcours'))}</h1><p class="sub">${t('Feuille de route Pisteo')} · ${e(new Date().toLocaleDateString(LOC, { day: 'numeric', month: 'long', year: 'numeric' }))} · ${t(bike ? 'à vélo' : 'à pied')}</p>
-<div class="sum"><span>${t('Distance')} <b>${fmtDist(T.total)}</b></span>${T.hasEle ? `<span>${t('D+')} <b>${fmtM(T.totalUp)}</b></span><span>${t('D−')} <b>${fmtM(T.totalDown)}</b></span>` : ''}<span>${t(bike ? 'Temps à vélo' : 'Temps de marche')} <b>${fmtDur(effTo(T.total))}</b></span>${n > 1 ? `<span><b>${n}</b> ${t('jours')}</span>` : ''}</div>
-${svg}
-<h2>${t(n > 1 ? 'Étapes' : 'Parcours')}</h2><table><tr><th>${t('Jour')}</th><th>${kmU().trim()}</th><th>${t('Distance')}</th>${T.hasEle ? `<th>${t('D+')}</th><th>${t('D−')}</th>` : ''}<th>${t('Temps')}</th><th>${t('Fin')}</th></tr>${stRows}</table>
-<p class="note">${t(bike ? 'Temps à vélo estimé selon ton allure, sans les pauses.' : 'Temps de marche estimé selon ton allure, sans les pauses.')}</p>
-<h2>${t('Eau')}</h2><ul>${gaps}</ul>
-${poiRows ? `<h2>${t('Points d\'eau et refuges')}</h2><table><tr><th>${kmU().trim()}</th><th>${t('Type')}</th><th>${t('Nom')}</th><th>${t('Écart')}</th></tr>${poiRows}</table><p class="note">${t('Données OpenStreetMap : vérifie sur place, et emporte de quoi tenir.')}</p>` : ''}
-${notes.length ? `<h2>${t('Points notés')}</h2><table>${notes.map(x => `<tr><td>${kmN(x.along)}</td><td>${e(x.name)}</td></tr>`).join('')}</table>` : ''}
-<h2>${t('Secours')}</h2><div class="sos">${sos.map(([num, l]) => `<b>${num}</b><span>${t(l)}</span>`).join('')}</div>
-<p>${t('Départ')} : ${ll(s0)}<br>${t('Arrivée')} : ${ll(s1)}</p><p class="note">${t('Avant de partir, laisse cette feuille ou le lien du parcours à un proche, avec ton heure de retour prévue.')}</p>
-${link ? `<h2>${t('Ouvrir le parcours')}</h2><div class="qrbox">${qr}<p class="note">${t('À scanner pour ouvrir le parcours dans Pisteo')}<br><a href="${e(link)}">${e(link.length > 70 ? link.slice(0, 70) + '…' : link)}</a></p></div>` : ''}
-</body></html>`;
+<style>
+*{box-sizing:border-box}body{margin:0;background:#eef1ea;color:#17201c;font:14px/1.45 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+.wrap{max-width:780px;margin:0 auto;padding:0 0 28px}
+.hero{background:linear-gradient(135deg,#2F5E45,#3f7a5b);color:#fff;padding:22px 18px 18px;border-radius:0 0 22px 22px}
+.hero small{display:block;opacity:.8;font-size:12.5px;letter-spacing:.06em;text-transform:uppercase;font-weight:600}
+.hero h1{margin:4px 0 2px;font-size:26px;line-height:1.15}.hero p{margin:0;opacity:.85}
+.hero .tiles{margin-top:14px}.hero .tl{background:rgba(255,255,255,.14)}.hero .tl span{color:#fff;opacity:.8}
+.tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(74px,1fr));gap:6px;margin:10px 0}.pz{margin:-4px 0 4px}
+.tl{background:#f3f5f0;border-radius:12px;padding:8px 9px}.tl b{display:block;font-size:17px;font-variant-numeric:tabular-nums;white-space:nowrap}.tl span{font-size:11.5px;color:#5d6963}
+.card,.day{background:#fff;border-radius:18px;padding:14px 16px;margin:12px 12px 0;box-shadow:0 1px 3px rgba(0,0,0,.06)}
+h2{font-size:12.5px;letter-spacing:.07em;text-transform:uppercase;color:#2F5E45;margin:0 0 8px}
+.prof{display:block;width:100%;height:auto;margin:6px 0 2px}.leg{font-size:11.5px;color:#5d6963;margin:2px 0 0}.leg i{display:inline-block;width:8px;height:8px;border-radius:50%;margin:0 4px 0 10px;vertical-align:middle}
+.day header{display:flex;justify-content:space-between;align-items:baseline;gap:8px;border-bottom:2px solid #2F5E45;padding-bottom:6px}
+.dn{font-size:20px;font-weight:800;color:#2F5E45}.km{color:#5d6963;font-variant-numeric:tabular-nums}
+.warn{margin:8px 0 0;padding:8px 10px;border-radius:10px;background:#fbefd8;color:#5b3d00;font-size:13.5px}
+.pts{list-style:none;margin:8px 0 0;padding:0}.pts li{padding:5px 0;border-top:1px solid #edf0ea;font-size:13.5px}.pts b{display:inline-block;min-width:58px;font-variant-numeric:tabular-nums}.pts i{color:#6b746f;font-style:normal;font-size:12px}
+.end{margin:10px 0 0;padding:9px 12px;border-radius:12px;background:#e6efe8;font-size:14px}
+.sos{border:2px solid #c62828}.sos h2{color:#c62828}.nums{display:grid;grid-template-columns:auto 1fr;gap:4px 14px;align-items:center}.nums b{font-size:24px;color:#c62828;font-variant-numeric:tabular-nums}
+.coords{margin:10px 0 0;font-variant-numeric:tabular-nums}.note{color:#5d6963;font-size:12.5px}
+.qrbox{display:flex;gap:14px;align-items:center}.qr{width:118px;height:118px;flex:none}a{color:#2F5E45;word-break:break-all}
+.foot{text-align:center;color:#6b746f;font-size:12px;margin:18px 0 0}
+.bar{position:sticky;top:0;z-index:2;display:flex;justify-content:center;padding:8px;background:rgba(238,241,234,.92);backdrop-filter:blur(6px)}
+.bar button{font:600 15px system-ui,sans-serif;padding:10px 18px;border-radius:12px;border:0;background:#2F5E45;color:#fff}
+@media print{@page{size:A4;margin:12mm}body{background:#fff}.bar{display:none}.hero{border-radius:14px}.card,.day{box-shadow:none;border:1px solid #dde3d8;margin:10px 0 0;break-inside:avoid}.wrap{max-width:none}}
+</style></head><body><div class="bar"><button onclick="window.print()">${t('Imprimer ou enregistrer en PDF')}</button></div><div class="wrap">
+<div class="hero"><small>${t('Feuille de route')} · ${e(dateTxt)}</small><h1>${e(T.name || tr('Parcours'))}</h1><p>${t(bike ? 'à vélo' : 'à pied')}${n > 1 ? ` · ${n} ${t('jours')}` : ''}</p>
+<div class="tiles">${tile(fmtDist(T.total), 'Distance')}${T.hasEle ? tile(fmtM(T.totalUp), 'D+') + tile(fmtM(T.totalDown), 'D−') : ''}${tile(fmtDur(effTo(T.total)), bike ? 'à vélo' : 'de marche')}</div></div>
+${T.hasEle ? `<div class="card"><h2>${t('Profil')}</h2>${prof(0, T.total, 700, 150, n > 1 ? stages : null)}<p class="leg"><i style="background:#2f80ed"></i>${t('Eau potable')}<i style="background:#8fb8de"></i>${t('Source')}<i style="background:#8a5a3b;border-radius:2px"></i>${t('Refuge, cabane, abri')}</p></div>` : ''}
+${dayCards}
+<div class="card sos"><h2>${t('Secours')}</h2><div class="nums">${sos.map(([num, l]) => `<b>${num}</b><span>${t(l)}</span>`).join('')}</div>
+<p class="coords">${t('Départ')} : ${ll(s0)}<br>${t('Arrivée')} : ${ll(s1)}</p><p class="note">${t('Avant de partir, laisse cette feuille ou le lien du parcours à un proche, avec ton heure de retour prévue.')}</p></div>
+${link ? `<div class="card"><h2>${t('Ouvrir le parcours')}</h2><div class="qrbox">${qr}<p class="note">${t('À scanner pour ouvrir le parcours dans Pisteo')}<br><a href="${e(link)}">${e(link.length > 60 ? link.slice(0, 60) + '…' : link)}</a></p></div></div>` : ''}
+<p class="note" style="margin:12px 16px 0">${t(bike ? 'Temps à vélo estimé selon ton allure, sans les pauses.' : 'Temps de marche estimé selon ton allure, sans les pauses.')} ${t('Données OpenStreetMap : vérifie sur place, et emporte de quoi tenir.')}</p>
+<p class="foot">${t('Préparé avec Pisteo')} · pisteo.app</p></div></body></html>`;
   // séparateur décimal de la langue (hors dessins)
   if (DICT && DICT.decimal !== ',') html = html.split(/(<svg[\s\S]*?<\/svg>)/).map((x, i) => i % 2 ? x : x.replace(/(\d),(\d{1,2})(?!\d)/g, '$1.$2')).join('');
   const fname = (T.name || 'parcours').replace(/[\\/:*?"<>|]+/g, ' ').trim().slice(0, 60) + ' - ' + tr('feuille de route') + '.html';
@@ -8481,7 +8619,7 @@ function prepRetDefault() {
 }
 function prepSafety() {
   let ret = null; try { ret = JSON.parse(store.get('sosReturn') || 'null'); } catch {}
-  $('prepRet').value = dtLocal(ret && ret.key === trKey() && ret.t > Date.now() ? ret.t : prepRetDefault());
+  prepRetT = ret && ret.key === trKey() && ret.t > Date.now() ? ret.t : prepRetDefault(); prepRetUI();
   $('prepTellInfo').innerHTML = ret && ret.key === trKey() && ret.t > Date.now() - 864e5
     ? `✓ <span>${escH(tr('Proche prévenu · retour prévu'))}</span> ${escH(new Date(ret.t).toLocaleString(LOC, { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }))}` : '';
 }
@@ -8492,7 +8630,7 @@ async function shareMsg(text, title) {
 }
 $('prepTell').onclick = async () => {
   if (!track) return;
-  const ret = new Date($('prepRet').value).getTime();
+  const ret = prepRetT;
   if (!ret || isNaN(ret)) { toast('Choisis ton heure de retour prévue.', 3500); return; }
   stat('securite_proche');
   const n = prepDays(), s0 = track.pts[0], late = ret + 2 * 3600e3, num = sosFor(s0.lon, s0.lat)[0][0];
@@ -8512,7 +8650,28 @@ $('prepTell').onclick = async () => {
     prepSafety();
   }
 };
-$('prepRet').onchange = () => { $('prepTellInfo').textContent = ''; };
+// heure de retour : un jour en pastille (aujourd'hui, demain, puis les 12 jours suivants) et l'heure au quart d'heure
+let prepRetT = 0;
+const dayStart = ms => { const d = new Date(ms); d.setHours(0, 0, 0, 0); return d.getTime(); };
+function prepRetUI() {
+  if (!prepRetT) return;
+  const t0 = dayStart(Date.now()), sel = dayStart(prepRetT), days = [];
+  for (let k = 0; k < 14; k++) { const d = new Date(t0); d.setDate(d.getDate() + k); days.push(d.getTime()); }
+  if (!days.includes(sel)) days.push(sel);
+  const lab = (d, k) => k === 0 ? tr('Aujourd\'hui') : k === 1 ? tr('Demain') : new Date(d).toLocaleDateString(LOC, { weekday: 'short', day: 'numeric' });
+  $('prepRetDays').innerHTML = days.map((d, k) => `<button role="option" data-d="${d}" class="${d === sel ? 'on' : ''}" aria-selected="${d === sel}">${escH(lab(d, Math.round((d - t0) / 864e5)))}</button>`).join('');
+  $('prepRetTime').textContent = new Date(prepRetT).toLocaleTimeString(LOC, { hour: '2-digit', minute: '2-digit' });
+  $('prepRetSum').textContent = new Date(prepRetT).toLocaleString(LOC, { weekday: 'long', day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit' });
+  $('prepRetDays').querySelectorAll('button').forEach(b => b.onclick = () => {
+    const d = new Date(+b.dataset.d), o = new Date(prepRetT); d.setHours(o.getHours(), o.getMinutes(), 0, 0);
+    prepRetT = d.getTime(); $('prepTellInfo').textContent = ''; prepRetUI();
+  });
+  const on = $('prepRetDays').querySelector('.on'); if (on) on.scrollIntoView({ block: 'nearest', inline: 'center' });
+}
+document.querySelectorAll('.ret-time button').forEach(b => b.onclick = () => {
+  prepRetT = Math.max(Date.now(), prepRetT + +b.dataset.t * 60000); prepRetT = Math.round(prepRetT / 9e5) * 9e5;
+  $('prepTellInfo').textContent = ''; prepRetUI();
+});
 // secours : position actuelle (ou départ de la trace), numéros du pays, appel et envoi de la position
 function openSos() {
   stat('secours_ouvre');
@@ -8564,7 +8723,7 @@ endActivity = (fn => async function (keep) {
 })(endActivity);
 function prepUpdate() {
   const show = !!track && !nav && track.total > 2000;
-  $('btnPrep').hidden = !show;
+  $('btnPrep').hidden = !show; if (!show) prepBack = false;
   if (!show) { prepMarkers(null); $('prepSheet').hidden = true; return; }
   // bouton : nombre de jours retenu pour cette trace (le détail se calcule à l'ouverture)
   const n = store.get(prepKey()) ? prepDays() : 1;
@@ -8572,10 +8731,22 @@ function prepUpdate() {
   if (n > 1 && track.prepFor !== track.id) { track.prepFor = track.id; prepRender(); }
   else if (n < 2) prepMarkers(null);
 }
-$('btnPrep').onclick = () => { stat('prep_ouvre'); $('prepSheet').hidden = false; prepRender(); };
+$('btnPrep').onclick = () => { stat('prep_ouvre'); prepOpen(); };
 $('prepClose').onclick = () => { $('prepSheet').hidden = true; };
 $('prepSheet').onclick = e => { if (e.target === $('prepSheet')) $('prepSheet').hidden = true; };
 $('prepDays').onchange = e => { store.set(prepKey(), e.target.value); stat('prep_jours'); prepRender(); };
+function prepStagesWire(stages, n) {
+  const save = a => { store.set(prepEndsKey(n), JSON.stringify(a.map(v => Math.round(v)))); stat('prep_etape_modifiee'); prepRender(); };
+  const ends = () => stages.slice(0, -1).map(s => s.to);
+  $('prepStages').querySelectorAll('.pl-ctl button').forEach(b => b.onclick = () => {
+    const i = +b.closest('.pl-ctl').dataset.i, a = ends(), lo = i ? a[i - 1] : 0, hi = i < a.length - 1 ? a[i + 1] : track.total;
+    a[i] = clamp(a[i] + +b.dataset.mv, lo + 500, hi - 500); save(a);
+  });
+  $('prepStages').querySelectorAll('.pl-near button').forEach(b => b.onclick = () => {
+    const i = +b.closest('.pl-near').dataset.i, a = ends(); a[i] = +b.dataset.at; save(a);
+  });
+  const r = $('prepReset'); if (r) r.onclick = () => { store.set(prepEndsKey(n), ''); prepRender(); };
+}
 trChipsUpdate = (fn => function () { const r = fn.apply(this, arguments); try { prepUpdate(); } catch {} return r; })(trChipsUpdate);
 
 // ---------- sauvegarde sur Google Drive (dossier caché de l'appli, champ drive.appdata) ----------

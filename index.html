@@ -9,13 +9,13 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<meta name="balise-version" content="269">
+<meta name="balise-version" content="270">
 <title>Pisteo</title>
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" href="icon.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
 <link rel="stylesheet" href="vendor/maplibre-gl.css">
-<link rel="stylesheet" href="app.css?v=269">
+<link rel="stylesheet" href="app.css?v=270">
 </head>
 <body>
 <div id="map" aria-label="Carte"></div>
@@ -310,6 +310,8 @@
     <section class="prep-sec" id="prepWaterSec">
       <h4>Eau</h4>
       <div id="prepWater" class="prep-water"></div>
+      <button id="prepPoiBtn" class="prep-more" hidden></button>
+      <ol id="prepPoiList" class="prep-pois" hidden></ol>
     </section>
     <section class="prep-sec">
       <h4>Partir sans réseau</h4>
@@ -318,11 +320,15 @@
     </section>
     <section class="prep-sec">
       <h4>Sécurité</h4>
-      <div class="set-group">
-        <div class="row">
-          <label for="prepRet">Retour prévu<br><small>Envoyé à un proche avec le parcours</small></label>
-          <input type="datetime-local" id="prepRet" class="prep-dt">
+      <div class="ret-pick">
+        <div class="ret-head"><span>Retour prévu</span><b id="prepRetSum"></b></div>
+        <div class="ret-days" id="prepRetDays" role="listbox" aria-label="Jour du retour"></div>
+        <div class="ret-time">
+          <button data-t="-60" aria-label="Une heure plus tôt">−1 h</button><button data-t="-15" aria-label="Un quart d'heure plus tôt">−15</button>
+          <b id="prepRetTime">–</b>
+          <button data-t="15" aria-label="Un quart d'heure plus tard">+15</button><button data-t="60" aria-label="Une heure plus tard">+1 h</button>
         </div>
+        <small class="note">Envoyé à un proche avec le parcours.</small>
       </div>
       <div class="prep-btns">
         <button id="prepTell" class="btn go">Prévenir un proche</button>
@@ -951,8 +957,8 @@
 
 <script src="vendor/maplibre-gl.js"></script>
 <script src="vendor/qrcode.js"></script>
-<script src="i18n/en.js?v=269"></script>
-<script src="i18n/es.js?v=269"></script>
-<script src="app.js?v=269"></script>
+<script src="i18n/en.js?v=270"></script>
+<script src="i18n/es.js?v=270"></script>
+<script src="app.js?v=270"></script>
 </body>
 </html>
