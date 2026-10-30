@@ -9,13 +9,13 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<meta name="balise-version" content="279">
+<meta name="balise-version" content="280">
 <title>Pisteo</title>
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" href="icon.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
 <link rel="stylesheet" href="vendor/maplibre-gl.css">
-<link rel="stylesheet" href="app.css?v=279">
+<link rel="stylesheet" href="app.css?v=280">
 </head>
 <body>
 <div id="map" aria-label="Carte"></div>
@@ -107,6 +107,7 @@
       <button id="npProfOnly" class="linkbtn">Profil seul</button>
       <button id="npReport" class="linkbtn">Signaler</button>
       <button id="npPhoto" class="linkbtn">Photo</button>
+      <button id="npExit" class="linkbtn">Abandonner</button>
       <button id="npSos" class="linkbtn sos-link">Secours</button>
       <input type="file" id="phCam" accept="image/*" capture="environment" hidden>
     </div>
@@ -336,6 +337,12 @@
       <button id="prepFoodBtn" class="prep-more" hidden></button>
       <ol id="prepFoodList" class="prep-pois" hidden></ol>
     </section>
+    <section class="prep-sec" id="prepExitSec" hidden>
+      <h4>Portes de sortie</h4>
+      <div id="prepExit" class="prep-water"></div>
+      <button id="prepExitBtn" class="prep-more" hidden></button>
+      <ol id="prepExitList" class="prep-pois" hidden></ol>
+    </section>
     <section class="prep-sec">
       <h4>Partir sans réseau</h4>
       <div id="prepOffSum" class="off-sum"></div>
@@ -362,6 +369,7 @@
         <button id="prepBook" class="btn"><span class="ic">📄</span>Feuille de route</button>
         <button id="prepSosBtn" class="btn"><span class="ic">🆘</span>Secours</button>
       </div>
+      <button id="prepToPhone" class="btn wide side-only">📱 Ouvrir sur mon téléphone (QR code)</button>
     </section>
   </div>
 </div>
@@ -978,8 +986,8 @@
 
 <script src="vendor/maplibre-gl.js"></script>
 <script src="vendor/qrcode.js"></script>
-<script src="i18n/en.js?v=279"></script>
-<script src="i18n/es.js?v=279"></script>
-<script src="app.js?v=279"></script>
+<script src="i18n/en.js?v=280"></script>
+<script src="i18n/es.js?v=280"></script>
+<script src="app.js?v=280"></script>
 </body>
 </html>

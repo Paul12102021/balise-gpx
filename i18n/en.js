@@ -8,6 +8,28 @@ const km = (n, half) => n === 1 && !half ? '1 kilometre' : (half ? n + '.5' : n)
 const nd = s => String(s).replace(/\.$/, '');
 const plural = (n, one, many) => n + ' ' + (+n > 1 ? many : one);
 const exact = {
+  // ---- portes de sortie, où dormir (v280)
+  "lieux pour la nuit": "places to sleep",
+  "lieu pour la nuit": "place to sleep",
+  "Camping": "Campsite",
+  "Hébergement": "Lodging",
+  "Gare": "Station",
+  "Portes de sortie": "Ways out",
+  "Tronçons loin de toute gare": "Sections far from any station",
+  "Tronçon loin de toute gare": "Section far from any station",
+  "En cas d'abandon, il faudra marcher ou trouver une route.": "If you give up, you'll need to walk or find a road.",
+  "Une gare à moins de 3 km régulièrement": "A station within 3 km all along",
+  "Parcours court, pas de gare repérée": "Short route, no station found",
+  "gares ou gares routières": "train or bus stations",
+  "gare ou gare routière": "train or bus station",
+  "Distance à vol d'oiseau depuis la trace. Vérifie les horaires des trains et des cars.": "Straight-line distance from the track. Check train and bus times.",
+  "Position GPS introuvable pour l'instant.": "No GPS position yet.",
+  "Pas de gare à moins de 25 km.": "No station within 25 km.",
+  "Gares inconnues ici pour l'instant.": "Stations unknown here for now.",
+  "à vol d'oiseau": "as the crow flies",
+  "Y aller": "Go there",
+  "Abandonner": "Give up",
+  "📱 Ouvrir sur mon téléphone (QR code)": "📱 Open on my phone (QR code)",
   // ---- ravitaillement (v278)
   "Voir cette étape sur la carte": "Show this stage on the map",
   "Glisse un fichier GPX.": "Drop a GPX file.",

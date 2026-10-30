@@ -5,7 +5,7 @@
 
 // La page et le code doivent être de la même version. Sinon (page gardée en cache
 // par le téléphone ou par GitHub), on recharge une page fraîche, au plus 3 fois.
-const APP_VERSION = 279;
+const APP_VERSION = 280;
 // lien « pisteo.app/?moi=1 » (ou ?moi=0) : cet appareil est compté à part dans les statistiques (développeur).
 // Lu avant tout rechargement de version, qui ne garde pas les paramètres de l'adresse.
 try {
@@ -8181,7 +8181,10 @@ function scrubDraw(ctx, X, Y, T, h, L0, W) {
 const POI = { w: ['💧', '#2f80ed', 'Eau potable', 5], s: ['💧', '#6aa7d8', 'Source (eau non garantie)', 3], r: ['🏠', '#b0532b', 'Refuge gardé', 6],
   c: ['🛖', '#8a5a3b', 'Cabane non gardée', 5], a: ['⛺', '#3a7556', 'Abri', 4], t: ['🚻', '#7a5cc2', 'Toilettes', 1],
   v: ['🔭', '#d08a1e', 'Point de vue', 3], p: ['⛰️', '#6b6f73', 'Sommet', 2],
-  e: ['🛒', '#c2410c', 'Épicerie', 1], b: ['🥖', '#b7791f', 'Boulangerie', 1] };
+  e: ['🛒', '#c2410c', 'Épicerie', 1], b: ['🥖', '#b7791f', 'Boulangerie', 1],
+  m: ['🏕️', '#4d7c0f', 'Camping', 3], h: ['🛏️', '#7c3aed', 'Hébergement', 2], g: ['🚉', '#334155', 'Gare', 4] };
+const NEARZ = { e: 1, b: 1, h: 1 }; // sur la carte seulement de près (nombreux dans les bourgs)
+const exitsKnown = () => !!(poiMan && poiMan.count && poiMan.count.g);
 const FOOD = { e: 1, b: 1 };
 // les données contiennent-elles les commerces ? (préparées depuis le 31 oct. 2026)
 const foodKnown = () => !!(poiMan && poiMan.count && (poiMan.count.e || poiMan.count.b));
@@ -8231,7 +8234,8 @@ async function poiUpdate() {
     const feats = [];
     for (const n of names) for (const [lat, lon, k, nm, x] of poiTiles.get(n) || []) if (POI[k]) {
       const f = FOOD[k], pr = { k, n: [nm, !f && x != null ? fmtM(x) : ''].filter(Boolean).join(' · '), pr: POI[k][3] };
-      if (f) { pr.f = 1; if (x) pr.oh = x; }
+      if (NEARZ[k]) pr.f = 1;
+      if (f && x) pr.oh = x;
       feats.push({ type: 'Feature', properties: pr, geometry: { type: 'Point', coordinates: [lon, lat] } });
     }
     map.getSource('poi').setData({ type: 'FeatureCollection', features: feats });
@@ -8353,7 +8357,7 @@ function ohTxt(o, sameDay) {
 
 // ---------- Préparer la sortie : étapes (plusieurs jours) et eau le long de la trace ----------
 // points utiles près de la trace, gardés sur la trace : [{ along, k, nm, d }] ; null = pas de données pour cette zone
-const PREP_NIGHT = { r: 3, c: 2, a: 1 }; // fin d'étape : refuge gardé > cabane > abri
+const PREP_NIGHT = { r: 3, h: 3, m: 2, c: 2, a: 1 }; // fin d'étape : refuge gardé ou hébergement > camping, cabane > abri
 async function prepPois(t) {
   if (t.prepPois !== undefined) return t.prepPois;
   const lats = t.pts.map(p => p.lat), lons = t.pts.map(p => p.lon);
@@ -8367,17 +8371,26 @@ async function prepPois(t) {
     covered = have.has(`${Math.floor((t.pts[i].lon + 180) / g)}_${Math.floor((t.pts[i].lat + 90) / g)}`);
   if (!covered) return (t.prepPois = null);
   // tri grossier : cases de ~550 m autour de la trace, puis distance exacte au tracé
-  const G = .005, near = new Set(), out = [], cell = (a, o) => Math.floor(a / G) + ':' + Math.floor(o / G);
+  const G = .005, near = new Set(), out = [], gares = [], cell = (a, o) => Math.floor(a / G) + ':' + Math.floor(o / G);
   for (let i = 0; i < t.pts.length; i++) {
     const p = t.pts[i];
     if (i && hav(p, t.pts[i - 1]) < 150 && i % 4) continue;
-    for (let y = -2; y <= 2; y++) for (let x = -2; x <= 2; x++) near.add(cell(p.lat + y * G, p.lon + x * G));
+    for (let y = -2; y <= 2; y++) for (let x = -3; x <= 3; x++) near.add(cell(p.lat + y * G, p.lon + x * G));
   }
   for (const T of poiTiles.values()) for (const [lat, lon, k, nm, x] of T) {
-    const tol = k === 'w' || k === 's' ? 250 : PREP_NIGHT[k] ? 400 : FOOD[k] ? 500 : 0;
+    // gares : jusqu'à 3 km de la trace (portes de sortie), cherchées à part plus bas
+    if (k === 'g') { gares.push([lat, lon, nm]); continue; }
+    const tol = k === 'w' || k === 's' ? 250 : k === 'h' || k === 'm' ? 800 : PREP_NIGHT[k] ? 400 : FOOD[k] ? 500 : 0;
     if (!tol || !near.has(cell(lat, lon))) continue;
     const pr = project(t, { lat, lon }, true);
     if (pr && pr.dist <= tol) { const o = { along: pr.along, k, nm: nm || '', d: pr.dist, lat, lon }; if (FOOD[k] && x) o.oh = x; out.push(o); }
+  }
+  // gares : tri grossier par la boîte de la trace élargie de 3 km, puis distance au tracé
+  const pad = .03;
+  for (const [lat, lon, nm] of gares) {
+    if (lat < bb[1] - pad || lat > bb[3] + pad || lon < bb[0] - pad * 1.4 || lon > bb[2] + pad * 1.4) continue;
+    const pr = project(t, { lat, lon }, true);
+    if (pr && pr.dist <= 3000) out.push({ along: pr.along, k: 'g', nm: nm || '', d: pr.dist, lat, lon });
   }
   return (t.prepPois = out.sort((a, b) => a.along - b.along));
 }
@@ -8447,7 +8460,7 @@ function prepWaterGaps(pois) {
 // borne kilométrique, sans unité : « 8 → 30 km »
 const kmN = m => { const v = IMP ? m / 1609.344 : m / 1000; return v < 10 && Math.abs(v - Math.round(v)) >= .05 ? v.toFixed(1).replace('.', ',') : String(Math.round(v)); };
 const kmU = () => IMP ? ' mi' : ' km';
-const POI_NAME = { r: 'Refuge gardé', c: 'Cabane non gardée', a: 'Abri' };
+const POI_NAME = { r: 'Refuge gardé', c: 'Cabane non gardée', a: 'Abri', h: 'Hébergement', m: 'Camping' };
 let prepMks = [], prepSeq = 0;
 function prepHintSet(n, dry) {
   $('prepHint').innerHTML = [n > 1 ? `${n} <span>jours</span>` : '', dry ? '⚠️ <span>eau</span>' : ''].filter(Boolean).join(' · ');
@@ -8600,7 +8613,7 @@ async function prepRender() {
   draw(pois);
   prepOffline(); prepSafety();
   if (!pois) {
-    prepFood(null);
+    prepFood(null); prepExits(null);
     $('prepWater').innerHTML = `<p class="note">${escH(tr(navigator.onLine === false ? 'Hors connexion : points d\'eau indisponibles pour le moment.' : 'Points d\'eau connus en France et dans les pays voisins seulement : pas de données ici.'))}</p>`;
     return;
   }
@@ -8618,6 +8631,7 @@ async function prepRender() {
   if (W.gaps.length) prepHintSet(n, true);
   prepPoiList();
   prepFood(pois, prepStages(n, pois));
+  prepExits(pois, prepStages(n, pois));
 }
 // ---------- ravitaillement : épiceries et boulangeries près de la trace, ouvertes ou non à ton passage ----------
 // heure de passage à une distance le long de la trace (départ prévu, jours suivants, pauses comprises)
@@ -8664,6 +8678,50 @@ function prepFood(pois, stages) {
     prepLeave(`${POI[p.k][0]} ${p.nm || tr(POI[p.k][2])} · ${tr('passage vers')} ${hm(p.eta)} · ${ohTxt(p.o)}`);
     map.flyTo({ center: [p.lon, p.lat], zoom: 16 });
   });
+}
+// ---------- portes de sortie : gares et gares routières à moins de 3 km de la trace (pour abandonner ou rentrer) ----------
+let prepExitsOpen = false;
+function prepExits(pois, stages) {
+  const sec = $('prepExitSec');
+  if (!pois || !exitsKnown()) { sec.hidden = true; return; }
+  sec.hidden = false;
+  const ex = pois.filter(p => p.k === 'g'), lim = prepBike() ? 60000 : 25000;
+  const marks = [0, ...ex.map(p => p.along), track.total], gaps = [];
+  for (let i = 1; i < marks.length; i++) if (marks[i] - marks[i - 1] >= lim) gaps.push({ from: marks[i - 1], to: marks[i], start: i === 1, end: i === marks.length - 1 });
+  const where = g => g.start && g.end ? escH(tr('Sur tout le parcours')) : g.start ? `${escH(tr('Départ'))} → ${kmN(g.to)}${kmU()}` : g.end ? `${kmN(g.from)}${kmU()} → ${escH(tr('arrivée'))}` : `${kmN(g.from)} → ${kmN(g.to)}${kmU()}`;
+  $('prepExit').innerHTML = gaps.length
+    ? `<div class="gap"><b>⚠️ ${escH(tr(gaps.length > 1 ? 'Tronçons loin de toute gare' : 'Tronçon loin de toute gare'))}</b>${gaps.map(g => `<span class="gap-row">${where(g)} : <b>${fmtDist(g.to - g.from)}</b></span>`).join('')}<small>${escH(tr('En cas d\'abandon, il faudra marcher ou trouver une route.'))}</small></div>`
+    : `<p class="ok">✓ <span>${escH(tr(ex.length ? 'Une gare à moins de 3 km régulièrement' : 'Parcours court, pas de gare repérée'))}</span></p>`;
+  const btn = $('prepExitBtn'), list = $('prepExitList');
+  btn.hidden = !ex.length; list.hidden = !ex.length || !prepExitsOpen;
+  if (!ex.length) return;
+  btn.innerHTML = prepExitsOpen ? `▾ <span>${escH(tr('Masquer la liste'))}</span>` : `▸ <span>${escH(tr('Voir'))}</span> ${ex.length} <span>${escH(tr(ex.length > 1 ? 'gares ou gares routières' : 'gare ou gare routière'))}</span>`;
+  btn.onclick = () => { prepExitsOpen = !prepExitsOpen; prepExits(pois, stages); };
+  if (list.hidden) return;
+  let out = '', day = -1;
+  for (const p of ex) {
+    const d = Math.max(0, stages.findIndex(s => p.along <= s.to + 1));
+    if (stages.length > 1 && d !== day) { day = d; out += `<li class="pp-day"><span>${escH(tr('Jour'))}</span> ${day + 1}</li>`; }
+    out += `<li><button class="pp-row" data-a="${Math.round(p.along)}"><b>${kmN(p.along)}${kmU()}</b><span>🚉 ${escH(p.nm || tr('Gare'))}</span><small>${fmtDist(Math.round(p.d / 50) * 50)}</small></button></li>`;
+  }
+  list.innerHTML = out + `<li class="pp-note">${escH(tr('Distance à vol d\'oiseau depuis la trace. Vérifie les horaires des trains et des cars.'))}</li>`;
+  list.querySelectorAll('.pp-row').forEach(b => b.onclick = () => {
+    const p = ex.find(q => Math.round(q.along) === +b.dataset.a); if (!p) return;
+    if (!poiOn()) { store.set('poi', '1'); $('optPoi').checked = true; }
+    if (!isSide()) prepLeave(`🚉 ${p.nm || tr('Gare')} · ${fmtDist(p.d)} ${tr('de la trace')}`);
+    map.flyTo({ center: [p.lon, p.lat], zoom: 14 });
+  });
+}
+// en navigation : « Abandonner » = itinéraire vers la gare la plus proche de ta position
+async function exitNearest() {
+  stat('abandon');
+  const here = me && me.t && Date.now() - me.t < 10 * 60000 ? me : null;
+  if (!here) { toast('Position GPS introuvable pour l\'instant.', 4000); return; }
+  await poiPrefetch([here.lon - .25, here.lat - .18, here.lon + .25, here.lat + .18]);
+  let best = null, bd = 25000;
+  for (const T of poiTiles.values()) for (const [lat, lon, k, nm] of T) if (k === 'g') { const d = hav(here, { lat, lon }); if (d < bd) { bd = d; best = { lat, lon, label: nm || tr('Gare') }; } }
+  if (!best) { toast(exitsKnown() ? 'Pas de gare à moins de 25 km.' : 'Gares inconnues ici pour l\'instant.', 5000); return; }
+  toast(`🚉 ${best.label} · ${fmtDist(bd)} ${tr('à vol d\'oiseau')}`, 6000, { label: tr('Y aller'), run: () => goTo(best) });
 }
 // partir sans réseau : trace gardée, carte et chemins le long de la trace, points utiles
 // les traces préparées sont rangées dans un dossier à part de « Mes traces » : hors des 30 dernières traces ouvertes, qui s'effacent
@@ -8841,7 +8899,7 @@ function prepPoiList(open) {
   if (!pois || !pois.length) { list.hidden = true; return; }
   if (open != null) list.hidden = !open;
   const nw = pois.filter(p => p.k === 'w').length, nn = pois.filter(p => PREP_NIGHT[p.k]).length;
-  btn.innerHTML = list.hidden ? `▸ <span>${escH(tr('Voir'))}</span> ${nw} <span>${escH(tr(nw > 1 ? 'points d\'eau' : 'point d\'eau'))}</span>${nn ? ` · ${nn} <span>${escH(tr(nn > 1 ? 'refuges ou abris' : 'refuge ou abri'))}</span>` : ''}` : `▾ <span>${escH(tr('Masquer la liste'))}</span>`;
+  btn.innerHTML = list.hidden ? `▸ <span>${escH(tr('Voir'))}</span> ${nw} <span>${escH(tr(nw > 1 ? 'points d\'eau' : 'point d\'eau'))}</span>${nn ? ` · ${nn} <span>${escH(tr(nn > 1 ? 'lieux pour la nuit' : 'lieu pour la nuit'))}</span>` : ''}` : `▾ <span>${escH(tr('Masquer la liste'))}</span>`;
   if (list.hidden) return;
   const st = prepStages(prepDays(), track.prepPois);
   let day = 0, html = '';
@@ -8875,6 +8933,8 @@ setInterval(() => { const d = !!dl; if (d !== prepDlWas) { prepDlWas = d; if (!$
 for (const id of ['maps', 'lib']) new MutationObserver(() => { if ($(id).hidden && !$('prepSheet').hidden) prepOffline(); }).observe($(id), { attributes: true, attributeFilter: ['hidden'] });
 
 $('prepBook').onclick = () => prepRoadbook();
+$('prepToPhone').onclick = () => { if (!track) return; stat('prep_vers_tel'); openSend({ name: track.name, pts: track.pts, cur: true }); setTimeout(() => { if ($('wtQrBox').hidden) $('wtQr').click(); }, 150); };
+$('npExit').onclick = exitNearest;
 $('prepOffMore').onclick = () => { prepOffOpen = !prepOffOpen; prepOffline(); };
 $('prepOffBatt').onclick = () => prepAct('batt', {});
 // retour prévu : une ligne ; le choix du jour et de l'heure s'ouvre avec « Modifier »

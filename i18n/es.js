@@ -8,6 +8,28 @@ const plural = (n, one, many) => n + ' ' + (+n > 1 ? many : one);
 const kmEs = (n, half) => half ? (n ? (n === 1 ? 'un kilómetro y medio' : n + ' kilómetros y medio') : 'medio kilómetro') : (n === 1 ? 'un kilómetro' : n + ' kilómetros');
 const lowFirst = s => s.charAt(0).toLowerCase() + s.slice(1);
 const exact = {
+  // ---- portes de sortie, où dormir (v280)
+  "lieux pour la nuit": "sitios para dormir",
+  "lieu pour la nuit": "sitio para dormir",
+  "Camping": "Camping",
+  "Hébergement": "Alojamiento",
+  "Gare": "Estación",
+  "Portes de sortie": "Salidas",
+  "Tronçons loin de toute gare": "Tramos lejos de cualquier estación",
+  "Tronçon loin de toute gare": "Tramo lejos de cualquier estación",
+  "En cas d'abandon, il faudra marcher ou trouver une route.": "Si abandonas, tendrás que caminar o buscar una carretera.",
+  "Une gare à moins de 3 km régulièrement": "Una estación a menos de 3 km en todo el recorrido",
+  "Parcours court, pas de gare repérée": "Ruta corta, sin estaciones",
+  "gares ou gares routières": "estaciones de tren o autobús",
+  "gare ou gare routière": "estación de tren o autobús",
+  "Distance à vol d'oiseau depuis la trace. Vérifie les horaires des trains et des cars.": "Distancia en línea recta desde la ruta. Comprueba los horarios.",
+  "Position GPS introuvable pour l'instant.": "Aún no hay posición GPS.",
+  "Pas de gare à moins de 25 km.": "Ninguna estación a menos de 25 km.",
+  "Gares inconnues ici pour l'instant.": "Estaciones desconocidas aquí por ahora.",
+  "à vol d'oiseau": "en línea recta",
+  "Y aller": "Ir allí",
+  "Abandonner": "Abandonar",
+  "📱 Ouvrir sur mon téléphone (QR code)": "📱 Abrir en mi teléfono (código QR)",
   // ---- ravitaillement (v278)
   "Voir cette étape sur la carte": "Ver esta etapa en el mapa",
   "Glisse un fichier GPX.": "Suelta un archivo GPX.",
