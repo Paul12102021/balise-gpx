@@ -5,7 +5,7 @@
 
 // La page et le code doivent être de la même version. Sinon (page gardée en cache
 // par le téléphone ou par GitHub), on recharge une page fraîche, au plus 3 fois.
-const APP_VERSION = 265;
+const APP_VERSION = 266;
 // lien « pisteo.app/?moi=1 » (ou ?moi=0) : cet appareil est compté à part dans les statistiques (développeur).
 // Lu avant tout rechargement de version, qui ne garde pas les paramètres de l'adresse.
 try {
@@ -97,7 +97,8 @@ function speakDist(d) {
 }
 // consigne affichée (« Tournez à gauche ») → consigne parlée, tutoyée comme le reste de l'appli
 function spokenTurn(txt) {
-  return txt.replace(/^Faites demi-tour/, 'fais demi-tour').replace(/^Tournez/, 'tourne')
+  return txt.replace(/^Continuez tout droit/, 'continue tout droit').replace(/^Gardez la/, 'garde la')
+    .replace(/^Série de lacets/, 'une série de lacets commence').replace(/^Faites demi-tour/, 'fais demi-tour').replace(/^Tournez/, 'tourne')
     .replace(/^Légèrement/, 'prends légèrement').replace(/^Rejoignez la trace/, 'rejoins la trace');
 }
 const pick = a => a[Math.floor(Math.random() * a.length)];
@@ -243,12 +244,203 @@ function computeTurns(p) {
   return turns;
 }
 
-function turnInfo(ang) {
-  const a = Math.abs(ang), side = ang > 0 ? 'à droite' : 'à gauche';
+function turnInfo(t) {
+  if (t && typeof t === 'object') {
+    if (t.kind === 'straight') return { txt: 'Continuez tout droit', icon: 0 };
+    if (t.kind === 'keepL') return { txt: 'Gardez la gauche', icon: -25 };
+    if (t.kind === 'keepR') return { txt: 'Gardez la droite', icon: 25 };
+    if (t.kind === 'lacets') return { txt: 'Série de lacets', icon: 'lacets' };
+    t = t.ang;
+  }
+  const ang = t, a = Math.abs(ang), side = ang > 0 ? 'à droite' : 'à gauche';
   if (a >= 150) return { txt: 'Faites demi-tour', icon: 'uturn' };
   if (a >= 110) return { txt: `Tournez franchement ${side}`, icon: ang };
   if (a >= 60) return { txt: `Tournez ${side}`, icon: ang };
   return { txt: `Légèrement ${side}`, icon: ang };
+}
+
+// =====================================================================
+// Carrefours : le réseau de chemins OpenStreetMap autour de la trace
+// Les virages ne sont plus annoncés à chaque courbe du tracé, mais aux vrais carrefours :
+// on y dit aussi « tout droit » ou « garde la gauche » quand un autre chemin part presque dans la même direction.
+// Une courbe du chemin sans carrefour n'est pas annoncée ; une suite d'épingles devient « série de lacets ».
+// Sans données (pas de réseau, hors des chemins connus) : les virages du tracé, comme avant.
+// =====================================================================
+const NET_STEP = 20; // un échantillon de la trace tous les 20 m : sur un chemin connu ou non
+const NET_SKIP = '^(proposed|construction|abandoned|platform|corridor|elevator|bus_stop|raceway|rest_area|services|razed)$';
+function netKey(p) {
+  const r = q => q.lat.toFixed(4) + ',' + q.lon.toFixed(4), a = r(p.pts[0]), b = r(p.pts[p.pts.length - 1]);
+  // même clé dans les deux sens (trace inversée : mêmes carrefours)
+  return 'n2|' + [a, b].sort().join('|') + '|' + r(pointAt(p, p.total / 2)) + '|' + Math.round(p.total / 10);
+}
+// direction d'une branche : vers le point du chemin situé environ 20 m plus loin
+function netBranch(geom, i, dir) {
+  const a = geom[i]; let k = i, d = 0;
+  while (true) {
+    const j = k + dir; if (j < 0 || j >= geom.length || !geom[j]) break;
+    d += hav(geom[k], geom[j]); k = j; if (d >= 20) break;
+  }
+  return k === i ? null : bearing(a, geom[k]);
+}
+function netBuild(p, json) {
+  const nodes = new Map(), segs = [];
+  for (const w of json.elements || []) {
+    if (w.type !== 'way' || !w.geometry || !w.nodes || w.nodes.length < 2) continue;
+    const g = w.geometry, ids = w.nodes, n = ids.length, closed = ids[0] === ids[n - 1];
+    for (let i = 0; i < n; i++) {
+      if (!g[i]) continue;
+      if (i > 0 && g[i - 1]) segs.push([g[i - 1], g[i]]);
+      if (closed && i === n - 1) continue;
+      let o = nodes.get(ids[i]); if (!o) nodes.set(ids[i], o = { lat: g[i].lat, lon: g[i].lon, br: [] });
+      const back = i > 0 ? netBranch(g, i, -1) : closed ? netBranch(g, n - 1, -1) : null;
+      const fwd = i < n - 1 ? netBranch(g, i, 1) : null;
+      if (back != null) o.br.push(back);
+      if (fwd != null) o.br.push(fwd);
+    }
+  }
+  // carrefour : au moins trois branches distinctes (deux chemins superposés ne comptent qu'une fois)
+  const jn = [];
+  for (const o of nodes.values()) {
+    const br = [];
+    for (const b of o.br) if (br.every(x => Math.abs(angDiff(x, b)) > 15)) br.push(b);
+    if (br.length >= 3) jn.push([+o.lat.toFixed(6), +o.lon.toFixed(6), br.map(b => Math.round(b))]);
+  }
+  // trace sur un chemin connu, tous les 20 m (écart ≤ 15 m)
+  const C = 0.0003, grid = new Map(), cell = (la, lo) => Math.floor(la / C) + ':' + Math.floor(lo / C);
+  for (const s of segs) {
+    const la0 = Math.min(s[0].lat, s[1].lat), la1 = Math.max(s[0].lat, s[1].lat), lo0 = Math.min(s[0].lon, s[1].lon), lo1 = Math.max(s[0].lon, s[1].lon);
+    if ((la1 - la0) / C > 40 || (lo1 - lo0) / C > 40) continue; // segment démesuré : ignoré
+    for (let y = Math.floor(la0 / C) - 1; y <= Math.floor(la1 / C) + 1; y++) for (let x = Math.floor(lo0 / C) - 1; x <= Math.floor(lo1 / C) + 1; x++) {
+      const k = y + ':' + x; let a = grid.get(k); if (!a) grid.set(k, a = []); a.push(s);
+    }
+  }
+  let on = '';
+  for (let d = 0; d <= p.total; d += NET_STEP) {
+    const q = pointAt(p, d), a = grid.get(cell(q.lat, q.lon));
+    on += a && a.some(s => segDist(q, s[0], s[1]) <= 15) ? '1' : '0';
+  }
+  return { id: netKey(p), t: Date.now(), o: [+p.pts[0].lat.toFixed(5), +p.pts[0].lon.toFixed(5)], jn, on };
+}
+// distance (m) d'un point à un segment
+function segDist(q, a, b) {
+  const kx = Math.cos(rad(q.lat)) * 111320, ky = 110540;
+  const ax = (a.lon - q.lon) * kx, ay = (a.lat - q.lat) * ky, bx = (b.lon - q.lon) * kx, by = (b.lat - q.lat) * ky;
+  const dx = bx - ax, dy = by - ay, L = dx * dx + dy * dy, f = L ? clamp(-(ax * dx + ay * dy) / L, 0, 1) : 0;
+  return Math.hypot(ax + f * dx, ay + f * dy);
+}
+// passages de la trace près d'un point (une boucle ou un aller-retour peut y passer plusieurs fois)
+function netPasses(p, idx, q, tol) {
+  const C = 0.0003, hits = [];
+  for (let y = -1; y <= 1; y++) for (let x = -1; x <= 1; x++) {
+    const a = idx.get((Math.floor(q.lat / C) + y) + ':' + (Math.floor(q.lon / C) + x)); if (!a) continue;
+    for (const i of a) {
+      const d = segDist(q, p.pts[i], p.pts[i + 1]); if (d > tol) continue;
+      const L = p.cum[i + 1] - p.cum[i], f = L ? clamp(hav(p.pts[i], q) / L, 0, 1) : 0, cosA = Math.sqrt(Math.max(0, 1 - (d / Math.max(hav(p.pts[i], q), d || 1)) ** 2));
+      hits.push({ along: p.cum[i] + L * f * cosA, d });
+    }
+  }
+  hits.sort((a, b) => a.along - b.along);
+  const out = [];
+  for (const h of hits) { const l = out[out.length - 1]; if (l && h.along - l.along < 40) { if (h.d < l.d) out[out.length - 1] = h; } else out.push(h); }
+  return out;
+}
+function trackIndex(p) {
+  const C = 0.0003, idx = new Map(), P = p.pts;
+  for (let i = 0; i < P.length - 1; i++) {
+    const ks = new Set([Math.floor(P[i].lat / C) + ':' + Math.floor(P[i].lon / C), Math.floor(P[i + 1].lat / C) + ':' + Math.floor(P[i + 1].lon / C)]);
+    for (const k of ks) { let a = idx.get(k); if (!a) idx.set(k, a = []); a.push(i); }
+  }
+  return idx;
+}
+// virages d'un chemin à partir des carrefours connus
+function netTurns(p, net) {
+  const geo = computeTurns(p).filter(t => !t.arrive);
+  const same = Math.abs(net.o[0] - p.pts[0].lat) < 2e-4 && Math.abs(net.o[1] - p.pts[0].lon) < 2e-4;
+  // échantillons pris dans le sens d'origine : trace inversée → on compte depuis l'autre bout
+  const onNet = d => { const c = net.on[Math.round((same ? d : p.total - d) / NET_STEP)]; return c === '1' || c == null; };
+  const idx = trackIndex(p), ev = [];
+  for (const [lat, lon, br] of net.jn) {
+    for (const pass of netPasses(p, idx, { lat, lon }, 15)) {
+      const a = pass.along; if (a < 15 || p.total - a < 15) continue;
+      const J = { lat, lon }, inB = bearing(pointAt(p, a - 25), J), outB = bearing(J, pointAt(p, a + 25)), ang = angDiff(inB, outB);
+      const backB = (inB + 180) % 360;
+      // les deux branches de la trace (celle d'où l'on vient, celle où l'on va) : les plus proches de ces directions
+      const near = d => br.reduce((x, b) => Math.abs(angDiff(b, d)) < Math.abs(angDiff(x, d)) ? b : x, br[0]);
+      const bIn = near(backB), bOut = near(outB);
+      if (Math.abs(angDiff(bIn, backB)) > 45 || Math.abs(angDiff(bOut, outB)) > 45) continue; // la trace ne suit pas ces chemins
+      const others = br.filter(b => b !== bIn && b !== bOut).map(b => angDiff(inB, b));
+      if (!others.length) continue; // le carrefour ne concerne pas ce passage
+      if (Math.abs(ang) >= 35) ev.push({ along: a, ang, j: 1 });
+      else {
+        const close = others.filter(r => Math.abs(r) < 60); // un autre chemin part presque tout droit : on précise
+        if (!close.length) continue;
+        const kind = close.every(r => r > ang) ? 'keepL' : close.every(r => r < ang) ? 'keepR' : 'straight';
+        ev.push({ along: a, ang, kind, j: 1 });
+      }
+    }
+  }
+  const jnNear = q => net.jn.some(([lat, lon]) => hav(q, { lat, lon }) <= 35);
+  const bends = [];
+  for (const t of geo) {
+    if (ev.some(e => Math.abs(e.along - t.along) <= 30)) continue; // le carrefour tout proche fait foi
+    const q = pointAt(p, t.along);
+    if (!onNet(t.along) || Math.abs(t.ang) >= 150 || jnNear(q)) ev.push(t); // hors chemin connu, demi-tour, ou carrefour un peu décalé
+    else bends.push(t); // simple courbe du chemin : rien à annoncer
+  }
+  // lacets : au moins 3 épingles qui se suivent, à moins de 250 m l'une de l'autre
+  let run = [];
+  const flush = () => { if (run.length >= 3) ev.push({ along: Math.max(1, run[0].along - 15), ang: 0, kind: 'lacets', n: run.length, len: run[run.length - 1].along - run[0].along + 30 }); run = []; };
+  for (const b of bends) {
+    if (Math.abs(b.ang) < 80) continue;
+    if (run.length && b.along - run[run.length - 1].along > 250) flush();
+    run.push(b);
+  }
+  flush();
+  // deux consignes à moins de 25 m : on garde la plus importante
+  const rank = t => t.kind === 'lacets' ? 0 : t.kind ? 1 : 2 + Math.abs(t.ang) / 180;
+  ev.sort((a, b) => a.along - b.along);
+  const out = [];
+  for (const t of ev) {
+    const l = out[out.length - 1];
+    if (l && t.kind !== 'lacets' && l.kind !== 'lacets' && t.along - l.along < 25) { if (rank(t) > rank(l)) out[out.length - 1] = t; }
+    else out.push(t);
+  }
+  out.push({ along: p.total, ang: 0, arrive: true });
+  return out;
+}
+async function netGet(id) { try { return await idb('readonly', st => st.get(id), 'net'); } catch { return null; } }
+async function netPut(rec) {
+  try {
+    await idb('readwrite', st => st.put(rec), 'net');
+    const all = await idb('readonly', st => st.getAllKeys(), 'net');
+    if (all && all.length > 40) { // on ne garde que les 40 traces les plus récentes
+      const recs = (await idb('readonly', st => st.getAll(), 'net')).sort((a, b) => a.t - b.t);
+      await idb('readwrite', st => { recs.slice(0, recs.length - 40).forEach(r => st.delete(r.id)); }, 'net');
+    }
+  } catch { /* stockage indisponible : le calcul sera refait */ }
+}
+const netBusy = new Set();
+async function netAttach(p) {
+  if (!p || p.total < 200 || p.total > 400000) return;
+  const key = netKey(p);
+  let net = await netGet(key);
+  if (!net) {
+    if (netBusy.has(key) || navigator.onLine === false) return;
+    netBusy.add(key);
+    try {
+      const sp = simplifyDP(p.pts, 3000), coords = [];
+      for (let i = 0; i < sp.length; i += 199) coords.push(sp.slice(i, i + 200).map(q => q.lat.toFixed(5) + ',' + q.lon.toFixed(5)).join(','));
+      const f = `[highway][highway!~"${NET_SKIP}"][footway!~"^(sidewalk|crossing)$"][service!~"^(driveway|parking_aisle|drive-through)$"][access!~"^(private|no)$"]`;
+      const q = `[out:json][timeout:90];(${coords.map(c => `way(around:20,${c})${f};`).join('')});out geom qt;`;
+      const json = await overpassFast(q, null, true, null, false);
+      net = netBuild(p, json); await netPut(net);
+      stat('net_ok');
+    } catch { stat('net_err'); return; }
+    finally { netBusy.delete(key); }
+  }
+  if (!p.pts) return;
+  try { p.turns = netTurns(p, net); p.net = 1; stat('net_used'); if (p === track && nav) guidance(); }
+  catch (e) { console.error(e); }
 }
 
 // Projection d'une position sur un chemin (recherche locale, puis globale si on s'est éloigné)
@@ -883,6 +1075,8 @@ function fitTo(ptsList) {
 async function showTrack(t, fit = true) {
   joinNear = false;
   track = makePath(t.pts, t.name); progress = null; clearRejoin(); loadDone();
+  setTimeout(() => netAttach(track), 1500); // carrefours réels (en arrière-plan)
+  track.climbs = computeClimbs(track); climbSpoken = new Map();
   track.wpts = (t.wpts || []).slice(); track.desc = t.desc || ''; trackDescUI();
   track.lit = litFor(track);
   setTimeout(trChipsUpdate, 0);
@@ -960,18 +1154,28 @@ $('btnSaveTr').onclick = async () => {
   toast('Enregistrée dans « Mes traces »', 3500, { label: 'Voir', run: openLib });
 };
 // Inverser le sens : la même trace, parcourue de l'arrivée vers le départ
-$('btnReverse').onclick = () => {
+$('btnReverse').onclick = () => reverseTrack();
+$('npRev').onclick = () => { toggleNavMore(false, true); reverseTrack(); };
+function reverseTrack() {
   if (!track) return;
-  if (nav) { toast('Quitte d\'abord la navigation pour inverser la trace.'); return; }
+  const inNav = nav;
   const rev = track.name.endsWith(' (sens inverse)');
   const name = rev ? track.name.replace(/ \(sens inverse\)$/, '') : track.name + ' (sens inverse)';
   const text = loopGPX(track.pts.slice().reverse(), name, { desc: track.desc, wpts: track.wpts });
   const hadWx = wxShown(), dep = depAt();
+  if (inNav) { // en navigation : on repart d'ici, dans l'autre sens, sans bouger la carte
+    try { showTrack(parseGPX(text), false); } catch (e) { toast(e.message, 4000); return; }
+    store.set('gpx', text.length < 4.5e6 ? text : ''); resetDone(); wrongReset(); arrived = false; poiAhead = null; poiSaid = new Set(); setTimeout(poiAlong, 500);
+    navTrackId = track.id; if (me) { progress = project(track, me, true); guidance(); }
+    say('Trace inversée. Tu es maintenant dans le bon sens.');
+    toast('Trace inversée : tu es dans le bon sens', 3000);
+    return;
+  }
   loadText(text, false); store.set('gpx', text.length < 4.5e6 ? text : '');
   // météo affichée : on la garde, recalculée dans le nouveau sens (avec la même heure de départ)
   if (hadWx) { wxDep = dep ? { key: trKey(), t: dep } : null; wxOn = false; toggleWx(); }
   toast(rev ? 'Trace remise dans son sens d\'origine' : 'Trace inversée : départ et arrivée échangés', 3000);
-};
+}
 function loadText(text, save = true) {
   try {
     const t = parseGPX(text);
@@ -990,7 +1194,7 @@ function openDB() {
   return dbP || (dbP = new Promise((res, rej) => {
     // un autre onglet de l'appli (ancienne version) peut bloquer l'ouverture : on n'attend pas indéfiniment
     const timer = setTimeout(() => { dbP = null; rej(new Error('blocked')); }, 3000);
-    const r = indexedDB.open('balise', 6);
+    const r = indexedDB.open('balise', 7);
     r.onblocked = () => { clearTimeout(timer); dbP = null; rej(new Error('blocked')); };
     r.onupgradeneeded = () => {
       const d = r.result;
@@ -999,6 +1203,7 @@ function openDB() {
       if (!d.objectStoreNames.contains('graphs')) d.createObjectStore('graphs', { keyPath: 'id' });
       if (!d.objectStoreNames.contains('graphChunks')) d.createObjectStore('graphChunks', { keyPath: 'id' });
       if (!d.objectStoreNames.contains('places')) d.createObjectStore('places', { keyPath: 'code' });
+      if (!d.objectStoreNames.contains('net')) d.createObjectStore('net', { keyPath: 'id' }); // carrefours autour des traces
       if (!d.objectStoreNames.contains('photos')) d.createObjectStore('photos', { keyPath: 'id' }); // photos des sorties (sur le téléphone)
     };
     r.onsuccess = () => {
@@ -1568,7 +1773,7 @@ function stvUI() {
 }
 // ---------- Sauvegarde : sorties, traces et réglages dans un fichier, et restauration ----------
 // réglages choisis par l'utilisateur (pas l'état en cours, ni les caches, ni la connexion Strava)
-const BK_KEYS = ['thr', 'voice', 'vib', 'autoRec', 'alertNight', 'litNight', 'statsOff', 'soBilan', 'poi', 'gdAuto', 'eco', 'ecoSeen', 'banner', 'theme', 'profile', 'layerId', 'soLayer',
+const BK_KEYS = ['thr', 'voice', 'vib', 'recap', 'navStats', 'autoRec', 'alertNight', 'litNight', 'statsOff', 'soBilan', 'poi', 'gdAuto', 'eco', 'ecoSeen', 'banner', 'theme', 'profile', 'layerId', 'soLayer',
   'rtFilt', 'npProfOnly', 'showPacks', 'stvAuto', 'recHint', 'libFolders'];
 const bkCount = items => {
   const r = items.filter(isRec).length;
@@ -2160,7 +2365,7 @@ function onPos(pos) {
     else { const d = hav(freeRef, pos); if (d >= 8) { if (d < 500) freeD += d; freeRef = pos; } }
   }
   if (nav) {
-    offTrackLogic();
+    offTrackLogic(); wrongWayCheck(pos); paceFix(pos); recapCheck(); poiCheck();
     if (rejoin && progress && progress.dist < Math.min(thrRef() * 0.7, 30) && !isOff && rightPart()) clearRejoin();
     if (!rejoin && progress && done && progress.remain < 25 && track.total - done.along < 25 && !arrived) {
       arrived = true; say(pick(['Tu es arrivé. Bravo, belle sortie !', 'Et voilà, tu es arrivé ! Bien joué.'])); vibrate([200, 100, 200]);
@@ -2173,6 +2378,93 @@ function onPos(pos) {
   }
   if (track) setDone(doneInfo().along / track.total);
   updateStats(); drawProfileSoon(); updateNavMore();
+}
+
+// ---------- mauvais sens : on avance sur la trace, mais à contresens ----------
+let wrongD = 0, wrongRef = null, wrongShown = false;
+function wrongReset() { wrongD = 0; wrongRef = null; wrongShown = false; }
+// un autre passage de la trace, tout près, va-t-il dans ma direction ? (aller-retour, boucle en 8…)
+function trackGoesThere(pos, brg) {
+  const P = track.pts, kx = Math.cos(rad(pos.lat)) * 111320, ky = 110540;
+  for (let i = 0; i < P.length - 1; i++) {
+    const ax = (P[i].lon - pos.lon) * kx, ay = (P[i].lat - pos.lat) * ky;
+    if (Math.abs(ax) > 300 || Math.abs(ay) > 300) continue;
+    if (segDist(pos, P[i], P[i + 1]) > 25 || hav(P[i], P[i + 1]) < 1) continue;
+    if (Math.abs(angDiff(brg, bearing(P[i], P[i + 1]))) < 50) return true;
+  }
+  return false;
+}
+function wrongWayCheck(pos) {
+  if (!nav || !track || rejoin || isOff || arrived || !progress || progress.dist > 30 || pos.sim || (pos.acc || 0) > 30) { wrongRef = null; return; }
+  if (!wrongRef) { wrongRef = pos; return; }
+  const d = hav(wrongRef, pos); if (d < 15) return;
+  const mv = bearing(wrongRef, pos); wrongRef = pos;
+  if (d > 200) return; // saut GPS
+  const a = progress.along, tb = bearing(pointAt(track, Math.max(0, a - 15)), pointAt(track, Math.min(track.total, a + 15)));
+  if (Math.abs(angDiff(mv, tb)) > 135 && !trackGoesThere(pos, mv)) wrongD += d;
+  else wrongD = Math.max(0, wrongD - d * 2);
+  if (wrongD >= 120 && !wrongShown) {
+    wrongShown = true; stat('sens_inverse');
+    vibrate([300, 150, 300]); say('Attention, tu parcours la trace à contresens.');
+    toast('Tu parcours la trace à contresens', 15000, { label: 'Inverser la trace', run: () => { stat('sens_inverse_ok'); reverseTrack(); } });
+    if (eco === 'max') ecoWake(15000);
+  }
+  if (wrongShown && wrongD === 0) wrongShown = false; // de nouveau dans le bon sens : alerte réarmée
+}
+
+// ---------- points d'étape vocaux et points utiles devant soi ----------
+// automatiques : tous les 3 km à pied, 10 km à vélo ; ou toutes les 15 / 30 min de navigation
+const recapMode = () => store.get('recap') || 'auto';
+$('optRecap').value = recapMode();
+$('optRecap').onchange = e => { store.set('recap', e.target.value); stat('recap_' + e.target.value); };
+let recapNext = 0, poiAhead = null, poiSaid = new Set();
+function recapReset() { recapNext = 0; poiAhead = null; poiSaid = new Set(); }
+function speakClock(secs) {
+  const d = new Date(Date.now() + secs * 1000), h = d.getHours(), m = d.getMinutes();
+  return LANG === 'fr' ? `${h} heure${h > 1 ? 's' : ''}${m ? ' ' + m : ''}` : fmtClock(secs);
+}
+function recapCheck() {
+  const md = recapMode(); if (md === 'off' || !nav || !me || rejoin || isOff || arrived) return;
+  const bike = profile === 'trekking';
+  let due;
+  if (md === 'auto') { const step = bike ? 10000 : 3000; if (!recapNext) recapNext = step; due = freeD >= recapNext; if (due) recapNext = (Math.floor(freeD / step) + 1) * step; }
+  else { const step = +md * 60000; if (!recapNext) recapNext = navStartT + step; due = Date.now() >= recapNext; if (due) recapNext += step; }
+  if (!due) return;
+  const parts = [md === 'auto' ? `${speakDist(Math.round(freeD / 1000) * 1000)} parcourus.` : `${speakDist(freeD)} parcourus en ${fmtDur((Date.now() - navStartT) / 1000)}.`];
+  const info = track && remainingInfo();
+  if (info && info.rem > 300) {
+    const up = track.hasEle && info.up >= 30 ? ` et ${Math.round(info.up / 10) * 10} mètres de montée` : '';
+    parts.push(`Encore ${speakDist(info.rem)}${up}. Arrivée vers ${speakClock(info.secs)}.`);
+  }
+  stat('recap_dit');
+  say(parts.join(' '), true);
+}
+// points utiles à moins de 60 m de la trace (eau, refuges, cabanes, abris, toilettes)
+const POI_SAY = { w: 'point d\'eau potable', s: 'source', r: 'refuge gardé', c: 'cabane', a: 'abri', t: 'toilettes' };
+async function poiAlong() {
+  if (!track || poiAhead || !poiOn()) return;
+  const mine = track; poiAhead = [];
+  try {
+    const lats = mine.pts.map(p => p.lat), lons = mine.pts.map(p => p.lon);
+    await poiPrefetch([Math.min(...lons), Math.min(...lats), Math.max(...lons), Math.max(...lats)]);
+    if (track !== mine) return;
+    const idx = trackIndex(mine), out = [];
+    for (const T of poiTiles.values()) for (const [lat, lon, k, nm] of T) {
+      if (!POI_SAY[k]) continue;
+      for (const ps of netPasses(mine, idx, { lat, lon }, 60)) out.push({ along: ps.along, k, nm: nm || '' });
+    }
+    mine.poiAhead = poiAhead = out.sort((a, b) => a.along - b.along);
+  } catch { /* pas de points utiles : rien à annoncer */ }
+}
+function poiCheck() {
+  if (recapMode() === 'off' || !nav || !track || !poiAhead || !poiAhead.length || !progress || rejoin || isOff) return;
+  const lead = profile === 'trekking' ? 1000 : 400, at = progress.along;
+  const p = poiAhead.find(q => q.along > at + 50 && q.along - at <= lead && !poiSaid.has(q.k + Math.round(q.along)));
+  if (!p) return;
+  // les points du même type tout proches ne sont annoncés qu'une fois
+  poiAhead.filter(q => q.k === p.k && Math.abs(q.along - p.along) < 500).forEach(q => poiSaid.add(q.k + Math.round(q.along)));
+  stat('poi_dit_' + p.k);
+  say(`${POI_SAY[p.k].charAt(0).toUpperCase() + POI_SAY[p.k].slice(1)} dans ${speakDist(p.along - at)}${p.nm && p.k !== 'w' && p.k !== 't' ? ', ' + p.nm : ''}.`, true);
 }
 
 // =====================================================================
@@ -2212,7 +2504,7 @@ async function startNav(free = false) {
   if (!startGPS()) return;
   nav = true; arrived = false; isOff = false; offCount = 0; milestones = {};
   navTrackId = track ? track.id : null;
-  navStartT = Date.now(); freeD = 0; freeRef = null; nightSaid = 0;
+  navStartT = Date.now(); freeD = 0; freeRef = null; paceReset(); wrongReset(); paceLoad(); recapReset(); if (track) setTimeout(poiAlong, 3000); nightSaid = 0;
   navHome = track && track.pts.length ? { lat: track.pts[0].lat, lon: track.pts[0].lon } : me && !me.sim ? { lat: me.lat, lon: me.lon } : null;
   setTimeout(trChipsUpdate, 0);
   if (track && done && track.total - done.along < 25) { resetDone(); setDone(0, true); } // trace déjà finie : on repart de zéro
@@ -2265,6 +2557,7 @@ function arrowSVG(icon) {
   if (icon === 'off') return '<svg viewBox="0 0 48 48"><path d="M24 6 44 42H4Z"/><path d="M24 19v10M24 35v1"/></svg>';
   if (icon === 'gps') return '<svg viewBox="0 0 48 48"><circle cx="24" cy="24" r="7"/><path d="M24 4v8M24 36v8M4 24h8M36 24h8"/></svg>';
   if (icon === 'join') return '<svg viewBox="0 0 48 48"><path d="M24 44V20"/><path d="M14 22 24 10l10 12"/><path d="M6 10h36" stroke-dasharray="4 5"/></svg>';
+  if (icon === 'lacets') return '<svg viewBox="0 0 48 48"><path d="M24 44v-6l-10-6 20-8-20-8 10-6V4"/><path d="M18 10l6-6 6 6"/></svg>';
   if (icon === 'uturn') return '<svg viewBox="0 0 48 48"><path d="M32 44V20a8 8 0 0 0-16 0v12"/><path d="M9 26l7 7 7-7"/></svg>';
   if (typeof icon === 'object') // flèche vers un point (retour à vol d'oiseau)
     return `<svg viewBox="0 0 48 48" style="transform:rotate(${icon.rot}deg)"><path d="M24 42V8"/><path d="M13 18 24 7l11 11"/></svg>`;
@@ -2444,8 +2737,8 @@ function drawPip() {
   // bandeau du bas : arrivée et distance restante (ou distance / durée en balade libre)
   ctx.fillStyle = cssVar('--hud') || '#1F2B25'; ctx.fillRect(0, H - BOT, W, BOT);
   ctx.fillStyle = '#fff'; ctx.font = '700 25px system-ui, sans-serif'; ctx.textAlign = 'center';
-  const a = $('nbEta').textContent, b = $('nbRem').textContent, l2 = $('nbL2').textContent;
-  ctx.fillText(track ? `${tr('Arrivée')} ${a}  ·  ${b}` : `${b} ${l2}  ·  ${$('nbUp').textContent}`, W / 2, H - 20);
+  const ri = track && remainingInfo();
+  ctx.fillText(ri ? `${tr('Arrivée')} ${fmtClock(ri.secs)}  ·  ${fmtDist(ri.rem)}` : `${fmtDist(freeD)} ${tr('parcourus')}  ·  ${fmtDur((Date.now() - navStartT) / 1000)}`, W / 2, H - 20);
   ctx.textAlign = 'left';
 }
 // dessin groupé (au plus 4 fois par seconde), après la mise à jour des chiffres
@@ -2516,11 +2809,11 @@ function guidance() {
   const next = path.turns.find(t => t.along > pr.along + 3) || path.turns[path.turns.length - 1];
   const dTo = Math.max(0, next.along - pr.along);
   nextDist = next.arrive ? Infinity : dTo;
-  const info = next.arrive ? (rejoin ? { txt: 'Rejoignez la trace', icon: 'join' } : { txt: 'Arrivée', icon: 'flag' }) : turnInfo(next.ang);
+  const info = next.arrive ? (rejoin ? { txt: 'Rejoignez la trace', icon: 'join' } : { txt: 'Arrivée', icon: 'flag' }) : turnInfo(next);
   const tone = rejoin ? 'rejoin' : 'ok';
   const sub = rejoin ? `Retour à la trace · ${fmtDist(rejoinProg.remain)} par le chemin` : '';
   if (dTo > 1200) setBanner(tone, fmtDist(dTo), track.route ? 'Continuez sur l\'itinéraire' : 'Continuez sur la trace', 0, (next.arrive ? '' : `puis ${lc(info.txt)}`) + (sub ? (next.arrive ? '' : ' · ') + sub : ''));
-  else setBanner(tone, fmtDist(dTo), info.txt, info.icon, sub);
+  else setBanner(tone, fmtDist(dTo), info.txt, info.icon, next.kind === 'lacets' ? `${next.n} épingles sur ${fmtDist(next.len)}` + (sub ? ' · ' + sub : '') : sub);
 
   const key = path.id + ':' + Math.round(next.along);
   if (key !== lastTurnKey) {
@@ -2539,18 +2832,18 @@ function guidance() {
   const s = Math.max(speedEma || 1.2, 1);
   const far = clamp(s * 30, 60, 400), near = clamp(s * 7, 15, 60);
   const lvl = spoken.get(key) || 0;
-  const what = next.arrive ? (rejoin ? 'tu rejoindras la trace' : 'tu seras arrivé') : spokenTurn(info.txt);
+  const what = next.arrive ? (rejoin ? 'tu rejoindras la trace' : 'tu seras arrivé') : next.kind === 'lacets' ? `une série de ${next.n} lacets commence, sur ${speakDist(next.len)}` : spokenTurn(info.txt);
   // virage suivant tout proche : on annonce les deux d'un coup, comme un copilote
   const after = !next.arrive && path.turns.find(t => t.along > next.along + 3);
   // (seulement un vrai virage, pas une courbe, et vraiment proche : sinon ça devient bavard dans les lacets)
-  const chain = after && !after.arrive && Math.abs(after.ang) >= 60 && after.along - next.along < Math.max(near * 2.5, 40);
-  const then = chain ? `, puis tout de suite ${spokenTurn(turnInfo(after.ang).txt).replace(/^tourne |^prends /, '')}` : '';
+  const chain = after && !after.arrive && !after.kind && !next.kind && Math.abs(after.ang) >= 60 && after.along - next.along < Math.max(near * 2.5, 40);
+  const then = chain ? `, puis tout de suite ${spokenTurn(turnInfo(after).txt).replace(/^tourne |^prends /, '')}` : '';
   const afterKey = chain ? path.id + ':' + Math.round(after.along) : null;
   const cap = t => t.charAt(0).toUpperCase() + t.slice(1);
   if (lvl < 1 && dTo <= far && dTo > near * 1.6) { say(`Dans ${speakDist(dTo)}, ${what}${then}.`); spoken.set(key, 1); }
-  else if (lvl === 3 && dTo <= near) { if (!next.arrive) say(cap(spokenTurn(info.txt).replace(/^tourne |^prends /, '')) + '.', true); spoken.set(key, 2); }
+  else if (lvl === 3 && dTo <= near) { if (!next.arrive && next.kind !== 'lacets') say(cap(spokenTurn(info.txt).replace(/^tourne |^prends /, '')) + '.', true); spoken.set(key, 2); }
   else if (lvl < 2 && dTo <= near) {
-    if (!next.arrive) { const t = spokenTurn(info.txt); say((lvl === 1 && Math.random() < .35 ? pick(['Maintenant, ', 'C\'est ici, ']) + t : cap(t)) + then + '.'); }
+    if (!next.arrive && next.kind !== 'lacets') { const t = spokenTurn(info.txt); say((lvl === 1 && Math.random() < .35 ? pick(['Maintenant, ', 'C\'est ici, ']) + t : cap(t)) + then + '.'); }
     spoken.set(key, 2);
     // le virage enchaîné a déjà été annoncé : au moment de le prendre, juste « À droite. »
     if (afterKey && !spoken.get(afterKey)) spoken.set(afterKey, 3);
@@ -2962,7 +3255,10 @@ function ecoCheck() {
     const m = Math.floor(Date.now() / 60000); // léger décalage chaque minute, pour ne pas marquer l'écran
     el.firstElementChild.style.transform = `translate(${(m % 5 - 2) * 6}px, ${(Math.floor(m / 5) % 5 - 2) * 10}px)`;
     $('ebIcon').innerHTML = $('ntIcon').innerHTML; $('ebDist').textContent = $('ntDist').textContent; $('ebTxt').textContent = $('ntTxt').textContent;
-    $('ebRem').textContent = track ? `${$('nbRem').textContent} restant · arrivée ${$('nbEta').textContent}` : `${$('nbRem').textContent} ${$('nbL2').textContent} · ${$('nbUp').textContent}`;
+    const ebc = $('ebClimb'); ebc.textContent = '';
+    if (!$('climb').hidden) ebc.append('⛰ ', $('clTxt').textContent); // deux morceaux : le texte se traduit seul
+    const ri = track && remainingInfo();
+    $('ebRem').textContent = ri ? `${fmtDist(ri.rem)} restant · arrivée ${fmtClock(ri.secs)}` : `${fmtDist(freeD)} parcourus · ${fmtDur((Date.now() - navStartT) / 1000)}`;
   } else if (was && nav && follow) { camT = 0; navCamera(0); }
 }
 function ecoWake(ms) { ecoWakeUntil = Date.now() + ms; ecoCheck(); setTimeout(ecoCheck, ms + 100); }
@@ -4976,6 +5272,54 @@ async function reroute() {
 // =====================================================================
 // Mesures affichées
 // =====================================================================
+// ---------- allure personnelle (heure d'arrivée) ----------
+// à pied 4,5 km/h et 1 h par 600 m de D+ ; à vélo 16 km/h et 1 h par 800 m de D+ ; corrigé par tes sorties
+const PACE0 = { foot: { v: 4.5 / 3.6, climb: 600 }, bike: { v: 16 / 3.6, climb: 800 } };
+let paceHist = { foot: null, bike: null };
+async function paceLoad() {
+  try {
+    const items = (await listRecent()).filter(isRec).filter(it => it.dist > 2000 && it.ms > 15 * 60000)
+      .sort((a, b) => (b.start || b.date) - (a.start || a.date));
+    for (const md of ['foot', 'bike']) {
+      const its = items.filter(it => recMode(it) === md).slice(0, 10), c = PACE0[md].climb;
+      let d = 0, t = 0;
+      for (const it of its) { const flat = it.ms / 1000 - (it.up || 0) / c * 3600; if (flat > 300) { d += it.dist; t += flat; } }
+      const lim = md === 'bike' ? [8, 35] : [2, 8];
+      paceHist[md] = its.length >= 2 && t > 0 ? { v: clamp(d / t * 3.6, lim[0], lim[1]) / 3.6, n: its.length } : null;
+    }
+  } catch { /* pas de sorties : allure par défaut */ }
+}
+setTimeout(paceLoad, 4000);
+// le jour même : temps et distance en mouvement depuis le début de la navigation (à partir de ~1 km)
+let paceDay = { t: 0, d: 0, up: 0, all: 0, ref: null };
+function paceReset() { paceDay = { t: 0, d: 0, up: 0, all: 0, ref: null }; }
+function paceFix(pos) {
+  if (!nav || pos.sim || (pos.acc || 0) > 40) return;
+  const r = paceDay.ref; paceDay.ref = pos;
+  if (!r || !r.t || !pos.t) return;
+  const dt = (pos.t - r.t) / 1000; if (dt <= 0 || dt > 60) return;
+  const d = hav(r, pos);
+  paceDay.all += dt;
+  if (d / dt > 0.5 && d / dt < 30) { // en mouvement
+    paceDay.t += dt; paceDay.d += d;
+    if (pos.ele != null && r.ele != null && pos.ele > r.ele) paceDay.up += Math.min(pos.ele - r.ele, 5);
+  }
+}
+function paceNow(bike) {
+  const md = bike ? 'bike' : 'foot', b = PACE0[md], h = paceHist[md];
+  let v = h ? h.v : b.v;
+  // allure du jour sur le plat (la montée faite retirée), de plus en plus prise en compte jusqu'à 5 km
+  const flat = paceDay.t - paceDay.up / b.climb * 3600;
+  if (paceDay.d > 1000 && flat > 120) {
+    const lim = bike ? [5, 45] : [1.5, 9], vd = clamp(paceDay.d / flat * 3.6, lim[0], lim[1]) / 3.6;
+    const w = clamp((paceDay.d - 1000) / 4000, 0, 0.8);
+    v = w * vd + (1 - w) * v;
+  }
+  // les pauses du jour (au-delà de ~2 km) rallongent un peu l'estimation, au plus d'un tiers
+  const stop = paceDay.d > 2000 && paceDay.t > 0 ? clamp(paceDay.all / paceDay.t, 1, 1.33) : 1;
+  // vitesse de montée : proportionnelle à ton allure par rapport à l'allure de base
+  return { v, climb: b.climb * clamp(v / b.v, 0.6, 1.6), stop };
+}
 function remainingInfo() {
   if (!track) return null;
   const di = doneInfo();
@@ -4985,16 +5329,11 @@ function remainingInfo() {
     rem = rejoinProg.remain + (pt ? pt.remain : 0);
     up = (pt ? pt.upLeft : up) + (rejoin.hasEle ? rejoinProg.upLeft : 0);
   }
-  // temps : allure de base selon le mode (à pied 4,5 km/h + 1 h par 600 m de D+,
-  // à vélo 16 km/h + 1 h par 800 m de D+), puis de plus en plus ta vitesse réelle
-  // à mesure que tu avances (pleinement après ~3 km)
-  const bike = profile === 'trekking';
-  const base = (bike ? 16 : 4.5) / 3.6, climb = bike ? 800 : 600;
-  const w = speedEma ? clamp(freeD / 3000, 0, 0.85) : 0;
-  const v = w * clamp(speedEma || base, 0.5, 15) + (1 - w) * base;
-  // + environ 20 s d'attente par carrefour à feux restant
-  const sigLeft = track.sig ? track.sig.filter(s => s > di.along + 20).length : 0;
-  const secs = rem / v + (track.hasEle ? (1 - w) * up / climb * 3600 : 0) + sigLeft * 20;
+  // temps = distance à ton allure sur le plat + D+ restant à ta vitesse de montée, puis tes pauses.
+  // Allure : d'abord celle de tes sorties passées (même mode), puis de plus en plus celle du jour (en mouvement).
+  const bike = profile === 'trekking', pace = paceNow(bike);
+  const sigLeft = track.sig ? track.sig.filter(s => s > di.along + 20).length : 0; // ~20 s par feu
+  const secs = (rem / pace.v + (track.hasEle ? up / pace.climb * 3600 : 0)) * pace.stop + sigLeft * 20;
   return { rem, up, secs };
 }
 // un chiffre trop long pour sa colonne est rapetissé plutôt que de déborder sur le voisin
@@ -5002,6 +5341,58 @@ function fitStat(id) {
   const el = $(id); el.style.fontSize = '';
   for (let fs = 21; el.scrollWidth > el.clientWidth + 1 && fs > 13; fs--) el.style.fontSize = (fs - 1) + 'px';
 }
+// ---------- cases du bas en navigation : au choix (toucher une case pour la changer) ----------
+const NB_IDS = [['nbEta', 'nbDur'], ['nbRem', 'nbL2'], ['nbUp', 'nbL3']];
+const NAV_STATS = { eta: 'Heure d\'arrivée', left: 'Temps restant', rem: 'Distance restante', up: 'D+ restant', done: 'Distance parcourue',
+  upDone: 'D+ fait', pct: 'Progression', time: 'Temps de sortie', avg: 'Vitesse moyenne', ele: 'Altitude', clock: 'Heure', climb: 'Prochaine montée' };
+function navStatSlots() {
+  let a; try { a = JSON.parse(store.get('navStats') || 'null'); } catch {}
+  return Array.isArray(a) && a.length === 3 && a.every(k => NAV_STATS[k]) ? a : ['eta', 'rem', 'up'];
+}
+function navStatVal(k, info) {
+  const di = doneInfo(), el = actState !== 'idle' ? actElapsed() / 1000 : (Date.now() - navStartT) / 1000;
+  const dist = actState !== 'idle' ? act.d : freeD;
+  switch (k) {
+    case 'eta': return [fmtClock(info.secs), 'arrivée · ' + fmtDur(info.secs)];
+    case 'left': return [fmtDur(info.secs), 'restant'];
+    case 'rem': return [fmtDist(info.rem), 'restant'];
+    case 'up': return [track.hasEle ? fmtM(info.up) : '–', 'D+ restant'];
+    case 'done': return [fmtDist(di.along), 'parcouru'];
+    case 'upDone': return [track.hasEle ? fmtM(track.totalUp - di.upLeft) : '–', 'D+ fait'];
+    case 'pct': return [Math.floor(di.along / track.total * 100) + ' %', 'progression'];
+    case 'time': return [fmtDur(el), actState !== 'idle' ? 'temps (sortie)' : 'durée'];
+    case 'avg': return [el > 60 ? kmh(dist / el * 3.6) : '–', 'vitesse moy.'];
+    case 'ele': return [me && me.ele != null ? fmtM(me.ele) : '–', 'altitude'];
+    case 'clock': return [new Date().toLocaleTimeString(LOC, { hour: '2-digit', minute: '2-digit' }), 'heure'];
+    case 'climb': {
+      const cn = climbNow();
+      if (!cn) return ['–', 'montée'];
+      return cn.inside ? [fmtM(cn.up), 'sommet ' + fmtDist(cn.left)] : [fmtDist(cn.to), 'montée ' + fmtPct(cn.c.grade)];
+    }
+  }
+  return ['–', ''];
+}
+function navStatPick(i) {
+  if (!nav || !track) return;
+  const cur = navStatSlots(), menu = $('nbPick');
+  menu.innerHTML = '';
+  const h = document.createElement('b'); h.textContent = 'Afficher dans cette case'; menu.appendChild(h);
+  for (const [k, lbl] of Object.entries(NAV_STATS)) {
+    const b = document.createElement('button'); b.className = 'nbp-item' + (cur[i] === k ? ' on' : ''); b.textContent = lbl;
+    b.onclick = e => {
+      e.stopPropagation();
+      const a = cur.slice(), j = a.indexOf(k); if (j >= 0 && j !== i) a[j] = a[i]; // déjà dans une autre case : on échange
+      a[i] = k; store.set('navStats', JSON.stringify(a)); stat('case_' + k);
+      menu.hidden = true; updateStats();
+    };
+    menu.appendChild(b);
+  }
+  const r = $(NB_IDS[i][0]).parentElement.getBoundingClientRect();
+  menu.style.left = clamp(r.left + r.width / 2 - 110, 8, innerWidth - 228) + 'px';
+  menu.hidden = false;
+}
+NB_IDS.forEach(([v], i) => { $(v).parentElement.onclick = e => { e.stopPropagation(); navStatPick(i); }; });
+document.addEventListener('click', e => { const m = $('nbPick'); if (m && !m.hidden && !m.contains(e.target)) m.hidden = true; }, true);
 function updateStats() {
   pipSoon();
   const info = remainingInfo();
@@ -5020,16 +5411,105 @@ function updateStats() {
     $('spVal').textContent = sp == null ? '–' : (sp < 10 ? sp.toFixed(1).replace('.', ',') : Math.round(sp));
   }
   if (nav && info) {
-    $('nbL2').textContent = 'restant'; $('nbL3').textContent = 'D+ restant';
-    $('nbEta').textContent = fmtClock(info.secs); nightCheck(info);
-    $('nbDur').textContent = 'arrivée · ' + fmtDur(info.secs);
-    $('nbRem').textContent = fmtDist(info.rem);
-    $('nbUp').textContent = track.hasEle ? fmtM(info.up) : '–';
+    nightCheck(info);
+    navStatSlots().forEach((k, i) => { const [v, l] = navStatVal(k, info); $(NB_IDS[i][0]).textContent = v; $(NB_IDS[i][1]).textContent = l; });
     ['nbEta', 'nbRem', 'nbUp'].forEach(fitStat);
+    climbUI();
     $('nbBar').style.width = clamp(doneInfo().along / track.total, 0, 1) * 100 + '%';
     const sp = me && me.speed != null && !isNaN(me.speed) ? me.speed * (IMP ? 2.23694 : 3.6) : null;
     $('spVal').textContent = sp == null ? '–' : (sp < 10 ? sp.toFixed(1).replace('.', ',') : Math.round(sp));
   }
+}
+
+// =====================================================================
+// Montées à venir (comme ClimbPro) : repérées sur le profil, affichées et annoncées en navigation
+// =====================================================================
+// montée : du creux au sommet, en ignorant les petites descentes (< 15 m) ; au moins 25 m de D+ et 3 % de moyenne
+function computeClimbs(p) {
+  if (!p.hasEle) return [];
+  const E = p.ele, C = p.cum, n = E.length, H = 15, ext = [];
+  let mode = 0, cand = -1, mn = -1, mx = -1;
+  for (let i = 0; i < n; i++) {
+    const e = E[i]; if (e == null) continue;
+    if (mode === 0) {
+      if (mn < 0) { mn = mx = i; continue; }
+      if (e > E[mx]) mx = i; if (e < E[mn]) mn = i;
+      if (E[mx] - E[mn] >= H) { if (mx > mn) { ext.push(['lo', mn]); mode = 1; cand = mx; } else { ext.push(['hi', mx]); mode = -1; cand = mn; } }
+    } else if (mode === 1) {
+      if (e > E[cand] + 1) cand = i;
+      // descente, ou replat de plus de 400 m sans rien gagner : la montée s'arrête au dernier point haut
+      else if (E[cand] - e >= H || C[i] - C[cand] > 400) { ext.push(['hi', cand]); mode = -1; cand = i; }
+    }
+    else { if (e < E[cand]) cand = i; else if (e - E[cand] >= H) { ext.push(['lo', cand]); mode = 1; cand = i; } }
+  }
+  if (mode === 1) ext.push(['hi', cand]);
+  const out = [];
+  for (let k = 0; k < ext.length - 1; k++) {
+    if (ext[k][0] !== 'lo' || ext[k + 1][0] !== 'hi') continue;
+    let a = ext[k][1], b = ext[k + 1][1];
+    // début réel : là où ça commence à monter (on retire le replat du creux)
+    while (a < b - 1 && E[a + 1] != null && E[a + 1] - E[a] < 0.5 && C[a + 1] - C[ext[k][1]] < 2000) a++;
+    // fin trop douce (faux plat après la vraie montée) : on la retire tant que les 300 derniers mètres montent à moins de 3 %
+    const gr = (i, j) => (E[j] - E[i]) / Math.max(1, C[j] - C[i]);
+    const back = (j, m) => { let i = j; while (i > a && C[j] - C[i] < m) i--; return i; };
+    while (C[b] - C[a] > 600) { const i = back(b, 300); if (gr(i, b) >= Math.max(0.03, gr(a, b) * 0.4)) break; b = back(b, 100); }
+    const len = C[b] - C[a], gain = E[b] - E[a];
+    if (gain < 25 || len < 200 || gain / len < 0.03) continue;
+    // pente max sur 100 m
+    let mx = 0;
+    for (let i = a, j = a; i < b; i++) { while (j < b && C[j] - C[i] < 100) j++; if (C[j] - C[i] >= 80) mx = Math.max(mx, (E[j] - E[i]) / (C[j] - C[i])); }
+    out.push({ start: C[a], end: C[b], gain, len, grade: gain / len, max: Math.max(mx, gain / len), top: E[b] });
+  }
+  return out;
+}
+const fmtPct = g => Math.round(g * 100) + ' %';
+let climbSpoken = new Map();
+// montée en cours, ou prochaine montée à moins de 3 km
+function climbNow() {
+  if (!nav || !track || !track.climbs || !track.climbs.length || !progress || rejoin || isOff || arrived) return null;
+  const at = progress.along, cs = track.climbs;
+  const i = cs.findIndex(c => at < c.end - 10);
+  if (i < 0) return null;
+  const c = cs[i], n = cs.length;
+  if (at >= c.start) {
+    const left = c.end - at, eleNow = track.ele[progress.idx], up = eleNow != null ? Math.max(0, c.top - eleNow) : c.gain * left / c.len;
+    return { c, i, n, inside: true, left, up, grade: left > 0 ? up / left : c.grade };
+  }
+  const to = c.start - at;
+  return to <= 3000 ? { c, i, n, inside: false, to } : null;
+}
+function climbUI() {
+  const el = $('climb'), cn = climbNow();
+  el.hidden = !cn;
+  if (!cn) return '';
+  const c = cn.c, num = cn.n > 1 ? ` ${cn.i + 1}/${cn.n}` : '';
+  let line;
+  if (cn.inside) {
+    line = `Sommet dans ${fmtDist(cn.left)} · encore ${fmtM(cn.up)} à ${fmtPct(cn.grade)}`;
+    $('clTitle').textContent = 'Montée' + num;
+    $('clBar').style.width = clamp(1 - cn.left / c.len, 0, 1) * 100 + '%';
+  } else {
+    line = `Dans ${fmtDist(cn.to)} : ${fmtDist(c.len)} à ${fmtPct(c.grade)} · D+ ${fmtM(c.gain)}`;
+    $('clTitle').textContent = 'Prochaine montée' + num;
+    $('clBar').style.width = '0%';
+  }
+  $('clTxt').textContent = line;
+  el.dataset.hard = c.grade >= 0.08 ? '2' : c.grade >= 0.05 ? '1' : '0';
+  // annonces : à l'approche, à mi-montée pour les longues, et peu avant le sommet
+  if (cn.inside) {
+    const key = c.start;
+    const st = climbSpoken.get(key) || 0;
+    if (c.gain >= 60 && st < 2 && cn.left < c.len / 2 && cn.left > 600) { climbSpoken.set(key, 2); say(`Mi-montée. Encore ${speakDist(cn.left)} et ${Math.round(cn.up / 10) * 10} mètres de dénivelé.`, true); }
+    else if (c.gain >= 40 && st < 3 && cn.left <= Math.max(250, (speedEma || 1.2) * 60) && cn.left > 60) { climbSpoken.set(key, 3); say(`Sommet dans ${speakDist(cn.left)}.`, true); }
+  } else {
+    const st = climbSpoken.get(c.start) || 0, lead = clamp((speedEma || 1.2) * 60, 150, 600);
+    if (st < 1 && cn.to <= lead && cn.to > 30) {
+      climbSpoken.set(c.start, 1);
+      const steep = c.max >= c.grade + 0.04 && c.max >= 0.08 ? `, jusqu'à ${Math.round(c.max * 100)} %` : '';
+      say(`Montée dans ${speakDist(cn.to)} : ${speakDist(c.len)} à ${Math.round(c.grade * 100)} % de moyenne${steep}, ${Math.round(c.gain / 10) * 10} mètres de dénivelé.`, true);
+    }
+  }
+  return line;
 }
 
 // =====================================================================

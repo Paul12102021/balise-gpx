@@ -226,6 +226,14 @@ body.nav[data-banner="hidden"] .navtop:not([data-tone="off"]):not([data-tone="re
 .nb-stats { gap: 4px; }
 .nb-stat:first-child b { color: var(--go-ink); }
 .nb-stat span { font-size: 12px; color: var(--muted); white-space: nowrap; }
+.nb-stat { cursor: pointer; border-radius: 10px; }
+.nb-stat:active { background: var(--field); }
+.nb-pick { position: fixed; z-index: 30; bottom: calc(var(--nav-h, 92px) + 8px); width: 220px; max-height: 60vh; overflow: auto;
+  background: var(--panel); color: var(--ink); border-radius: 14px; box-shadow: 0 6px 28px rgba(0,0,0,.3); padding: 8px; display: flex; flex-direction: column; }
+.nb-pick[hidden] { display: none; }
+.nb-pick b { font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spacing: .05em; padding: 4px 8px 6px; }
+.nbp-item { text-align: left; padding: 10px; border: 0; border-radius: 10px; background: none; color: inherit; font: inherit; font-size: 15px; cursor: pointer; }
+.nbp-item.on { background: var(--field); font-weight: 700; }
 .nb-btn {
   width: 46px; height: 46px; border-radius: 50%; border: 1px solid var(--line); flex: none;
   background: var(--field); color: var(--ink); display: grid; place-items: center; cursor: pointer;
@@ -238,6 +246,21 @@ body.nav[data-banner="hidden"] .navtop:not([data-tone="off"]):not([data-tone="re
   border: 3px solid var(--line); box-shadow: 0 2px 10px rgba(0,0,0,.2);
   display: flex; flex-direction: column; align-items: center; justify-content: center;
 }
+/* montée en cours ou à venir, à côté de la vitesse */
+.climb { position: fixed; z-index: 9; left: 84px; right: 72px; bottom: calc(var(--nav-h, 92px) + 12px); max-width: 360px;
+  background: var(--panel); color: var(--ink); border-radius: 14px; padding: 7px 11px 8px; box-shadow: 0 2px 10px rgba(0,0,0,.2);
+  border-left: 5px solid #3BA55D; }
+.climb[hidden] { display: none; }
+.climb[data-hard="1"] { border-left-color: #E8A33A; }
+.climb[data-hard="2"] { border-left-color: #E5484D; }
+.cl-head { display: flex; align-items: center; gap: 6px; font-size: 12px; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); }
+.cl-head svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linejoin: round; }
+.cl-txt { font: 600 14px/1.25 var(--num); font-variant-numeric: tabular-nums; margin-top: 2px; }
+.cl-bar { height: 4px; border-radius: 2px; background: var(--line); margin-top: 5px; overflow: hidden; }
+#clBar { height: 100%; width: 0; background: currentColor; opacity: .55; transition: width .5s; }
+body:not(.nav) .climb { display: none; }
+.eb-climb { font: 600 16px var(--num); color: #7A7A7A; text-align: center; }
+.eb-climb:empty { display: none; }
 .speed b { font: 700 21px/1 var(--num); font-variant-numeric: tabular-nums; }
 .speed span { font-size: 10px; color: var(--muted); }
 
@@ -387,7 +410,7 @@ body.nav .pausepill { top: calc(var(--nt-h, 100px) + 8px); }
 .pausepill.pick { background: var(--me); }
 body.free #btnRejoin { display: none; }
 /* balade libre : pas de trace, donc ni profil ni chiffres de parcours */
-body.free #navProfile, body.free .np-grid .trk, body.free #npBack { display: none !important; }
+body.free #navProfile, body.free .np-grid .trk, body.free #npBack, body.free #npRev { display: none !important; }
 
 .actions .wide { grid-column: 1 / -1; }
 

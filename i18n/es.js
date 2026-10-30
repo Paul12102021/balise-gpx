@@ -693,6 +693,38 @@ const bits = [
   ['le point choisi', 'el punto elegido'],
   [' Réglages appliqués, l\'appli redémarre…', ' Ajustes aplicados, la app se reinicia…'],
 ];
+// ---- guiado: cruces, subidas, sentido contrario, avisos de progreso, casillas a elegir (oct. 2026)
+Object.assign(exact, {
+  'Continuez tout droit': 'Sigue recto', 'Gardez la gauche': 'Mantente a la izquierda', 'Gardez la droite': 'Mantente a la derecha', 'Série de lacets': 'Serie de curvas en zigzag',
+  'continue tout droit': 'sigue recto', 'garde la gauche': 'mantente a la izquierda', 'garde la droite': 'mantente a la derecha',
+  'Continue tout droit.': 'Sigue recto.', 'Garde la gauche.': 'Mantente a la izquierda.', 'Garde la droite.': 'Mantente a la derecha.',
+  'Montée': 'Subida', 'Prochaine montée': 'Próxima subida',
+  'Attention, tu parcours la trace à contresens.': 'Atención, vas en sentido contrario al track.',
+  'Tu parcours la trace à contresens': 'Vas en sentido contrario al track', 'Inverser la trace': 'Invertir el track',
+  'Trace inversée. Tu es maintenant dans le bon sens.': 'Track invertido. Ahora vas en el buen sentido.',
+  'Trace inversée : tu es dans le bon sens': 'Track invertido: vas en el buen sentido', '⇄ Inverser le sens': '⇄ Invertir sentido',
+  "Points d'étape vocaux": 'Avisos de progreso por voz', "Distance, montée restante et heure d'arrivée · points d'eau et refuges devant toi": 'Distancia, subida restante y hora de llegada · fuentes y refugios por delante',
+  'Automatiques': 'Automáticos', 'Toutes les 15 min': 'Cada 15 min', 'Toutes les 30 min': 'Cada 30 min', 'Aucun': 'Ninguno',
+  'Afficher dans cette case': 'Mostrar en esta casilla', "Heure d'arrivée": 'Hora de llegada', 'Temps restant': 'Tiempo restante', 'Distance restante': 'Distancia restante',
+  'Distance parcourue': 'Distancia recorrida', 'D+ fait': 'D+ hecho', 'Progression': 'Progreso', 'Temps de sortie': 'Tiempo de actividad', 'Vitesse moyenne': 'Velocidad media',
+  'Heure': 'Hora', 'parcouru': 'recorrido', 'progression': 'progreso', 'temps (sortie)': 'tiempo (actividad)', 'vitesse moy.': 'vel. media', 'altitude': 'altitud', 'heure': 'hora', 'montée': 'subida',
+  'Mi-montée.': 'Mitad de la subida.',
+});
+patterns.unshift(
+  [/^(\d+) épingles sur (.+)$/, '$1 horquillas en $2'],
+  [/^(Prochaine montée|Montée) (\d+\/\d+)$/, (m, t) => t(m[1]) + ' ' + m[2]],
+  [/^Sommet dans (.+?) · encore (.+?) à (\d+ %)$/, 'Cima en $1 · faltan $2 al $3'],
+  [/^Dans (.+?) : (.+?) à (\d+ %) · D\+ (.+)$/, 'En $1: $2 al $3 · D+ $4'],
+  [/^sommet (.+)$/, 'cima $1'], [/^montée (\d+ %)$/, 'subida $1'],
+  [/^Dans (.+?), une série de (\d+) lacets commence, sur (.+?)\.$/, 'En $1, empieza una serie de $2 curvas en zigzag, durante $3.'],
+  [/^Montée dans (.+?) : (.+?) à (\d+) % de moyenne(?:, jusqu'à (\d+) %)?, (\d+) mètres de dénivelé\.$/, (m, t) => `Subida en ${t(m[1])}: ${t(m[2])} al ${m[3]} % de media${m[4] ? ', hasta el ' + m[4] + ' %' : ''}, ${m[5]} metros de desnivel.`],
+  [/^Mi-montée\. Encore (.+?) et (\d+) mètres de dénivelé\.$/, (m, t) => `Mitad de la subida. Faltan ${t(m[1])} y ${m[2]} metros de desnivel.`],
+  [/^Sommet dans (.+?)\.$/, (m, t) => `Cima en ${t(m[1])}.`],
+  [/^(.+?) parcourus\.(?: Encore (.+?)(?: et (\d+) mètres de montée)?\. Arrivée vers (.+?)\.)?$/, (m, t) => `${t(m[1])} recorridos.` + (m[2] ? ` Faltan ${t(m[2])}${m[3] ? ' y ' + m[3] + ' metros de subida' : ''}. Llegada hacia las ${m[4]}.` : '')],
+  [/^(.+?) parcourus en (.+?)\.(?: Encore (.+?)(?: et (\d+) mètres de montée)?\. Arrivée vers (.+?)\.)?$/, (m, t) => `${t(m[1])} recorridos en ${m[2]}.` + (m[3] ? ` Faltan ${t(m[3])}${m[4] ? ' y ' + m[4] + ' metros de subida' : ''}. Llegada hacia las ${m[5]}.` : '')],
+  [/^(Point d'eau potable|Source|Refuge gardé|Cabane|Abri|Toilettes) dans (.+?)(?:, (.+?))?\.$/, (m, t) => ({ "Point d'eau potable": 'Agua potable', Source: 'Fuente', 'Refuge gardé': 'Refugio guardado', Cabane: 'Cabaña', Abri: 'Abrigo', Toilettes: 'Aseos' })[m[1]] + ' en ' + t(m[2]) + (m[3] ? ', ' + m[3] : '') + '.'],
+  [/^(.+) parcourus · (.+)$/, (m, t) => t(m[1]) + ' recorridos · ' + m[2]]
+);
 window.I18N = window.I18N || {};
 window.I18N.es = { exact, patterns, bits: bits.sort((a, b) => b[0].length - a[0].length), decimal: ',' };
 })();

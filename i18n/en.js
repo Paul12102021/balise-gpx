@@ -692,6 +692,38 @@ const bits = [
   ['serveurs d\'itinéraires indisponibles', 'route servers unavailable'],
   ['le point choisi', 'the chosen point'],
 ];
+// ---- guidage : carrefours, montées, contresens, points d'étape, cases au choix (oct. 2026)
+Object.assign(exact, {
+  'Continuez tout droit': 'Continue straight on', 'Gardez la gauche': 'Keep left', 'Gardez la droite': 'Keep right', 'Série de lacets': 'Series of switchbacks',
+  'continue tout droit': 'continue straight on', 'garde la gauche': 'keep left', 'garde la droite': 'keep right',
+  'Continue tout droit.': 'Continue straight on.', 'Garde la gauche.': 'Keep left.', 'Garde la droite.': 'Keep right.',
+  'Montée': 'Climb', 'Prochaine montée': 'Next climb',
+  'Attention, tu parcours la trace à contresens.': 'Careful, you are going the wrong way along the track.',
+  'Tu parcours la trace à contresens': 'You are going the wrong way along the track', 'Inverser la trace': 'Reverse the track',
+  'Trace inversée. Tu es maintenant dans le bon sens.': 'Track reversed. You are now going the right way.',
+  'Trace inversée : tu es dans le bon sens': 'Track reversed: you are going the right way', '⇄ Inverser le sens': '⇄ Reverse direction',
+  "Points d'étape vocaux": 'Spoken progress updates', "Distance, montée restante et heure d'arrivée · points d'eau et refuges devant toi": 'Distance, climbing left and arrival time · water points and huts ahead',
+  'Automatiques': 'Automatic', 'Toutes les 15 min': 'Every 15 min', 'Toutes les 30 min': 'Every 30 min', 'Aucun': 'None',
+  'Afficher dans cette case': 'Show in this box', "Heure d'arrivée": 'Arrival time', 'Temps restant': 'Time left', 'Distance restante': 'Distance left',
+  'Distance parcourue': 'Distance done', 'D+ fait': 'Climbed', 'Progression': 'Progress', 'Temps de sortie': 'Activity time', 'Vitesse moyenne': 'Average speed',
+  'Heure': 'Time', 'parcouru': 'done', 'progression': 'progress', 'temps (sortie)': 'time (activity)', 'vitesse moy.': 'avg speed', 'altitude': 'altitude', 'heure': 'time', 'montée': 'climb',
+  'Mi-montée.': 'Halfway up.',
+});
+patterns.unshift(
+  [/^(\d+) épingles sur (.+)$/, '$1 hairpins over $2'],
+  [/^(Prochaine montée|Montée) (\d+\/\d+)$/, (m, t) => t(m[1]) + ' ' + m[2]],
+  [/^Sommet dans (.+?) · encore (.+?) à (\d+ %)$/, 'Summit in $1 · $2 more at $3'],
+  [/^Dans (.+?) : (.+?) à (\d+ %) · D\+ (.+)$/, 'In $1: $2 at $3 · +$4'],
+  [/^sommet (.+)$/, 'summit $1'], [/^montée (\d+ %)$/, 'climb $1'],
+  [/^Dans (.+?), une série de (\d+) lacets commence, sur (.+?)\.$/, 'In $1, a series of $2 switchbacks begins, over $3.'],
+  [/^Montée dans (.+?) : (.+?) à (\d+) % de moyenne(?:, jusqu'à (\d+) %)?, (\d+) mètres de dénivelé\.$/, (m, t) => `Climb in ${t(m[1])}: ${t(m[2])} at ${m[3]} % average${m[4] ? ', up to ' + m[4] + ' %' : ''}, ${m[5]} metres of climbing.`],
+  [/^Mi-montée\. Encore (.+?) et (\d+) mètres de dénivelé\.$/, (m, t) => `Halfway up. ${t(m[1])} and ${m[2]} metres of climbing to go.`],
+  [/^Sommet dans (.+?)\.$/, (m, t) => `Summit in ${t(m[1])}.`],
+  [/^(.+?) parcourus\.(?: Encore (.+?)(?: et (\d+) mètres de montée)?\. Arrivée vers (.+?)\.)?$/, (m, t) => `${t(m[1])} done.` + (m[2] ? ` ${t(m[2])}${m[3] ? ' and ' + m[3] + ' metres of climbing' : ''} to go. Arriving around ${m[4]}.` : '')],
+  [/^(.+?) parcourus en (.+?)\.(?: Encore (.+?)(?: et (\d+) mètres de montée)?\. Arrivée vers (.+?)\.)?$/, (m, t) => `${t(m[1])} done in ${m[2]}.` + (m[3] ? ` ${t(m[3])}${m[4] ? ' and ' + m[4] + ' metres of climbing' : ''} to go. Arriving around ${m[5]}.` : '')],
+  [/^(Point d'eau potable|Source|Refuge gardé|Cabane|Abri|Toilettes) dans (.+?)(?:, (.+?))?\.$/, (m, t) => ({ "Point d'eau potable": 'Drinking water', Source: 'Spring', 'Refuge gardé': 'Staffed hut', Cabane: 'Cabin', Abri: 'Shelter', Toilettes: 'Toilets' })[m[1]] + ' in ' + t(m[2]) + (m[3] ? ', ' + m[3] : '') + '.'],
+  [/^(.+) parcourus · (.+)$/, (m, t) => t(m[1]) + ' done · ' + m[2]]
+);
 window.I18N = window.I18N || {};
 window.I18N.en = { exact, patterns, bits: bits.sort((a, b) => b[0].length - a[0].length) };
 })();

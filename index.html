@@ -9,13 +9,13 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<meta name="balise-version" content="265">
+<meta name="balise-version" content="266">
 <title>Pisteo</title>
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" href="icon.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
 <link rel="stylesheet" href="vendor/maplibre-gl.css">
-<link rel="stylesheet" href="app.css?v=265">
+<link rel="stylesheet" href="app.css?v=266">
 </head>
 <body>
 <div id="map" aria-label="Carte"></div>
@@ -73,6 +73,7 @@
   <button id="pauseResume" class="btn small go">Reprendre</button>
 </div>
 
+<div id="climb" class="climb nav-only" hidden aria-live="polite"><div class="cl-head"><svg viewBox="0 0 24 24"><path d="m3 19 6-9 4 5 3-4 5 8Z"/></svg><b id="clTitle">Montée</b></div><div id="clTxt" class="cl-txt"></div><div class="cl-bar"><div id="clBar"></div></div></div>
 <div id="speed" class="speed nav-only"><b id="spVal">–</b><span>km/h</span></div>
 
 <!-- Navigation : barre du bas -->
@@ -113,6 +114,7 @@
       <button id="npMode" class="chip"></button>
       <button id="npBanner" class="chip"></button>
       <button id="npEco" class="chip"></button>
+      <button id="npRev" class="chip">⇄ Inverser le sens</button>
     </div>
     <div id="npBack" class="np-back" hidden>
       <svg viewBox="0 0 24 24"><path d="M9 14 4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11"/></svg>
@@ -132,6 +134,8 @@
     </div>
   </div>
 </div>
+
+<div id="nbPick" class="nb-pick nav-only" hidden role="menu"></div>
 
 <!-- Aperçu : panneau du bas -->
 <section class="sheet ov-only" id="sheet">
@@ -241,6 +245,10 @@
       <div class="row" id="rowVStyle">
         <label for="optVStyle">Voix<br><small id="voiceHelpRow">Robotique ? <button id="voiceHelp" class="linkbtn">une voix plus naturelle</button></small><small id="voiceCredit">Voix UPMC, licence <a href="voice/LICENSE.txt" target="_blank" rel="noopener">CC BY-SA</a></small></label>
         <select id="optVStyle"><option value="system">Voix du téléphone</option><option value="pisteo">Jessica (enregistrée)</option></select>
+      </div>
+      <div class="row" id="rowRecap">
+        <label for="optRecap">Points d'étape vocaux<br><small>Distance, montée restante et heure d'arrivée · points d'eau et refuges devant toi</small></label>
+        <select id="optRecap"><option value="auto">Automatiques</option><option value="15">Toutes les 15 min</option><option value="30">Toutes les 30 min</option><option value="off">Aucun</option></select>
       </div>
       <div class="row">
         <label for="optVib">Vibrations<br><small>Virages, sortie de trace</small></label>
@@ -868,14 +876,15 @@
 <div id="ecoBlack" hidden>
   <div class="eb-main"><div id="ebIcon" class="eb-icon"></div><div><div id="ebDist" class="eb-dist"></div><div id="ebTxt" class="eb-txt"></div></div></div>
   <div id="ebRem" class="eb-rem"></div>
+  <div id="ebClimb" class="eb-climb"></div>
   <div class="eb-hint">Écran noir pour économiser la batterie · touche pour voir la carte</div>
 </div>
 <div id="toast" class="toast" hidden></div>
 
 <script src="vendor/maplibre-gl.js"></script>
 <script src="vendor/qrcode.js"></script>
-<script src="i18n/en.js?v=265"></script>
-<script src="i18n/es.js?v=265"></script>
-<script src="app.js?v=265"></script>
+<script src="i18n/en.js?v=266"></script>
+<script src="i18n/es.js?v=266"></script>
+<script src="app.js?v=266"></script>
 </body>
 </html>
