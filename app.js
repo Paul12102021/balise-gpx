@@ -5,7 +5,7 @@
 
 // La page et le code doivent être de la même version. Sinon (page gardée en cache
 // par le téléphone ou par GitHub), on recharge une page fraîche, au plus 3 fois.
-const APP_VERSION = 272;
+const APP_VERSION = 273;
 // lien « pisteo.app/?moi=1 » (ou ?moi=0) : cet appareil est compté à part dans les statistiques (développeur).
 // Lu avant tout rechargement de version, qui ne garde pas les paramètres de l'adresse.
 try {
@@ -8368,12 +8368,18 @@ function prepDepUI(times) {
     const d = new Date(+b.dataset.d), o = new Date(raw || prepDepDefault()); d.setHours(o.getHours(), o.getMinutes(), 0, 0);
     prepDepSet(d.getTime());
   });
-  const on = $('prepDepDays').querySelector('.on'); if (on) on.scrollIntoView({ block: 'nearest', inline: 'center' });
+  pillCenter($('prepDepDays'));
 }
 document.querySelectorAll('#prepDepTimeRow button').forEach(b => b.onclick = () => {
   const base = prepDepRaw() || q15(Date.now());
   prepDepSet(Math.round((base + +b.dataset.t * 60000) / 9e5) * 9e5);
 });
+// pastille choisie centrée dans sa bande, sans faire défiler le panneau (scrollIntoView l'emmenait jusqu'au retour prévu)
+function pillCenter(strip) {
+  const on = strip.querySelector('.on'); if (!on || !strip.clientWidth) return;
+  const a = strip.getBoundingClientRect(), b = on.getBoundingClientRect();
+  strip.scrollLeft += (b.left + b.width / 2) - (a.left + a.width / 2);
+}
 let prepEdit = -1; // jour dont les réglages de fin d'étape sont ouverts
 async function prepRender() {
   if (!track) return;
@@ -8803,7 +8809,7 @@ function prepRetUI() {
     const d = new Date(+b.dataset.d), o = new Date(prepRetT); d.setHours(o.getHours(), o.getMinutes(), 0, 0);
     prepRetT = d.getTime(); store.set(prepRetOwnKey(), String(prepRetT)); $('prepTellInfo').textContent = ''; prepSafety();
   });
-  const on = $('prepRetDays').querySelector('.on'); if (on) on.scrollIntoView({ block: 'nearest', inline: 'center' });
+  pillCenter($('prepRetDays'));
 }
 document.querySelectorAll('#prepRetTimeRow button').forEach(b => b.onclick = () => {
   prepRetT = Math.max(Date.now(), prepRetT + +b.dataset.t * 60000); prepRetT = Math.round(prepRetT / 9e5) * 9e5;
