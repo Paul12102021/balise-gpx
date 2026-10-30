@@ -911,3 +911,31 @@ body.wx-on:not(.side) .trackrow { justify-content: space-between; } /* les bouto
 :root[data-theme="light"] .stv-compat .cw-light { display: block; }
 .stv-view { grid-column: 1 / -1; text-align: center; font-weight: 700; color: #FC5200; text-decoration: underline; padding: 4px; }
 .stv-view[hidden] { display: none; }
+
+/* ---------- Préparer la sortie : étapes, eau ---------- */
+.prep-btn { display: flex; align-items: center; gap: 8px; width: 100%; min-height: 40px; margin: 2px 0 6px; padding: 6px 12px; border: 1px solid var(--line);
+  border-radius: 12px; background: var(--field); color: var(--ink); font: inherit; font-size: 14px; text-align: left; cursor: pointer; }
+.prep-btn[hidden] { display: none; }
+.prep-btn svg { flex: none; width: 20px; height: 20px; fill: none; stroke: var(--go-ink); stroke-width: 1.9; stroke-linecap: round; stroke-linejoin: round; }
+.prep-btn b { font-weight: 600; }
+.prep-btn span { margin-left: auto; color: var(--muted); font-size: 12.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.prep-btn:active { background: var(--line); }
+.prep-sec h4 { margin: 0 0 6px; font-size: 12px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); }
+.prep-sec[hidden] { display: none; }
+.prep-list { list-style: none; margin: 8px 0 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.prep-list li { padding: 9px 12px; border-radius: 10px; background: var(--field); font-size: 14px; line-height: 1.35; font-variant-numeric: tabular-nums; }
+.prep-list li > b:first-child { color: var(--go-ink); }
+.prep-list .pl-km { color: var(--muted); font-size: 12.5px; }
+.prep-list .pl-night { display: block; margin-top: 3px; font-size: 13px; }
+.prep-list .pl-night.none { color: var(--muted); }
+.prep-water { display: flex; flex-direction: column; gap: 6px; font-size: 14px; line-height: 1.35; }
+.prep-water p { margin: 0; }
+.prep-water .gap { padding: 9px 12px; border-radius: 10px; background: #f9eeda; color: #5b3d00; font-variant-numeric: tabular-nums; }
+.prep-water .ok { padding: 9px 12px; border-radius: 10px; background: var(--field); }
+.prep-water small { color: inherit; opacity: .8; }
+.prep-foot { margin: 0; font-size: 12.5px; }
+.stage-mk { min-width: 26px; height: 22px; padding: 0 6px; border-radius: 11px; background: var(--go, #3A7556); color: #fff; border: 2px solid #fff;
+  font: 700 12px/18px system-ui, sans-serif; text-align: center; box-shadow: 0 1px 4px rgba(0,0,0,.35); }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .prep-water .gap { background: #4a3a17; color: #ffe2a8; } }
+:root[data-theme="dark"] .prep-water .gap { background: #4a3a17; color: #ffe2a8; }
+#prepSum b, .prep-list li b { white-space: nowrap; }

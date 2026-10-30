@@ -8172,6 +8172,161 @@ if (map.loaded()) poiUpdate();
 $('optPoi').checked = poiOn();
 $('optPoi').onchange = e => { store.set('poi', e.target.checked ? '1' : '0'); poiUpdate(); };
 
+// ---------- Préparer la sortie : étapes (plusieurs jours) et eau le long de la trace ----------
+// points utiles près de la trace, gardés sur la trace : [{ along, k, nm, d }] ; null = pas de données pour cette zone
+const PREP_NIGHT = { r: 3, c: 2, a: 1 }; // fin d'étape : refuge gardé > cabane > abri
+async function prepPois(t) {
+  if (t.prepPois !== undefined) return t.prepPois;
+  const lats = t.pts.map(p => p.lat), lons = t.pts.map(p => p.lon);
+  const bb = [Math.min(...lons), Math.min(...lats), Math.max(...lons), Math.max(...lats)];
+  await poiPrefetch(bb);
+  if (!poiMan || !poiMan.tiles) return null; // pas de réseau : on réessaiera
+  const g = poiMan.grid || 0.25, have = new Set(poiMan.tiles);
+  // zone couverte : au moins une tuile de points utiles le long de la trace
+  let covered = false;
+  for (let i = 0; i < t.pts.length && !covered; i += Math.max(1, Math.floor(t.pts.length / 200)))
+    covered = have.has(`${Math.floor((t.pts[i].lon + 180) / g)}_${Math.floor((t.pts[i].lat + 90) / g)}`);
+  if (!covered) return (t.prepPois = null);
+  // tri grossier : cases de ~550 m autour de la trace, puis distance exacte au tracé
+  const G = .005, near = new Set(), out = [], cell = (a, o) => Math.floor(a / G) + ':' + Math.floor(o / G);
+  for (let i = 0; i < t.pts.length; i++) {
+    const p = t.pts[i];
+    if (i && hav(p, t.pts[i - 1]) < 150 && i % 4) continue;
+    for (let y = -1; y <= 1; y++) for (let x = -1; x <= 1; x++) near.add(cell(p.lat + y * G, p.lon + x * G));
+  }
+  for (const T of poiTiles.values()) for (const [lat, lon, k, nm] of T) {
+    const tol = k === 'w' || k === 's' ? 250 : PREP_NIGHT[k] ? 400 : 0;
+    if (!tol || !near.has(cell(lat, lon))) continue;
+    const pr = project(t, { lat, lon }, true);
+    if (pr && pr.dist <= tol) out.push({ along: pr.along, k, nm: nm || '', d: pr.dist });
+  }
+  return (t.prepPois = out.sort((a, b) => a.along - b.along));
+}
+const prepBike = () => profile === 'trekking';
+const prepKey = () => 'prepDays|' + trKey();
+// effort (secondes) du départ jusqu'à d, et distance où l'effort atteint s
+const effTo = d => baseSecs(0, d);
+function distForEff(s) {
+  let lo = 0, hi = track.total;
+  for (let k = 0; k < 40; k++) { const m = (lo + hi) / 2; if (effTo(m) < s) lo = m; else hi = m; }
+  return (lo + hi) / 2;
+}
+function prepAutoDays() {
+  const E = effTo(track.total), day = (prepBike() ? 5 : 6) * 3600;
+  return Math.max(1, Math.min(20, Math.round(E / day) || 1));
+}
+function prepDays() { const v = +store.get(prepKey()); return v >= 1 && v <= 30 ? v : prepAutoDays(); }
+// découpe en n étapes à effort égal ; chaque fin d'étape se cale sur un lieu pour la nuit à ± 15 % de l'effort d'une journée
+function prepStages(n, pois) {
+  const E = effTo(track.total), day = E / n, nights = (pois || []).filter(p => PREP_NIGHT[p.k]);
+  const ends = []; let prev = 0;
+  for (let j = 1; j < n; j++) {
+    const want = day * j, d0 = distForEff(want);
+    let best = null, bestScore = Infinity;
+    for (const p of nights) {
+      if (p.along <= prev + 500 || p.along >= track.total - 500) continue;
+      const off = Math.abs(effTo(p.along) - want) / day; if (off > .15) continue;
+      const score = off - PREP_NIGHT[p.k] * .03 + p.d / 20000;
+      if (score < bestScore) { bestScore = score; best = p; }
+    }
+    const at = best ? best.along : Math.max(d0, prev + 100);
+    ends.push({ along: at, night: best }); prev = at;
+  }
+  ends.push({ along: track.total, night: null, last: true });
+  let from = 0;
+  return ends.map((e, i) => {
+    const a = infoAt(from), b = infoAt(e.along);
+    const st = { n: i + 1, from, to: e.along, dist: e.along - from, up: a.upLeft - b.upLeft, down: a.downLeft - b.downLeft, secs: baseSecs(from, e.along), night: e.night, last: !!e.last };
+    from = e.along; return st;
+  });
+}
+// trous d'eau : portions sans point d'eau potable connu (au-delà de 10 km à pied, 30 km à vélo)
+function prepWaterGaps(pois) {
+  const lim = prepBike() ? 30000 : 10000, w = pois.filter(p => p.k === 'w').map(p => p.along);
+  const marks = [0, ...w, track.total], gaps = [];
+  for (let i = 1; i < marks.length; i++) {
+    const a = marks[i - 1], b = marks[i]; if (b - a < lim) continue;
+    gaps.push({ from: a, to: b, start: i === 1, end: i === marks.length - 1, src: pois.filter(p => p.k === 's' && p.along > a && p.along < b) });
+  }
+  return { gaps, n: w.length, lim };
+}
+// borne kilométrique, sans unité : « 8 → 30 km »
+const kmN = m => { const v = IMP ? m / 1609.344 : m / 1000; return v < 10 && Math.abs(v - Math.round(v)) >= .05 ? v.toFixed(1).replace('.', ',') : String(Math.round(v)); };
+const kmU = () => IMP ? ' mi' : ' km';
+const POI_NAME = { r: 'Refuge gardé', c: 'Cabane non gardée', a: 'Abri' };
+let prepMks = [], prepSeq = 0;
+function prepHintSet(n, dry) {
+  $('prepHint').innerHTML = [n > 1 ? `${n} <span>jours</span>` : '', dry ? '⚠️ <span>eau</span>' : ''].filter(Boolean).join(' · ');
+}
+function prepMarkers(stages) {
+  prepMks.forEach(m => m.remove()); prepMks = [];
+  if (!stages || stages.length < 2 || nav) return;
+  for (const s of stages.slice(0, -1)) {
+    const p = pointAt(track, s.to), e = document.createElement('div');
+    e.className = 'stage-mk'; e.textContent = (LANG === 'fr' ? 'J' : LANG === 'es' ? 'D' : 'D') + s.n;
+    e.title = tr('Fin du jour') + ' ' + s.n;
+    prepMks.push(new maplibregl.Marker({ element: e }).setLngLat([p.lon, p.lat]).addTo(map));
+  }
+}
+async function prepRender() {
+  if (!track) return;
+  const mine = track, seq = ++prepSeq, n = prepDays(), sel = $('prepDays');
+  const max = Math.max(10, prepAutoDays() + 4, n);
+  sel.innerHTML = Array.from({ length: max }, (_, i) => `<option value="${i + 1}">${i + 1}</option>`).join('');
+  sel.value = String(n);
+  const bike = prepBike(), E = effTo(track.total);
+  $('prepSum').innerHTML = `<b>${fmtDist(track.total)}</b>${track.hasEle ? ` · <span>D+</span> <b>${fmtM(track.totalUp)}</b> · <span>D−</span> <b>${fmtM(track.totalDown)}</b>` : ''} · <span>${tr(bike ? 'à vélo' : 'à pied')}</span> <b>${fmtDur(E)}</b>`;
+  document.querySelector('.prep-foot').textContent = tr(bike ? 'Temps à vélo estimé selon ton allure, sans les pauses.' : 'Temps de marche estimé selon ton allure, sans les pauses.');
+  $('prepWater').innerHTML = `<p class="note">${escH(tr('Recherche des points d\'eau…'))}</p>`;
+  const draw = pois => {
+    const stages = prepStages(n, pois);
+    $('prepStages').innerHTML = n < 2 ? '' : stages.map(s => {
+      const night = s.last ? `<span class="pl-night">🏁 <span>${escH(tr('Arrivée'))}</span></span>`
+        : s.night ? `<span class="pl-night">${POI[s.night.k][0]} <span>${escH(tr(POI_NAME[s.night.k]))}</span>${s.night.nm ? ' · ' + escH(s.night.nm) : ''}${s.night.d > 80 ? ` <span class="pl-km">(${fmtDist(Math.round(s.night.d / 10) * 10)} <span>${escH(tr('de la trace'))}</span>)</span>` : ''}</span>`
+        : `<span class="pl-night none">🌙 <span>${escH(tr(pois ? 'Pas de refuge ni d\'abri repéré à cet endroit' : 'Lieux pour la nuit inconnus ici'))}</span></span>`;
+      return `<li><b><span>${escH(tr('Jour'))}</span> ${s.n}</b> · <b>${fmtDist(s.dist)}</b>${track.hasEle ? ` · <span>D+</span> ${fmtM(s.up)} · <span>D−</span> ${fmtM(s.down)}` : ''} · ${fmtDur(s.secs)}<br><span class="pl-km">${kmN(s.from)} → ${kmN(s.to)}${kmU()}</span>${night}</li>`;
+    }).join('');
+    prepMarkers(stages);
+    prepHintSet(n, false);
+    return stages;
+  };
+  draw(mine.prepPois || null);
+  let pois = null; try { pois = await prepPois(mine); } catch {}
+  if (track !== mine || seq !== prepSeq) return;
+  draw(pois);
+  if (!pois) {
+    $('prepWater').innerHTML = `<p class="note">${escH(tr(navigator.onLine === false ? 'Hors connexion : points d\'eau indisponibles pour le moment.' : 'Points d\'eau connus en France et dans les pays voisins seulement : pas de données ici.'))}</p>`;
+    return;
+  }
+  const W = prepWaterGaps(pois);
+  const gapHtml = W.gaps.map(gp => {
+    const where = gp.start && gp.end ? `<span>${escH(tr('Sur tout le parcours'))}</span>`
+      : gp.start ? `<span>${escH(tr('Départ'))}</span> → ${kmN(gp.to)}${kmU()}`
+      : gp.end ? `${kmN(gp.from)}${kmU()} → <span>${escH(tr('arrivée'))}</span>`
+      : `${kmN(gp.from)} → ${kmN(gp.to)}${kmU()}`;
+    const src = gp.src.length ? `<br><small>💧 ${gp.src.length} <span>${escH(tr(gp.src.length > 1 ? 'sources sur ce tronçon (eau non garantie)' : 'source sur ce tronçon (eau non garantie)'))}</span></small>` : '';
+    return `<p class="gap">⚠️ ${where} : <b>${fmtDist(gp.to - gp.from)}</b> <span>${escH(tr('sans point d\'eau potable connu'))}</span>${src}</p>`;
+  }).join('');
+  $('prepWater').innerHTML = (gapHtml || `<p class="ok">✓ <span>${escH(tr(W.n ? 'Un point d\'eau potable au moins tous les' : 'Parcours court : pas de long tronçon sans eau'))}</span>${W.n ? ' ' + fmtDist(W.lim) : ''}</p>`)
+    + `<p class="note">${W.n} <span>${escH(tr(W.n > 1 ? 'points d\'eau potable à moins de 250 m de la trace' : 'point d\'eau potable à moins de 250 m de la trace'))}</span>. <span>${escH(tr('Données OpenStreetMap : vérifie sur place, et emporte de quoi tenir.'))}</span></p>`;
+  if (W.gaps.length) prepHintSet(n, true);
+}
+function prepUpdate() {
+  const show = !!track && !nav && track.total > 2000;
+  $('btnPrep').hidden = !show;
+  if (!show) { prepMarkers(null); $('prepSheet').hidden = true; return; }
+  // bouton : nombre de jours retenu pour cette trace (le détail se calcule à l'ouverture)
+  const n = store.get(prepKey()) ? prepDays() : 1;
+  prepHintSet(n, false);
+  if (n > 1 && track.prepFor !== track.id) { track.prepFor = track.id; prepRender(); }
+  else if (n < 2) prepMarkers(null);
+}
+$('btnPrep').onclick = () => { stat('prep_ouvre'); $('prepSheet').hidden = false; prepRender(); };
+$('prepClose').onclick = () => { $('prepSheet').hidden = true; };
+$('prepSheet').onclick = e => { if (e.target === $('prepSheet')) $('prepSheet').hidden = true; };
+$('prepDays').onchange = e => { store.set(prepKey(), e.target.value); stat('prep_jours'); prepRender(); };
+trChipsUpdate = (fn => function () { const r = fn.apply(this, arguments); try { prepUpdate(); } catch {} return r; })(trChipsUpdate);
+
 // ---------- sauvegarde sur Google Drive (dossier caché de l'appli, champ drive.appdata) ----------
 // appli Android 2.3+ : jeton demandé par la coquille (Google refuse les connexions dans une page intégrée) ;
 // navigateur : fenêtre Google (Google Identity Services). Rien ne passe par un serveur Pisteo.

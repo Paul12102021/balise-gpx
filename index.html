@@ -173,6 +173,10 @@
   <div class="prof-wrap">
     <canvas id="profile" aria-label="Profil altimétrique"></canvas>
   </div>
+  <button id="btnPrep" class="prep-btn" hidden>
+    <svg viewBox="0 0 24 24"><path d="M8 7V5a4 4 0 0 1 8 0v2"/><rect x="5" y="7" width="14" height="14" rx="3"/><path d="M9 13h6M5 13h2M17 13h2"/></svg>
+    <b>Préparer la sortie</b><span id="prepHint"></span>
+  </button>
   <div id="actBar" class="actbar" hidden>
     <div class="ab-text"><b id="actLabel">Enregistrement</b><span id="actStats"></span></div>
     <button id="actPause" class="btn small"></button>
@@ -285,6 +289,30 @@
   </div>
 </section>
 
+<div id="prepSheet" class="lib" hidden>
+  <div class="lib-panel" role="dialog" aria-label="Préparer la sortie">
+    <div class="lib-head">
+      <b>Préparer la sortie</b>
+      <button id="prepClose" class="closebtn" aria-label="Fermer"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></svg>Fermer</button>
+    </div>
+    <p id="prepSum" class="lib-sum"></p>
+    <section class="prep-sec">
+      <h4>Étapes</h4>
+      <div class="set-group">
+        <div class="row">
+          <label for="prepDays">Nombre de jours<br><small>Coupé à effort égal ; fin d'étape près d'un refuge ou d'un abri quand il y en a un</small></label>
+          <select id="prepDays"></select>
+        </div>
+      </div>
+      <ol id="prepStages" class="prep-list"></ol>
+    </section>
+    <section class="prep-sec" id="prepWaterSec">
+      <h4>Eau</h4>
+      <div id="prepWater" class="prep-water"></div>
+    </section>
+    <p class="note prep-foot">Temps de marche estimé selon ton allure, sans les pauses.</p>
+  </div>
+</div>
 <div id="wxLegSheet" class="lib" hidden>
   <div class="lib-panel" role="dialog" aria-label="Légende météo">
     <div class="lib-head">
