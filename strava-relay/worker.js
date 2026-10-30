@@ -743,7 +743,15 @@ function etatVerdict(e) {
 function etatMessage(e, v) {
   return `Pisteo – état des services du ${etatDate(e.t)} : ${v.title}.\n` + v.items.map(i => `- ${i.name} : en panne depuis ${i.hours} h (code ${(e.res.find(r => r.id === i.id) || {}).code || 'aucune réponse'})`).join('\n') + '\nPeux-tu regarder ce qu\'il faut faire ?';
 }
-async function etatOne(e) { const r = await etatTry(e); if (r.ok) return r; await new Promise(ok => setTimeout(ok, 5000)); return etatTry(e); }
+// miroirs Overpass qui refusent ou ignorent les adresses de Cloudflare (403, pas de réponse) alors qu'ils servent les téléphones
+// (vérifié par Paul le 30 oct. : VK répond 504 au relais mais marche sur son téléphone) : « non vérifiable d'ici », les statistiques des téléphones tranchent
+const ETAT_BLIND = { overpassfr: 1, overpassvk: 1 };
+async function etatOne(e) {
+  let r = await etatTry(e);
+  if (!r.ok) { await new Promise(ok => setTimeout(ok, 5000)); r = await etatTry(e); }
+  if (!r.ok && ETAT_BLIND[r.id] && [0, 403, 429, 502, 504, 520, 521, 522, 523, 524].includes(r.code)) Object.assign(r, { ok: true, blind: true });
+  return r;
+}
 async function etatTry([id, name, u, test, crit, backup]) {
   const t0 = Date.now();
   try {
@@ -796,7 +804,7 @@ async function etatStore(env, res) {
   if (env.STATS) try {
     await stInit(env);
     const st = env.STATS.prepare('INSERT INTO etat_log (t, id, ok, ms) VALUES (?1, ?2, ?3, ?4)');
-    await env.STATS.batch([...res.map(r => st.bind(now, r.id, r.ok ? 1 : 0, r.ok && r.ms ? Math.round(r.ms) : null)),
+    await env.STATS.batch([...res.map(r => st.bind(now, r.id, r.ok ? 1 : 0, r.ok && r.ms && !r.blind ? Math.round(r.ms) : null)),
       env.STATS.prepare('DELETE FROM etat_log WHERE t < ?1').bind(new Date(Date.now() - 400 * 864e5).toISOString())]);
   } catch {}
   return out;
@@ -824,7 +832,7 @@ async function etatLoad(env, url) {
 const etatDate = d => new Date(d).toLocaleString('fr-FR', { timeZone: 'Europe/Paris', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
 function etatTable(e) {
   const order = r => r.ok ? 2 : r.crit ? 0 : 1;
-  const row = r => `<tr data-id="${r.id}" class="${r.ok ? 'ok' : r.crit ? 'crit' : 'ko'}"><td>${r.ok ? '✅' : r.crit ? '🔴' : '🟠'}</td><td>${r.name}</td><td>${r.ok ? r.ms + ' ms' : 'en panne' + (r.since ? ' depuis le ' + etatDate(r.since) : '') + (r.code ? ' (' + r.code + ')' : '')}</td><td>${r.backup || ''}</td></tr>`;
+  const row = r => r.blind ? `<tr data-id="${r.id}" class="ok"><td>⚪</td><td>${r.name}</td><td>non vérifiable depuis le relais (${r.code ? 'refus ' + r.code : 'pas de réponse'}) ; marche depuis les téléphones</td><td>${r.backup || ''}</td></tr>` : `<tr data-id="${r.id}" class="${r.ok ? 'ok' : r.crit ? 'crit' : 'ko'}"><td>${r.ok ? '✅' : r.crit ? '🔴' : '🟠'}</td><td>${r.name}</td><td>${r.ok ? r.ms + ' ms' : 'en panne' + (r.since ? ' depuis le ' + etatDate(r.since) : '') + (r.code ? ' (' + r.code + ')' : '')}</td><td>${r.backup || ''}</td></tr>`;
   return `<style>.etat{border-collapse:collapse;width:100%;max-width:860px;font-size:14px}.etat td,.etat th{padding:7px 8px;border-bottom:1px solid #8883;text-align:left}.etat tr.ko{background:#f59e0b22}.etat tr.crit{background:#ef444433}.etat th{font-size:12px;opacity:.7}</style>
 <table class="etat"><tr><th></th><th>Service</th><th>État</th><th>Secours dans l'appli</th></tr>${e.res.slice().sort((a, b) => order(a) - order(b)).map(row).join('')}</table>`;
 }
