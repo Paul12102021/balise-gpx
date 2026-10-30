@@ -5,7 +5,7 @@
 
 // La page et le code doivent être de la même version. Sinon (page gardée en cache
 // par le téléphone ou par GitHub), on recharge une page fraîche, au plus 3 fois.
-const APP_VERSION = 268;
+const APP_VERSION = 269;
 // lien « pisteo.app/?moi=1 » (ou ?moi=0) : cet appareil est compté à part dans les statistiques (développeur).
 // Lu avant tout rechargement de version, qui ne garde pas les paramètres de l'adresse.
 try {
@@ -8313,19 +8313,36 @@ async function prepRender() {
   if (W.gaps.length) prepHintSet(n, true);
 }
 // partir sans réseau : trace gardée, carte et chemins le long de la trace, points utiles
+// les traces préparées sont rangées dans un dossier à part de « Mes traces » : hors des 30 dernières traces ouvertes, qui s'effacent
+const PREP_FOLDER = () => tr('Sorties préparées');
+async function prepKeep() {
+  if (!track) return false;
+  const id = trKey(), mine = track;
+  const saved = store.get('gpx'), text = saved && saved.includes('<trkpt') ? saved : loopGPX(mine.pts, mine.name);
+  const old = await idb('readonly', st => st.get(id)).catch(() => null);
+  if (!old) await saveRecent(mine, text);
+  const f = (old && old.folder) || PREP_FOLDER();
+  if (!old || !old.folder) {
+    await libPatch([id], it => { it.folder = f; delete it.pos; });
+    const fs = libFoldersStored(); if (!fs.includes(f)) { fs.push(f); libSaveFolders(fs); }
+  }
+  refreshSaveBtn();
+  return f;
+}
 async function prepOffline() {
   const mine = track; if (!mine) return;
   const id = trKey(), lats = mine.pts.map(p => p.lat), lons = mine.pts.map(p => p.lon);
   const bb = [Math.min(...lons), Math.min(...lats), Math.max(...lons), Math.max(...lats)];
   const [recent, packs] = await Promise.all([listRecent().catch(() => []), listPacks()]);
   if (track !== mine) return;
-  const saved = recent.some(it => it.id === id);
+  const it = recent.find(x => x.id === id), saved = !!(it && it.folder);
   const own = packs.find(p => p.id === 'trace:' + id);
   const covers = p => p.bbox && p.bbox[0] <= bb[0] && p.bbox[1] <= bb[1] && p.bbox[2] >= bb[2] && p.bbox[3] >= bb[3];
   const pack = own && own.complete ? own : packs.find(p => p.complete && covers(p)) || own;
   const mapOk = !!(pack && pack.complete), graphOk = !!(pack && pack.graph && !pack.graph.partial);
   const poiOk = Array.isArray(mine.prepPois);
-  const row = (ok, title, sub) => `<li><i class="${ok === 'info' ? 'info' : ok ? 'ok' : 'no'}">${ok === 'info' ? 'i' : ok ? '✓' : ''}</i><span><span>${escH(tr(title))}</span>${sub ? `<small>${sub}</small>` : ''}</span></li>`;
+  // chaque ligne se touche : elle fait ce qui manque (ou montre le détail)
+  const row = (ok, title, sub, act) => `<li><button class="prep-row" data-act="${act}"><i class="${ok === 'info' ? 'info' : ok ? 'ok' : 'no'}">${ok === 'info' ? 'i' : ok ? '✓' : ''}</i><span><span>${escH(tr(title))}</span>${sub ? `<small>${sub}</small>` : ''}</span><em>${ok === true ? '' : escH(tr(ok === 'info' ? 'Voir' : 'Faire'))}</em></button></li>`;
   const when = pack ? `${fmtMo(pack.bytes / 1024)} · ${fmtDate(pack.date)}` : '';
   // batterie : heures de navigation possibles (10 % gardés en réserve) face au jour le plus long, pauses comprises
   let battRow = '';
@@ -8336,32 +8353,57 @@ async function prepOffline() {
     const rateTxt = `≈ ${String(rate).replace('.', ',')} %/h ${escH(tr(learned ? 'sur ce téléphone' : 'estimation par défaut, affinée après tes sorties'))}`;
     if (b && !b.charging) {
       const h = Math.max(0, (b.level * 100 - 10) / rate), ok = h >= need;
-      battRow = row(ok, 'Batterie', `${Math.round(b.level * 100)} % · ${escH(tr('environ'))} ${fmtDur(h * 3600)} ${escH(tr('de navigation'))} · ${escH(tr(st.length > 1 ? 'jour le plus long' : 'il en faut'))} ${fmtDur(need * 3600)}${ok ? '' : ' · ' + escH(tr('recharge ou prends une batterie externe'))}${st.length > 1 ? `<br>${escH(tr('Sans recharge sur'))} ${st.length} ${escH(tr('jours'))} : ${fmtDur(needAll * 3600)} (${Math.round(needAll * rate)} %)` : ''}<br>${rateTxt}`);
+      battRow = row(ok, 'Batterie', `${Math.round(b.level * 100)} % · ${escH(tr('environ'))} ${fmtDur(h * 3600)} ${escH(tr('de navigation'))} · ${escH(tr(st.length > 1 ? 'jour le plus long' : 'il en faut'))} ${fmtDur(need * 3600)}${ok ? '' : ' · ' + escH(tr('recharge ou prends une batterie externe'))}${st.length > 1 ? `<br>${escH(tr('Sans recharge sur'))} ${st.length} ${escH(tr('jours'))} : ${fmtDur(needAll * 3600)} (${Math.round(needAll * rate)} %)` : ''}<br>${rateTxt}`, 'batt');
     } else {
-      battRow = row('info', 'Batterie', `${escH(tr(b ? 'En charge.' : 'Niveau inconnu.'))} ${escH(tr(st.length > 1 ? 'Jour le plus long' : 'Il en faut'))} ${fmtDur(need * 3600)}, ${escH(tr('soit'))} ${Math.round(need * rate)} % ${escH(tr('de batterie'))}${st.length > 1 ? ` · ${st.length} ${escH(tr('jours'))} : ${Math.round(needAll * rate)} %` : ''}<br>${rateTxt}`);
+      battRow = row('info', 'Batterie', `${escH(tr(b ? 'En charge.' : 'Niveau inconnu.'))} ${escH(tr(st.length > 1 ? 'Jour le plus long' : 'Il en faut'))} ${fmtDur(need * 3600)}, ${escH(tr('soit'))} ${Math.round(need * rate)} % ${escH(tr('de batterie'))}${st.length > 1 ? ` · ${st.length} ${escH(tr('jours'))} : ${Math.round(needAll * rate)} %` : ''}<br>${rateTxt}`, 'batt');
     }
   } catch {}
   $('prepOff').innerHTML = [
-    row(saved, 'Trace gardée dans Mes traces', saved ? '' : escH(tr('Pour la rouvrir même si l\'appli redémarre'))),
-    row(mapOk, 'Carte le long de la trace', mapOk ? when : pack ? escH(tr('Téléchargement incomplet')) : escH(tr('Pas encore téléchargée'))),
-    row(graphOk, 'Chemins pour revenir sur la trace', graphOk ? `${pack.graph.km} km` : escH(tr('Itinéraire de retour calculé même sans réseau'))),
-    row(poiOk, 'Points d\'eau et refuges', poiOk ? `${mine.prepPois.length} <span>${escH(tr('près de la trace'))}</span>` : escH(tr('Indisponibles pour cette zone'))),
+    row(saved, 'Trace gardée dans Mes traces', saved ? `📁 ${escH(it.folder)}` : escH(tr('Rangée dans un dossier, pour ne pas être effacée')), 'keep'),
+    row(mapOk, 'Carte le long de la trace', mapOk ? when : pack ? escH(tr('Téléchargement incomplet')) : escH(tr('Pas encore téléchargée')), 'map'),
+    row(graphOk, 'Chemins pour revenir sur la trace', graphOk ? `${pack.graph.km} km` : escH(tr('Itinéraire de retour calculé même sans réseau')), 'map'),
+    row(poiOk, 'Points d\'eau et refuges', poiOk ? `${mine.prepPois.length} <span>${escH(tr('près de la trace'))}</span>` : escH(tr('Indisponibles pour cette zone')), 'poi'),
     battRow,
-    row('info', 'Météo', escH(tr('Regarde-la avant de partir : elle ne se met pas à jour sans réseau.'))),
+    row('info', 'Météo', escH(tr('Regarde-la avant de partir : elle ne se met pas à jour sans réseau.')), 'wx'),
   ].join('');
+  $('prepOff').querySelectorAll('.prep-row').forEach(bt => bt.onclick = () => prepAct(bt.dataset.act, { saved, mapOk, graphOk, poiOk, it }));
   const todo = !saved || !mapOk || !graphOk;
   $('prepOffGo').hidden = !todo;
   return { saved, mapOk, graphOk, poiOk };
+}
+async function prepMapDl() {
+  if (navigator.onLine === false) { toast('Pas de connexion : télécharge la carte avant de partir, en Wi-Fi si possible.', 5000); return; }
+  $('prepSheet').hidden = true;
+  await openMaps();
+  $('dlTrace').click();
+}
+async function prepAct(act, s) {
+  stat('prep_ligne_' + act);
+  if (act === 'keep') {
+    if (s.saved) { $('prepSheet').hidden = true; libFolder = s.it.folder; openLib(); return; }
+    const f = await prepKeep();
+    if (f) toast(tr('Rangée dans « ' + f + ' »'), 3000, { label: tr('Voir'), run: () => { $('prepSheet').hidden = true; libFolder = f; openLib(); } });
+    prepOffline();
+  } else if (act === 'map') {
+    if (s.mapOk && s.graphOk) { $('prepSheet').hidden = true; openMaps(); return; }
+    prepMapDl();
+  } else if (act === 'poi') {
+    if (track && !s.poiOk) { delete track.prepPois; prepRender(); }
+    else if (track) { $('prepSheet').hidden = true; if (!poiOn()) { store.set('poi', '1'); $('optPoi').checked = true; } poiUpdate(); toast('Points d\'eau et refuges : sur la carte, en zoomant le long de la trace.', 4000); }
+  } else if (act === 'batt') {
+    if (eco === 'max') toast('Économie de batterie déjà activée : écran noir entre les virages.', 4000);
+    else toast('Pour tenir plus longtemps : économie de batterie (écran noir entre les virages, la carte revient aux virages).', 7000, { label: tr('Activer'), run: () => setEco('max') });
+  } else if (act === 'wx') {
+    $('prepSheet').hidden = true;
+    if (!$('btnWx').hidden && !$('btnWx').classList.contains('on')) $('btnWx').click();
+  }
 }
 $('prepBook').onclick = () => prepRoadbook();
 $('prepOffGo').onclick = async () => {
   if (!track) return;
   stat('prep_horsligne');
-  if (!$('btnSaveTr').classList.contains('done')) { try { $('btnSaveTr').click(); } catch {} }
-  if (navigator.onLine === false) { toast('Pas de connexion : télécharge la carte avant de partir, en Wi-Fi si possible.', 5000); return; }
-  $('prepSheet').hidden = true;
-  await openMaps();
-  $('dlTrace').click();
+  await prepKeep();
+  prepMapDl();
 };
 // ---------- feuille de route : une page à garder ou imprimer (étapes, eau, refuges, secours) ----------
 const SOS_NUM = {

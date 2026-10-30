@@ -479,6 +479,12 @@ const exact = {
   'Merci ! Une note sur le Play Store aide beaucoup Pisteo à se faire connaître.': 'Thanks! A rating on the Play Store really helps Pisteo get known.',
   'Noter Pisteo': 'Rate Pisteo',
   // ---- préparer la sortie
+  "Sorties préparées": "Planned trips",
+  "Rangée dans un dossier, pour ne pas être effacée": "Filed in a folder, so it isn't deleted",
+  "Faire": "Do it",
+  "Économie de batterie déjà activée : écran noir entre les virages.": "Battery saver already on: black screen between turns.",
+  "Pour tenir plus longtemps : économie de batterie (écran noir entre les virages, la carte revient aux virages).": "To last longer: battery saver (black screen between turns, the map comes back at each turn).",
+  "Points d'eau et refuges : sur la carte, en zoomant le long de la trace.": "Water points and huts: on the map, zoom in along the track.",
   "Batterie": "Battery",
   "sur ce téléphone": "on this phone",
   "estimation par défaut, affinée après tes sorties": "default estimate, refined after your outings",

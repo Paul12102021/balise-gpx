@@ -481,6 +481,12 @@ const exact = {
   'Merci ! Une note sur le Play Store aide beaucoup Pisteo à se faire connaître.': '¡Gracias! Una valoración en Play Store ayuda mucho a que Pisteo se dé a conocer.',
   'Noter Pisteo': 'Valorar Pisteo',
   // ---- préparer la sortie
+  "Sorties préparées": "Salidas preparadas",
+  "Rangée dans un dossier, pour ne pas être effacée": "Guardado en una carpeta, para que no se borre",
+  "Faire": "Hacer",
+  "Économie de batterie déjà activée : écran noir entre les virages.": "Ahorro de batería ya activado: pantalla negra entre giros.",
+  "Pour tenir plus longtemps : économie de batterie (écran noir entre les virages, la carte revient aux virages).": "Para que dure más: ahorro de batería (pantalla negra entre giros, el mapa vuelve en cada giro).",
+  "Points d'eau et refuges : sur la carte, en zoomant le long de la trace.": "Puntos de agua y refugios: en el mapa, haciendo zoom a lo largo del track.",
   "Batterie": "Batería",
   "sur ce téléphone": "en este teléfono",
   "estimation par défaut, affinée après tes sorties": "estimación por defecto, afinada tras tus salidas",

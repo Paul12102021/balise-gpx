@@ -959,3 +959,9 @@ body.wx-on:not(.side) .trackrow { justify-content: space-between; } /* les bouto
 .sos-call { display: flex; justify-content: center; align-items: center; min-height: 52px; border-radius: 14px; background: #c62828; color: #fff; font-size: 18px; font-weight: 700; text-decoration: none; }
 .sos-nums { display: grid; grid-template-columns: auto 1fr; gap: 6px 12px; align-items: center; font-size: 14px; }
 .sos-nums a { font-size: 18px; font-weight: 700; color: #c62828; text-decoration: none; min-width: 48px; }
+.prep-check li { padding: 0; }
+.prep-row { display: flex; gap: 10px; align-items: flex-start; width: 100%; padding: 9px 0; border: 0; background: none; color: inherit; font: inherit; text-align: left; cursor: pointer; }
+.prep-row:active { opacity: .6; }
+.prep-row > span { flex: 1; min-width: 0; }
+.prep-row em { flex: none; align-self: center; font-style: normal; font-size: 13px; font-weight: 600; color: var(--go-ink); }
+.prep-row em:not(:empty)::after { content: ' ›'; }
