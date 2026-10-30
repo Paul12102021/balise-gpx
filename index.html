@@ -100,6 +100,7 @@
       <button id="npProfOnly" class="linkbtn">Profil seul</button>
       <button id="npReport" class="linkbtn">Signaler</button>
       <button id="npPhoto" class="linkbtn">Photo</button>
+      <button id="npSos" class="linkbtn sos-link">Secours</button>
       <input type="file" id="phCam" accept="image/*" capture="environment" hidden>
     </div>
     <div class="np-acts">
@@ -316,11 +317,38 @@
       <button id="prepOffGo" class="btn go wide" hidden>Tout préparer pour partir sans réseau</button>
     </section>
     <section class="prep-sec">
+      <h4>Sécurité</h4>
+      <div class="set-group">
+        <div class="row">
+          <label for="prepRet">Retour prévu<br><small>Envoyé à un proche avec le parcours</small></label>
+          <input type="datetime-local" id="prepRet" class="prep-dt">
+        </div>
+      </div>
+      <div class="prep-btns">
+        <button id="prepTell" class="btn go">Prévenir un proche</button>
+        <button id="prepSosBtn" class="btn">Numéros de secours</button>
+      </div>
+      <small id="prepTellInfo" class="note"></small>
+    </section>
+    <section class="prep-sec">
       <h4>Feuille de route</h4>
       <button id="prepBook" class="btn wide">Feuille de route à garder ou imprimer</button>
       <small class="note">Étapes, profil, eau, refuges, numéros de secours et QR code du parcours.</small>
     </section>
     <p class="note prep-foot">Temps de marche estimé selon ton allure, sans les pauses.</p>
+  </div>
+</div>
+<div id="sosSheet" class="lib" hidden>
+  <div class="lib-panel" role="dialog" aria-label="Secours">
+    <div class="lib-head">
+      <b>Secours</b>
+      <button id="sosClose" class="closebtn" aria-label="Fermer"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></svg>Fermer</button>
+    </div>
+    <div class="sos-pos"><small id="sosPosL">Ma position</small><b id="sosCoord">–</b><small id="sosMeta"></small></div>
+    <a id="sosCall" class="btn sos-call" href="tel:112">Appeler le 112</a>
+    <button id="sosShare" class="btn wide">Envoyer ma position</button>
+    <div id="sosNums" class="sos-nums"></div>
+    <p class="note">Les numéros d'urgence passent par le réseau de n'importe quel opérateur. Dis où tu es (position ci-dessus), ce qui s'est passé et combien vous êtes.</p>
   </div>
 </div>
 <div id="wxLegSheet" class="lib" hidden>

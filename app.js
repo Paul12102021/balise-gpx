@@ -8294,7 +8294,7 @@ async function prepRender() {
   let pois = null; try { pois = await prepPois(mine); } catch {}
   if (track !== mine || seq !== prepSeq) return;
   draw(pois);
-  prepOffline();
+  prepOffline(); prepSafety();
   if (!pois) {
     $('prepWater').innerHTML = `<p class="note">${escH(tr(navigator.onLine === false ? 'Hors connexion : points d\'eau indisponibles pour le moment.' : 'Points d\'eau connus en France et dans les pays voisins seulement : pas de données ici.'))}</p>`;
     return;
@@ -8411,6 +8411,100 @@ ${link ? `<h2>${t('Ouvrir le parcours')}</h2><div class="qrbox">${qr}<p class="n
   const w = window.open(URL.createObjectURL(new Blob([html], { type: 'text/html' })), '_blank');
   if (!w) { const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([html], { type: 'text/html' })); a.download = fname; a.click(); }
 }
+// ---------- sécurité : prévenir un proche (heure de retour), secours ----------
+const dtLocal = ms => { const d = new Date(ms), z = n => String(n).padStart(2, '0'); return `${d.getFullYear()}-${z(d.getMonth() + 1)}-${z(d.getDate())}T${z(d.getHours())}:${z(d.getMinutes())}`; };
+// retour prévu par défaut : départ (heure choisie pour la météo, sinon maintenant) + temps estimé + 30 % de pauses ;
+// sur plusieurs jours : le dernier jour à la même heure d'arrivée
+function prepRetDefault() {
+  const start = depAt() || Date.now(), n = prepDays();
+  const last = prepStages(n, Array.isArray(track.prepPois) ? track.prepPois : null).pop();
+  let t = start + effTo(track.total) * 1300;
+  if (n > 1) { const d = new Date(start + (n - 1) * 864e5); d.setHours(8, 30, 0, 0); t = d.getTime() + last.secs * 1300; }
+  return Math.ceil(t / 9e5) * 9e5;
+}
+function prepSafety() {
+  let ret = null; try { ret = JSON.parse(store.get('sosReturn') || 'null'); } catch {}
+  $('prepRet').value = dtLocal(ret && ret.key === trKey() && ret.t > Date.now() ? ret.t : prepRetDefault());
+  $('prepTellInfo').innerHTML = ret && ret.key === trKey() && ret.t > Date.now() - 864e5
+    ? `✓ <span>${escH(tr('Proche prévenu · retour prévu'))}</span> ${escH(new Date(ret.t).toLocaleString(LOC, { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }))}` : '';
+}
+async function shareMsg(text, title) {
+  if (AND && AND.shareText) { try { AND.shareText(text, title); return true; } catch {} }
+  if (navigator.share) { try { await navigator.share({ title, text }); return true; } catch (e) { if (e.name === 'AbortError') return false; } }
+  toast(copyText(text) ? 'Message copié : colle-le dans un SMS ou WhatsApp.' : text, 5000); return true;
+}
+$('prepTell').onclick = async () => {
+  if (!track) return;
+  const ret = new Date($('prepRet').value).getTime();
+  if (!ret || isNaN(ret)) { toast('Choisis ton heure de retour prévue.', 3500); return; }
+  stat('securite_proche');
+  const n = prepDays(), s0 = track.pts[0], late = ret + 2 * 3600e3, num = sosFor(s0.lon, s0.lat)[0][0];
+  const when = ms => new Date(ms).toLocaleString(LOC, { weekday: 'long', day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit' });
+  let link = ''; try { link = await routeLink(track.name, track.pts, { desc: track.desc, wpts: track.wpts }); } catch {}
+  const C = LANG === 'fr' ? ' : ' : ': ';
+  let msg = [
+    `${tr('Je pars sur ce parcours')}${C}${track.name || tr('Parcours')} (${fmtDist(track.total)}${track.hasEle ? ', ' + tr('D+') + ' ' + fmtM(track.totalUp) : ''}${n > 1 ? ', ' + n + ' ' + tr('jours') : ''}, ${tr(prepBike() ? 'à vélo' : 'à pied')}).`,
+    `${tr('Départ')}${C}${s0.lat.toFixed(5)}, ${s0.lon.toFixed(5)}.`,
+    `${tr('Retour prévu')}${C}${when(ret)}.`,
+    `${tr('Sans nouvelles de moi le')} ${when(late)}, ${tr('appelle le')} ${num} ${tr('et donne-leur ce parcours')}${C.trimEnd()}`,
+    link
+  ].filter(Boolean).join('\n');
+  if (DICT && DICT.decimal !== ',') msg = msg.replace(/(\d),(\d{1,2})(?!\d)/g, '$1.$2');
+  if (await shareMsg(msg, tr('Ma sortie'))) {
+    store.set('sosReturn', JSON.stringify({ key: trKey(), name: track.name || '', t: ret, said: 0 }));
+    prepSafety();
+  }
+};
+$('prepRet').onchange = () => { $('prepTellInfo').textContent = ''; };
+// secours : position actuelle (ou départ de la trace), numéros du pays, appel et envoi de la position
+function openSos() {
+  stat('secours_ouvre');
+  const fresh = me && !me.sim && me.t && Date.now() - me.t < 5 * 60000 ? me : null;
+  const p = fresh || me || (track && track.pts[0]) || null;
+  $('sosPosL').textContent = tr(fresh ? 'Ma position' : me ? 'Dernière position connue' : track ? 'Départ du parcours (pas de position GPS)' : 'Pas de position GPS');
+  $('sosCoord').textContent = p ? `${p.lat.toFixed(5)}, ${p.lon.toFixed(5)}` : '–';
+  const meta = [];
+  if (p && p.ele != null && !isNaN(p.ele)) meta.push(`${tr('Altitude')} ${fmtM(p.ele)}`);
+  if (fresh && fresh.acc) meta.push(`± ${fmtM(fresh.acc)}`);
+  if (fresh && fresh.t) meta.push(new Date(fresh.t).toLocaleTimeString(LOC, { hour: '2-digit', minute: '2-digit' }));
+  $('sosMeta').textContent = meta.join(' · ');
+  const nums = p ? sosFor(p.lon, p.lat) : [['112', 'Urgences (Europe et nombreux pays)']];
+  $('sosCall').href = 'tel:' + nums[0][0]; $('sosCall').textContent = `${tr('Appeler le')} ${nums[0][0]}`;
+  $('sosNums').innerHTML = nums.map(([n, l]) => `<a href="tel:${n}">${n}</a><span>${escH(tr(l))}</span>`).join('');
+  $('sosShare').hidden = !(fresh || me);
+  $('sosSheet').dataset.lat = p ? p.lat : ''; $('sosSheet').dataset.lon = p ? p.lon : '';
+  $('sosSheet').hidden = false;
+}
+$('sosShare').onclick = () => {
+  const lat = +$('sosSheet').dataset.lat, lon = +$('sosSheet').dataset.lon; if (!lat && !lon) return;
+  stat('secours_position');
+  const c = `${lat.toFixed(5)}, ${lon.toFixed(5)}`;
+  shareMsg(`${tr('Ma position')}${LANG === 'fr' ? ' : ' : ': '}${c}\nhttps://www.openstreetmap.org/?mlat=${lat.toFixed(5)}&mlon=${lon.toFixed(5)}#map=16/${lat.toFixed(5)}/${lon.toFixed(5)}\nhttps://maps.google.com/?q=${lat.toFixed(5)},${lon.toFixed(5)}`, tr('Ma position'));
+};
+$('sosCall').addEventListener('click', () => { try { stat('secours_appel'); } catch {} });
+$('sosClose').onclick = () => { $('sosSheet').hidden = true; };
+$('sosSheet').onclick = e => { if (e.target === $('sosSheet')) $('sosSheet').hidden = true; };
+$('npSos').onclick = openSos;
+$('prepSosBtn').onclick = openSos;
+// rappel : heure de retour dépassée pendant la sortie, puis « bien rentré » à la fin
+function sosRet() { try { return JSON.parse(store.get('sosReturn') || 'null'); } catch { return null; } }
+setInterval(() => {
+  const r = sosRet(); if (!r) return;
+  if (Date.now() > r.t + 3 * 864e5) { store.set('sosReturn', ''); return; }
+  if (r.said || Date.now() < r.t || !(nav || actState === 'on' || actState === 'paused')) return;
+  r.said = 1; store.set('sosReturn', JSON.stringify(r)); stat('securite_retard');
+  vibrate([300, 150, 300]); say('Ton heure de retour prévue est passée. Pense à prévenir ton proche.', true);
+  toast('Heure de retour prévue dépassée', 15000, { label: 'Prévenir', run: () => shareMsg(tr('Petit retard sur ma sortie, tout va bien. Je te redis quand je suis rentré(e).'), tr('Ma sortie')) });
+}, 60000);
+endActivity = (fn => async function (keep) {
+  const r = await fn.apply(this, arguments);
+  const s = sosRet();
+  if (s && Date.now() > s.t - 864e5 * 4) {
+    store.set('sosReturn', '');
+    setTimeout(() => toast('Bien rentré ? Préviens ton proche.', 12000, { label: 'Envoyer', run: () => shareMsg(tr('Bien rentré(e) de ma sortie, tout va bien !'), tr('Ma sortie')) }), 1500);
+  }
+  return r;
+})(endActivity);
 function prepUpdate() {
   const show = !!track && !nav && track.total > 2000;
   $('btnPrep').hidden = !show;

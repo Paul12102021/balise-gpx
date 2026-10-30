@@ -948,3 +948,14 @@ body.wx-on:not(.side) .trackrow { justify-content: space-between; } /* les bouto
 .prep-check small { display: block; color: var(--muted); font-size: 12.5px; }
 .prep-check i.info { border: 2px solid var(--line); color: var(--muted); font-family: Georgia, serif; }
 .prep-sec .btn.wide { width: 100%; } .prep-sec > small.note { display: block; margin-top: 6px; font-size: 12.5px; }
+.prep-dt { flex: none; max-width: 58%; min-height: 36px; border: 0; background: transparent; color: var(--go-ink); font: 600 14px system-ui, sans-serif; text-align: right; }
+.prep-btns { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 8px; }
+#prepTellInfo { display: block; margin-top: 6px; font-size: 12.5px; }
+#prepTellInfo:empty { display: none; }
+.sos-link { color: #c62828 !important; font-weight: 700; }
+.sos-pos { display: flex; flex-direction: column; gap: 2px; padding: 12px; border-radius: 12px; background: var(--field); text-align: center; }
+.sos-pos b { font-size: 22px; font-variant-numeric: tabular-nums; letter-spacing: .01em; user-select: all; }
+.sos-pos small { color: var(--muted); font-size: 12.5px; }
+.sos-call { display: flex; justify-content: center; align-items: center; min-height: 52px; border-radius: 14px; background: #c62828; color: #fff; font-size: 18px; font-weight: 700; text-decoration: none; }
+.sos-nums { display: grid; grid-template-columns: auto 1fr; gap: 6px 12px; align-items: center; font-size: 14px; }
+.sos-nums a { font-size: 18px; font-weight: 700; color: #c62828; text-decoration: none; min-width: 48px; }
