@@ -5,7 +5,7 @@
 
 // La page et le code doivent être de la même version. Sinon (page gardée en cache
 // par le téléphone ou par GitHub), on recharge une page fraîche, au plus 3 fois.
-const APP_VERSION = 278;
+const APP_VERSION = 279;
 // lien « pisteo.app/?moi=1 » (ou ?moi=0) : cet appareil est compté à part dans les statistiques (développeur).
 // Lu avant tout rechargement de version, qui ne garde pas les paramètres de l'adresse.
 try {
@@ -2229,6 +2229,17 @@ async function checkShared() {
     else toast('Le fichier partagé n\'a pas été reçu. Réessaie.', 4000);
   } catch { toast('Impossible de lire le fichier partagé.', 4000); }
 }
+// grand écran : glisser un fichier GPX sur la fenêtre pour l'ouvrir
+window.addEventListener('dragover', e => { if (e.dataTransfer && [...e.dataTransfer.types].includes('Files')) { e.preventDefault(); document.body.classList.add('dropping'); } });
+window.addEventListener('dragleave', e => { if (!e.relatedTarget) document.body.classList.remove('dropping'); });
+window.addEventListener('drop', e => {
+  document.body.classList.remove('dropping');
+  const f = e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0]; if (!f) return;
+  e.preventDefault();
+  if (!/\.gpx$|xml/i.test(f.name + ' ' + f.type)) { toast('Glisse un fichier GPX.', 3000); return; }
+  stat('gpx_glisse');
+  const r = new FileReader(); r.onload = () => loadText(r.result); r.readAsText(f);
+});
 $('fileIn').onchange = e => {
   const f = e.target.files[0]; if (!f) return;
   const r = new FileReader(); r.onload = () => loadText(r.result); r.readAsText(f); e.target.value = '';
@@ -5448,6 +5459,7 @@ NB_IDS.forEach(([v], i) => { $(v).parentElement.onclick = e => { e.stopPropagati
 document.addEventListener('click', e => { const m = $('nbPick'); if (m && !m.hidden && !m.contains(e.target)) m.hidden = true; }, true);
 function updateStats() {
   pipSoon();
+  document.body.classList.toggle('trk', !!track);
   const info = remainingInfo();
   $('sDist').textContent = info ? fmtDist(info.rem) : '–';
   $('sUp').textContent = info && track.hasEle ? fmtM(info.up) : '–';
@@ -8574,7 +8586,7 @@ async function prepRender() {
       const when = `<span class="pl-when">${escH(dayLab(tm.start))} · ${hm(tm.start)} → ${hm(tm.arr)}${tm.dark ? ` <span class="pl-dark">🌙 ${escH(tr('après le coucher du soleil'))} (${hm(tm.set)})</span>` : ''}</span>`;
       const edit = ctl ? `<button class="pl-edit" data-i="${s.n - 1}" aria-expanded="${open}">${escH(tr(open ? 'OK' : 'Changer'))} ${open ? '▴' : '▾'}</button>` : '';
       const adj = ctl ? `<div class="pl-adj"${open ? '' : ' hidden'}><span class="pl-km">${escH(tr('Jour'))} ${s.n} : ${kmN(s.from)} → ${kmN(s.to)}${kmU()}</span>${ctl}</div>` : '';
-      return `<li><b><span>${escH(tr('Jour'))}</span> ${s.n}</b> · <b>${fmtDist(s.dist)}</b>${track.hasEle ? ` · <span class="nw"><span>D+</span> ${fmtM(s.up)}</span> · <span class="nw"><span>D−</span> ${fmtM(s.down)}</span>` : ''} · <span class="nw">${fmtDur(s.secs)}</span>${when}<div class="pl-end">${night}${edit}</div>${adj}</li>`;
+      return `<li data-n="${s.n}" title="${escH(tr('Voir cette étape sur la carte'))}"><b><span>${escH(tr('Jour'))}</span> ${s.n}</b> · <b>${fmtDist(s.dist)}</b>${track.hasEle ? ` · <span class="nw"><span>D+</span> ${fmtM(s.up)}</span> · <span class="nw"><span>D−</span> ${fmtM(s.down)}</span>` : ''} · <span class="nw">${fmtDur(s.secs)}</span>${when}<div class="pl-end">${night}${edit}</div>${adj}</li>`;
     }).join('') + (n > 1 && stages.some(s => s.own) ? `<li class="pl-reset"><button id="prepReset">↺ <span>${escH(tr('Recalculer les étapes automatiquement'))}</span></button></li>` : '');
     prepStagesWire(stages, n);
     $('prepOnMap').hidden = n < 2;
@@ -9100,6 +9112,21 @@ function prepUpdate() {
   if (n > 1 && track.prepFor !== track.id) { track.prepFor = track.id; prepRender(); }
   else if (n < 2) prepMarkers(null);
 }
+// ---------- clavier (PC) : Échap ferme ce qui est ouvert ----------
+document.addEventListener('keydown', e => {
+  if (e.key !== 'Escape' || e.defaultPrevented) return;
+  if (!$('libDlg').hidden) { $('libDlgNo').click(); return; }
+  if (!$('fabSub').hidden) { fabSub(false); return; }
+  if (!$('nbPick').hidden) { $('nbPick').hidden = true; return; }
+  const open = [...document.querySelectorAll('.lib')].filter(x => !x.hidden);
+  if (open.length) { open[open.length - 1].hidden = true; return; }
+  if (!$('more').hidden) toggleMore(false);
+});
+// bandes de dates : la molette de la souris les fait défiler de côté
+for (const id of ['prepDepDays', 'prepRetDays']) $(id).addEventListener('wheel', e => {
+  const el = e.currentTarget; if (el.scrollWidth <= el.clientWidth || Math.abs(e.deltaX) > Math.abs(e.deltaY)) return;
+  e.preventDefault(); el.scrollLeft += e.deltaY;
+}, { passive: false });
 // ---------- navigation : voix, vibrations, économie de batterie, fenêtre réduite derrière « ⋯ » ----------
 // pastille orange sur « ⋯ » quand la voix ou les vibrations sont coupées (ça se voit sans ouvrir)
 function fabMoreDot() { try { $('btnFabMore').classList.toggle('alert', $('btnVoice').classList.contains('muted') || $('btnVibFab').classList.contains('muted')); } catch {} }
@@ -9135,6 +9162,14 @@ function prepStagesWire(stages, n) {
   });
   $('prepStages').querySelectorAll('.pl-near button').forEach(b => b.onclick = () => {
     const i = +b.closest('.pl-near').dataset.i, a = ends(); a[i] = +b.dataset.at; save(a);
+  });
+  $('prepStages').querySelectorAll('li[data-n]').forEach(li => li.onclick = e => {
+    if (e.target.closest('button')) return;
+    const st = stages[+li.dataset.n - 1]; if (!st) return;
+    const pts = prepSlice(st.from, st.to), lats = pts.map(p => p.lat), lons = pts.map(p => p.lon);
+    stat('prep_jour_carte');
+    if (!isSide()) prepLeave(`${tr('Jour')} ${st.n} · ${fmtDist(st.dist)}`);
+    map.fitBounds([[Math.min(...lons), Math.min(...lats)], [Math.max(...lons), Math.max(...lats)]], { padding: isSide() ? 60 : { top: 90, bottom: Math.round(innerHeight * .42), left: 30, right: 30 }, duration: 600 });
   });
   $('prepStages').querySelectorAll('.pl-edit').forEach(b => b.onclick = () => { prepEdit = prepEdit === +b.dataset.i ? -1 : +b.dataset.i; prepRender(); });
   const r = $('prepReset'); if (r) r.onclick = () => { store.set(prepEndsKey(n), ''); prepRender(); };

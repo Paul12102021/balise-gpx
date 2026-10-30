@@ -9,6 +9,8 @@ const kmEs = (n, half) => half ? (n ? (n === 1 ? 'un kilómetro y medio' : n + '
 const lowFirst = s => s.charAt(0).toLowerCase() + s.slice(1);
 const exact = {
   // ---- ravitaillement (v278)
+  "Voir cette étape sur la carte": "Ver esta etapa en el mapa",
+  "Glisse un fichier GPX.": "Suelta un archivo GPX.",
   "horaires inconnus": "horario desconocido",
   "ouvert jusqu'à": "abierto hasta",
   "ouvert": "abierto",

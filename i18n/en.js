@@ -9,6 +9,8 @@ const nd = s => String(s).replace(/\.$/, '');
 const plural = (n, one, many) => n + ' ' + (+n > 1 ? many : one);
 const exact = {
   // ---- ravitaillement (v278)
+  "Voir cette étape sur la carte": "Show this stage on the map",
+  "Glisse un fichier GPX.": "Drop a GPX file.",
   "horaires inconnus": "hours unknown",
   "ouvert jusqu'à": "open until",
   "ouvert": "open",

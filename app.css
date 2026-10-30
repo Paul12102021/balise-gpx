@@ -832,9 +832,11 @@ body.wx-on #navProfile { height: 150px; }
 
 /* ---------- Grand écran (PC, tablette à l'horizontale) : panneau à gauche, carte à droite ---------- */
 /* La classe « side » est posée par app.js (fenêtre ≥ 1000 × 560 px, en aperçu seulement). */
-body.side { --side-w: 400px; --ctrl-bottom: 8px; }
+body.side { --side-w: clamp(400px, 30vw, 470px); --ctrl-bottom: 8px; }
 body.side #map { left: var(--side-w); }
-body.side .hud { display: none; }
+/* chiffres de la trace : petite carte en haut de la carte (pas de place perdue dans le panneau) */
+body.side .hud { display: grid; left: calc(var(--side-w) + 12px); right: auto; top: 12px; width: min(520px, calc(100% - var(--side-w) - 90px)); padding: 8px 14px; border-radius: 14px; box-shadow: 0 2px 10px rgba(0,0,0,.18); }
+body.side:not(.trk) .hud, body.side.nav .hud { display: none; }
 body.side .sheet { top: 0; right: auto; width: var(--side-w); max-height: none; border-radius: 0; border-top: 0;
   border-right: 1px solid var(--line); box-shadow: 4px 0 18px rgba(0,0,0,.10); padding-top: calc(var(--sa-t) + 14px); transform: none !important; }
 body.side .grip { display: none; }
@@ -1077,3 +1079,8 @@ body.wx-on:not(.side) .trackrow { justify-content: space-between; } /* les bouto
 .prep-pois .oh.un { color: var(--muted); font-weight: 400; }
 @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .prep-pois .oh.cl { color: #ffc46b; } }
 :root[data-theme="dark"] .prep-pois .oh.cl { color: #ffc46b; }
+
+/* v279 : PC */
+.prep-list li[data-n] { cursor: pointer; }
+@media (hover: hover) { .prep-list li[data-n]:hover { box-shadow: inset 0 0 0 1.5px var(--go-ink); } }
+body.dropping::after { content: 'Dépose le fichier GPX pour l\'ouvrir'; position: fixed; inset: 12px; z-index: 100; display: grid; place-items: center; border: 3px dashed var(--go, #3A7556); border-radius: 18px; background: color-mix(in srgb, var(--panel) 80%, transparent); color: var(--go-ink); font: 700 22px system-ui, sans-serif; pointer-events: none; }
