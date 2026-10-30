@@ -5,7 +5,7 @@
 
 // La page et le code doivent être de la même version. Sinon (page gardée en cache
 // par le téléphone ou par GitHub), on recharge une page fraîche, au plus 3 fois.
-const APP_VERSION = 264;
+const APP_VERSION = 265;
 // lien « pisteo.app/?moi=1 » (ou ?moi=0) : cet appareil est compté à part dans les statistiques (développeur).
 // Lu avant tout rechargement de version, qui ne garde pas les paramètres de l'adresse.
 try {
@@ -3736,11 +3736,13 @@ async function rtElevate(pts) {
 
 // Le serveur principal d'OpenStreetMap fait souvent patienter : pour ces petites demandes,
 // on essaie d'abord un serveur libre tout de suite, sinon des serveurs miroirs, et en dernier recours on patiente.
-const OVERPASS_MIRRORS = ['https://overpass.private.coffee/api/interpreter', 'https://overpass.kumi.systems/api/interpreter'];
+// miroirs (oct. 2026) : OpenStreetMap France, puis VK Maps ; private.coffee / kumi.systems, un seul serveur, ne répondent plus
+const OVERPASS_MIRRORS = ['https://overpass.openstreetmap.fr/api/interpreter', 'https://maps.mail.ru/osm/tools/overpass/api/interpreter'];
 async function overpassFast(q, onWait, mirrorFirst, signal, fast) {
   // demandes « en relais » : un serveur, puis le suivant s'il échoue ou tarde 3 s ; la première réponse
   // gagne et les autres sont annulées. fast : pas d'attente longue, échec franc au bout de ~20 s
-  const servers = mirrorFirst ? [OVERPASS_MIRRORS[0], OVERPASS, OVERPASS_MIRRORS[1]] : [OVERPASS, OVERPASS_MIRRORS[0], OVERPASS_MIRRORS[1]];
+  // serveur principal souvent saturé : en dernier quand on veut aller vite
+  const servers = mirrorFirst ? [OVERPASS_MIRRORS[0], OVERPASS_MIRRORS[1], OVERPASS] : [OVERPASS, OVERPASS_MIRRORS[0], OVERPASS_MIRRORS[1]];
   const ctrls = [];
   const j = await new Promise(resolve => {
     let next = 0, running = 0, done = false, relay = 0;
@@ -6457,18 +6459,27 @@ async function overpassWait(onWait) {
     await new Promise(r => setTimeout(r, Math.min(secs, 120) * 1000));
   }
 }
+// grosses demandes (réseau de chemins, localités) : serveur principal, puis les miroirs s'il refuse
+// (il rejette les demandes coûteuses quand il est plein : 502 « at capacity », 504, 429)
 async function overpass(q, tries = 2, onWait) {
   let last;
+  const one = async (url, ms) => {
+    const ctrl = new AbortController(), timer = setTimeout(() => ctrl.abort(), ms);
+    try {
+      const r = await fetch(url, { method: 'POST', body: 'data=' + encodeURIComponent(q), headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, signal: ctrl.signal });
+      if (r.ok) return await r.json();
+      last = new Error(r.status === 429 || r.status === 502 || r.status === 504 ? 'serveurs OpenStreetMap saturés, réessaie dans quelques minutes' : 'erreur ' + r.status);
+    } catch (e) { last = e.name === 'AbortError' ? new Error('délai dépassé') : navigator.onLine === false ? new Error('pas de connexion') : new Error('serveurs OpenStreetMap injoignables'); }
+    finally { clearTimeout(timer); }
+    return null;
+  };
   for (let t = 0; t < tries; t++) {
     await overpassWait(onWait);
-    const ctrl = new AbortController(), timer = setTimeout(() => ctrl.abort(), 190000);
-    try {
-      const r = await fetch(OVERPASS, { method: 'POST', body: 'data=' + encodeURIComponent(q), headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, signal: ctrl.signal });
-      if (r.ok) return await r.json();
-      last = new Error(r.status === 429 || r.status === 504 ? 'serveur OpenStreetMap saturé, réessaie dans quelques minutes' : 'erreur ' + r.status);
-    } catch (e) { last = e.name === 'AbortError' ? new Error('délai dépassé') : new Error('pas de connexion'); }
-    finally { clearTimeout(timer); }
-    // serveur saturé : on patiente de plus en plus longtemps avant de réessayer
+    let j = await one(OVERPASS, 190000);
+    for (const m of OVERPASS_MIRRORS) { if (j || navigator.onLine === false) break; j = await one(m, 190000); }
+    if (j) return j;
+    if (navigator.onLine === false) break;
+    // tous saturés : on patiente de plus en plus longtemps avant de réessayer
     const pause = 15 * (t + 1);
     if (onWait) onWait(pause);
     await new Promise(r => setTimeout(r, pause * 1000));
