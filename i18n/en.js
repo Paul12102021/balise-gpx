@@ -8,6 +8,18 @@ const km = (n, half) => n === 1 && !half ? '1 kilometre' : (half ? n + '.5' : n)
 const nd = s => String(s).replace(/\.$/, '');
 const plural = (n, one, many) => n + ' ' + (+n > 1 ? many : one);
 const exact = {
+  // ---- navigation et Où aller (v277)
+  "étape": "stage",
+  "🚶 Balade libre": "🚶 Free roam",
+  "Plus : voix, vibrations, économie de batterie, fenêtre réduite": "More: voice, vibration, battery saver, small window",
+  "Voix, vibrations, batterie": "Voice, vibration, battery",
+  "fin du jour": "end of day",
+  "Temps": "Time",
+  "D− restant": "Descent left",
+  "✎ Point par point": "✎ Point by point",
+  "📍 Choisir sur la carte": "📍 Pick on the map",
+  "sans trace": "no track",
+  "Astuce : appui long sur la carte pour y aller · itinéraires BRouter, adresses IGN": "Tip: long-press the map to go there · BRouter routes, IGN addresses",
   // ---- suppression d'un dossier (v276)
   "Garder les traces": "Keep the tracks",
   "Garder la trace": "Keep the track",

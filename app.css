@@ -1055,3 +1055,16 @@ body.wx-on:not(.side) .trackrow { justify-content: space-between; } /* les bouto
 .lib-dlg.three .lib-dlg-btns { grid-template-columns: 1fr; }
 .lib-dlg.three #libDlgNo { order: 3; }
 #libDlgAlt[hidden] { display: none; }
+
+/* v277 : « ⋯ » en navigation, Où aller allégé */
+.fab-more { position: relative; }
+.fab-sub { position: absolute; right: calc(100% + 10px); bottom: 0; display: flex; gap: 10px; padding: 0; }
+.fab-sub[hidden] { display: none; }
+#btnFabMore { position: relative; }
+#btnFabMore.on { background: var(--go, #3A7556); color: #fff; }
+#btnFabMore .fm-dot { display: none; position: absolute; top: 6px; right: 6px; width: 10px; height: 10px; border-radius: 50%; background: #e9783a; border: 2px solid var(--panel); }
+#btnFabMore.alert .fm-dot { display: block; }
+.dest-btns .dest-opt { display: flex; align-items: center; gap: 6px; min-height: 46px; padding: 0 12px; border: 1px solid var(--line); border-radius: 12px; background: var(--panel); color: var(--ink); font: 600 14px system-ui, sans-serif; text-align: left; cursor: pointer; }
+.dest-btns .dest-opt small { margin-left: auto; color: var(--muted); font-weight: 400; font-size: 12px; }
+.dest-btns .dest-opt:active { background: var(--line); }
+.dest-note { font-size: 12px; }

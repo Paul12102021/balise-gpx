@@ -8,6 +8,18 @@ const plural = (n, one, many) => n + ' ' + (+n > 1 ? many : one);
 const kmEs = (n, half) => half ? (n ? (n === 1 ? 'un kilómetro y medio' : n + ' kilómetros y medio') : 'medio kilómetro') : (n === 1 ? 'un kilómetro' : n + ' kilómetros');
 const lowFirst = s => s.charAt(0).toLowerCase() + s.slice(1);
 const exact = {
+  // ---- navigation et Où aller (v277)
+  "étape": "etapa",
+  "🚶 Balade libre": "🚶 Paseo libre",
+  "Plus : voix, vibrations, économie de batterie, fenêtre réduite": "Más: voz, vibración, ahorro de batería, ventana reducida",
+  "Voix, vibrations, batterie": "Voz, vibración, batería",
+  "fin du jour": "fin del día",
+  "Temps": "Tiempo",
+  "D− restant": "D− restante",
+  "✎ Point par point": "✎ Punto a punto",
+  "📍 Choisir sur la carte": "📍 Elegir en el mapa",
+  "sans trace": "sin ruta",
+  "Astuce : appui long sur la carte pour y aller · itinéraires BRouter, adresses IGN": "Truco: mantén pulsado el mapa para ir allí · rutas BRouter, direcciones IGN",
   // ---- suppression d'un dossier (v276)
   "Garder les traces": "Conservar las rutas",
   "Garder la trace": "Conservar la ruta",

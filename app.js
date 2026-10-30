@@ -5,7 +5,7 @@
 
 // La page et le code doivent être de la même version. Sinon (page gardée en cache
 // par le téléphone ou par GitHub), on recharge une page fraîche, au plus 3 fois.
-const APP_VERSION = 276;
+const APP_VERSION = 277;
 // lien « pisteo.app/?moi=1 » (ou ?moi=0) : cet appareil est compté à part dans les statistiques (développeur).
 // Lu avant tout rechargement de version, qui ne garde pas les paramètres de l'adresse.
 try {
@@ -2876,6 +2876,7 @@ let voiceOn = store.get('voice') !== '0', vibOn = store.get('vib') !== '0';
 function syncAlertUI() {
   $('btnVoice').classList.toggle('muted', !voiceOn);
   $('btnVibFab').classList.toggle('muted', !vibOn);
+  fabMoreDot();
   $('optVoice').checked = voiceOn; $('optVib').checked = vibOn;
   $('rowVStyle').hidden = !voiceOn;
   $('npVoice').classList.toggle('off', !voiceOn); $('npVoice').textContent = voiceOn ? 'Son activé' : 'Son coupé';
@@ -3236,7 +3237,7 @@ function setEco(v, quiet) {
   const on = eco === 'max';
   $('optEco').checked = on;
   $('npEco').textContent = on ? 'Économie de batterie' : 'Économie de batterie'; $('npEco').classList.toggle('off', !on);
-  $('btnEcoFab').classList.toggle('on', on);
+  $('btnEcoFab').classList.toggle('on', on); fabMoreDot();
   if (!quiet) toast(on ? 'Économie de batterie activée : écran noir entre les virages' : 'Économie de batterie désactivée', 3000);
   applyEco();
 }
@@ -5367,7 +5368,11 @@ function navStatVal(k, info) {
   const di = doneInfo(), el = actState !== 'idle' ? actElapsed() / 1000 : (Date.now() - navStartT) / 1000;
   const dist = actState !== 'idle' ? act.d : freeD;
   switch (k) {
-    case 'eta': return [fmtClock(info.secs), 'arrivée · ' + fmtDur(info.secs)];
+    case 'eta': {
+      const st = navStage();
+      if (st) { const s = Math.max(0, (etaAlong(st.to) - Date.now()) / 1000); return [fmtClockD(s), `${tr('étape')} ${st.n} · ${fmtDur(s)}`]; }
+      return [fmtClockD(info.secs), 'arrivée · ' + fmtDur(info.secs)];
+    }
     case 'left': return [fmtDur(info.secs), 'restant'];
     case 'rem': return [fmtDist(info.rem), 'restant'];
     case 'up': return [track.hasEle ? fmtM(info.up) : '–', 'D+ restant'];
@@ -5385,6 +5390,29 @@ function navStatVal(k, info) {
     }
   }
   return ['–', ''];
+}
+// heure d'arrivée ; avec le jour (« dim. 16:03 ») quand ce n'est pas aujourd'hui
+function fmtClockD(s) {
+  const t = Date.now() + s * 1000, d = new Date(t);
+  return new Date().toDateString() === d.toDateString() ? fmtClock(s) : d.toLocaleDateString(LOC, { weekday: 'short' }).replace('.', '') + ' ' + fmtClock(s);
+}
+// sortie préparée sur plusieurs jours : étape en cours (fins d'étape telles que préparées)
+let navStageC = null;
+function navStage() {
+  try {
+    if (!track || !store.get(prepKey())) return null;
+    const n = prepDays(); if (n < 2) return null;
+    const key = trKey() + '|' + n + '|' + (store.get(prepEndsKey(n)) || '') + '|' + (store.get(prepTripKey() + '|sig') || '');
+    if (!navStageC || navStageC.key !== key) {
+      const sig = (store.get(prepTripKey() + '|sig') || '').split(',').map(Number).filter(v => v > 0);
+      let ends = sig.length === n ? sig : prepStages(n, Array.isArray(track.prepPois) ? track.prepPois : null).map(s => s.to);
+      navStageC = { key, ends };
+    }
+    const a = doneInfo().along, ends = navStageC.ends;
+    const i = ends.findIndex(e => a < e - 50);
+    if (i < 0 || i >= ends.length - 1) return null; // dernier jour : l'arrivée tout court
+    return { n: i + 1, to: ends[i] };
+  } catch { return null; }
 }
 function navStatPick(i) {
   if (!nav || !track) return;
@@ -5416,6 +5444,9 @@ function updateStats() {
   off.textContent = progress ? fmtDist(progress.dist) : '–';
   off.classList.toggle('bad', !!threshold && !!progress && progress.dist > threshold);
   $('sEle').textContent = me && me.ele != null ? fmtM(me.ele) : (progress && track.ele[progress.idx] != null ? '≈' + fmtM(track.ele[progress.idx]) : '–');
+  const pre = !!track && !nav && actState === 'idle';
+  $('sOffL').textContent = tr(pre ? 'Temps' : 'Écart'); $('sEleL').textContent = tr(pre ? 'D− restant' : 'Altitude');
+  if (pre && info) { off.textContent = fmtDur(info.secs); off.classList.remove('bad'); $('sEle').textContent = track.hasEle ? fmtM(doneInfo().downLeft) : '–'; }
   if (nav && !track) {
     $('nbEta').textContent = me && me.ele != null ? fmtM(me.ele) : '–'; $('nbDur').textContent = 'altitude';
     $('nbRem').textContent = fmtDist(freeD); $('nbL2').textContent = 'parcourus';
@@ -8516,7 +8547,7 @@ async function prepKeep() {
   const old = await idb('readonly', st => st.get(id)).catch(() => null);
   if (n > 1) {
     const trip = store.get(prepTripKey());
-    if (trip && trip !== PREP_FOLDER()) f = trip;
+    if (trip && trip !== PREP_FOLDER() && libFolders(await listRecent().catch(() => [])).includes(trip)) f = trip;
     else {
       toast('Recherche des villes de départ et d\'arrivée…', 2500);
       const def = (await prepTripName(mine)).slice(0, 40);
@@ -8901,6 +8932,20 @@ function prepUpdate() {
   if (n > 1 && track.prepFor !== track.id) { track.prepFor = track.id; prepRender(); }
   else if (n < 2) prepMarkers(null);
 }
+// ---------- navigation : voix, vibrations, économie de batterie, fenêtre réduite derrière « ⋯ » ----------
+// pastille orange sur « ⋯ » quand la voix ou les vibrations sont coupées (ça se voit sans ouvrir)
+function fabMoreDot() { try { $('btnFabMore').classList.toggle('alert', $('btnVoice').classList.contains('muted') || $('btnVibFab').classList.contains('muted')); } catch {} }
+let fabSubT = 0;
+function fabSub(open) {
+  $('fabSub').hidden = !open; $('btnFabMore').setAttribute('aria-expanded', open); $('btnFabMore').classList.toggle('on', open);
+  clearTimeout(fabSubT); if (open) fabSubT = setTimeout(() => fabSub(false), 8000);
+}
+$('btnFabMore').onclick = () => { stat('nav_plus'); fabSub($('fabSub').hidden); };
+// un réglage touché : on laisse ouvert un peu (pour voir l'effet), puis ça se referme
+$('fabSub').addEventListener('click', () => { clearTimeout(fabSubT); fabSubT = setTimeout(() => fabSub(false), 2500); });
+map.on('mousedown', () => { if (!$('fabSub').hidden) fabSub(false); });
+map.on('touchstart', () => { if (!$('fabSub').hidden) fabSub(false); });
+fabMoreDot();
 $('btnPrep').onclick = () => { stat('prep_ouvre'); if ($('prepSheet').hidden) { prepOffOpen = false; $('prepRetPick').hidden = true; $('prepRetEdit').textContent = tr('Modifier'); $('prepSheet').querySelector('.lib-panel').scrollTop = 0; } prepOpen(); };
 $('prepClose').onclick = () => { $('prepSheet').hidden = true; };
 $('prepSheet').onclick = e => { if (e.target === $('prepSheet')) $('prepSheet').hidden = true; };
