@@ -1068,3 +1068,12 @@ body.wx-on:not(.side) .trackrow { justify-content: space-between; } /* les bouto
 .dest-btns .dest-opt small { margin-left: auto; color: var(--muted); font-weight: 400; font-size: 12px; }
 .dest-btns .dest-opt:active { background: var(--line); }
 .dest-note { font-size: 12px; }
+
+/* v278 : ravitaillement */
+#prepFoodSec[hidden] { display: none; }
+.prep-pois .oh { display: block; font-style: normal; font-size: 12.5px; font-weight: 600; }
+.prep-pois .oh.op { color: var(--go-ink); }
+.prep-pois .oh.cl { color: #b45309; }
+.prep-pois .oh.un { color: var(--muted); font-weight: 400; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .prep-pois .oh.cl { color: #ffc46b; } }
+:root[data-theme="dark"] .prep-pois .oh.cl { color: #ffc46b; }

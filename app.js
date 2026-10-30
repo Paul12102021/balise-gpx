@@ -5,7 +5,7 @@
 
 // La page et le code doivent être de la même version. Sinon (page gardée en cache
 // par le téléphone ou par GitHub), on recharge une page fraîche, au plus 3 fois.
-const APP_VERSION = 277;
+const APP_VERSION = 278;
 // lien « pisteo.app/?moi=1 » (ou ?moi=0) : cet appareil est compté à part dans les statistiques (développeur).
 // Lu avant tout rechargement de version, qui ne garde pas les paramètres de l'adresse.
 try {
@@ -2454,7 +2454,7 @@ function recapCheck() {
   say(parts.join(' '), true);
 }
 // points utiles à moins de 60 m de la trace (eau, refuges, cabanes, abris, toilettes)
-const POI_SAY = { w: 'point d\'eau potable', s: 'source', r: 'refuge gardé', c: 'cabane', a: 'abri', t: 'toilettes' };
+const POI_SAY = { w: 'point d\'eau potable', s: 'source', r: 'refuge gardé', c: 'cabane', a: 'abri', t: 'toilettes', e: 'épicerie', b: 'boulangerie' };
 async function poiAlong() {
   if (!track || poiAhead || !poiOn()) return;
   const mine = track; poiAhead = [];
@@ -2463,9 +2463,9 @@ async function poiAlong() {
     await poiPrefetch([Math.min(...lons), Math.min(...lats), Math.max(...lons), Math.max(...lats)]);
     if (track !== mine) return;
     const idx = trackIndex(mine), out = [];
-    for (const T of poiTiles.values()) for (const [lat, lon, k, nm] of T) {
+    for (const T of poiTiles.values()) for (const [lat, lon, k, nm, x] of T) {
       if (!POI_SAY[k]) continue;
-      for (const ps of netPasses(mine, idx, { lat, lon }, 60)) out.push({ along: ps.along, k, nm: nm || '' });
+      for (const ps of netPasses(mine, idx, { lat, lon }, FOOD[k] ? 120 : 60)) out.push({ along: ps.along, k, nm: nm || '', oh: FOOD[k] ? x : undefined });
     }
     mine.poiAhead = poiAhead = out.sort((a, b) => a.along - b.along);
   } catch { /* pas de points utiles : rien à annoncer */ }
@@ -2478,7 +2478,10 @@ function poiCheck() {
   // les points du même type tout proches ne sont annoncés qu'une fois
   poiAhead.filter(q => q.k === p.k && Math.abs(q.along - p.along) < 500).forEach(q => poiSaid.add(q.k + Math.round(q.along)));
   stat('poi_dit_' + p.k);
-  say(`${POI_SAY[p.k].charAt(0).toUpperCase() + POI_SAY[p.k].slice(1)} dans ${speakDist(p.along - at)}${p.nm && p.k !== 'w' && p.k !== 't' ? ', ' + p.nm : ''}.`, true);
+  // commerce : ouvert ou fermé à l'heure où tu y seras
+  let st = '';
+  if (FOOD[p.k]) { const o = ohAt(p.oh || '', etaAlong(p.along)); st = o.open === true ? ', ouvert' : o.open === false ? ', fermé' : ''; }
+  say(`${POI_SAY[p.k].charAt(0).toUpperCase() + POI_SAY[p.k].slice(1)} dans ${speakDist(p.along - at)}${p.nm && p.k !== 'w' && p.k !== 't' ? ', ' + p.nm : ''}${st}.`, true);
 }
 
 // =====================================================================
@@ -5359,7 +5362,7 @@ function fitStat(id) {
 // ---------- cases du bas en navigation : au choix (toucher une case pour la changer) ----------
 const NB_IDS = [['nbEta', 'nbDur'], ['nbRem', 'nbL2'], ['nbUp', 'nbL3']];
 const NAV_STATS = { eta: 'Heure d\'arrivée', left: 'Temps restant', rem: 'Distance restante', up: 'D+ restant', done: 'Distance parcourue',
-  upDone: 'D+ fait', pct: 'Progression', time: 'Temps de sortie', avg: 'Vitesse moyenne', ele: 'Altitude', clock: 'Heure', climb: 'Prochaine montée' };
+  upDone: 'D+ fait', pct: 'Progression', time: 'Temps de sortie', avg: 'Vitesse moyenne', ele: 'Altitude', clock: 'Heure', climb: 'Prochaine montée', food: 'Prochain ravitaillement' };
 function navStatSlots() {
   let a; try { a = JSON.parse(store.get('navStats') || 'null'); } catch {}
   return Array.isArray(a) && a.length === 3 && a.every(k => NAV_STATS[k]) ? a : ['eta', 'rem', 'up'];
@@ -5383,6 +5386,14 @@ function navStatVal(k, info) {
     case 'avg': return [el > 60 ? kmh(dist / el * 3.6) : '–', 'vitesse moy.'];
     case 'ele': return [me && me.ele != null ? fmtM(me.ele) : '–', 'altitude'];
     case 'clock': return [new Date().toLocaleTimeString(LOC, { hour: '2-digit', minute: '2-digit' }), 'heure'];
+    case 'food': {
+      // prochaine épicerie ou boulangerie devant toi, ouverte ou non quand tu y seras
+      if (track.prepPois === undefined) { prepPois(track).catch(() => {}); return ['…', tr('ravitaillement')]; }
+      const a = doneInfo().along, p = (track.prepPois || []).find(q => FOOD[q.k] && q.along > a + 30);
+      if (!p) return ['–', tr('ravitaillement')];
+      const o = ohAt(p.oh || '', etaAlong(p.along));
+      return [fmtDist(p.along - a), `${POI[p.k][0]} ${tr(o.open === true ? 'ouvert' : o.open === false ? 'fermé' : 'ravitaillement')}`];
+    }
     case 'climb': {
       const cn = climbNow();
       if (!cn) return ['–', 'montée'];
@@ -8157,7 +8168,11 @@ function scrubDraw(ctx, X, Y, T, h, L0, W) {
 // ---------- points utiles sur la carte (eau, sources, refuges, abris, toilettes) : dépôt pisteo-data ----------
 const POI = { w: ['💧', '#2f80ed', 'Eau potable', 5], s: ['💧', '#6aa7d8', 'Source (eau non garantie)', 3], r: ['🏠', '#b0532b', 'Refuge gardé', 6],
   c: ['🛖', '#8a5a3b', 'Cabane non gardée', 5], a: ['⛺', '#3a7556', 'Abri', 4], t: ['🚻', '#7a5cc2', 'Toilettes', 1],
-  v: ['🔭', '#d08a1e', 'Point de vue', 3], p: ['⛰️', '#6b6f73', 'Sommet', 2] };
+  v: ['🔭', '#d08a1e', 'Point de vue', 3], p: ['⛰️', '#6b6f73', 'Sommet', 2],
+  e: ['🛒', '#c2410c', 'Épicerie', 1], b: ['🥖', '#b7791f', 'Boulangerie', 1] };
+const FOOD = { e: 1, b: 1 };
+// les données contiennent-elles les commerces ? (préparées depuis le 31 oct. 2026)
+const foodKnown = () => !!(poiMan && poiMan.count && (poiMan.count.e || poiMan.count.b));
 var poiMan = null, poiTiles = new Map(), poiBusy = false;
 const poiOn = () => store.get('poi') !== '0';
 function poiImages() {
@@ -8174,11 +8189,14 @@ function poiLayer() {
   poiImages();
   map.addSource('poi', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
   map.addLayer({ id: 'poi', type: 'symbol', source: 'poi', minzoom: 12.5,
+    // commerces seulement de près (ils sont nombreux dans les bourgs)
+    filter: ['any', ['!', ['has', 'f']], ['>=', ['zoom'], 14]],
     layout: { 'icon-image': ['concat', 'poi-', ['get', 'k']], 'icon-size': ['interpolate', ['linear'], ['zoom'], 12.5, .7, 16, 1], 'icon-allow-overlap': false,
       'symbol-sort-key': ['-', 0, ['get', 'pr']], 'icon-padding': 1 } });
   map.on('click', 'poi', e => {
     const f = e.features && e.features[0]; if (!f) return;
-    const P = POI[f.properties.k]; toast(`${P[0]} ${tr(P[2])}${f.properties.n ? ' · ' + f.properties.n : ''}`, 3500);
+    const P = POI[f.properties.k], o = FOOD[f.properties.k] ? ' · ' + ohTxt(ohAt(f.properties.oh || '', Date.now()), true) : '';
+    toast(`${P[0]} ${tr(P[2])}${f.properties.n ? ' · ' + f.properties.n : ''}${o}`, 4500);
   });
   map.on('mouseenter', 'poi', () => { map.getCanvas().style.cursor = 'pointer'; });
   map.on('mouseleave', 'poi', () => { map.getCanvas().style.cursor = ''; });
@@ -8199,7 +8217,11 @@ async function poiUpdate() {
       for (let y = Math.floor((b.getSouth() + 90) / g); y <= Math.floor((b.getNorth() + 90) / g); y++) if (have.has(`${x}_${y}`) && names.length < 12) names.push(`${x}_${y}`);
     await Promise.all(names.filter(n => !poiTiles.has(n)).map(n => rtdGet(`p/${n}.json?d=${poiMan.date}`, 0).then(T => poiTiles.set(n, T.p || [])).catch(() => {})));
     const feats = [];
-    for (const n of names) for (const [lat, lon, k, nm, ele] of poiTiles.get(n) || []) if (POI[k]) feats.push({ type: 'Feature', properties: { k, n: [nm, ele != null ? fmtM(ele) : ''].filter(Boolean).join(' · '), pr: POI[k][3] }, geometry: { type: 'Point', coordinates: [lon, lat] } });
+    for (const n of names) for (const [lat, lon, k, nm, x] of poiTiles.get(n) || []) if (POI[k]) {
+      const f = FOOD[k], pr = { k, n: [nm, !f && x != null ? fmtM(x) : ''].filter(Boolean).join(' · '), pr: POI[k][3] };
+      if (f) { pr.f = 1; if (x) pr.oh = x; }
+      feats.push({ type: 'Feature', properties: pr, geometry: { type: 'Point', coordinates: [lon, lat] } });
+    }
     map.getSource('poi').setData({ type: 'FeatureCollection', features: feats });
   } finally { poiBusy = false; }
 }
@@ -8221,6 +8243,102 @@ if (map.loaded()) poiUpdate();
 $('optPoi').checked = poiOn();
 $('optPoi').onchange = e => { store.set('poi', e.target.checked ? '1' : '0'); poiUpdate(); };
 
+// ---------- horaires d'ouverture OSM (opening_hours) : sous-ensemble courant, sans réseau ----------
+// gère : jours (Mo-Fr, Sa,Su), plages horaires multiples, « off », 24/7, mois (Jul-Aug …), PH (jours fériés français), plages après minuit.
+// renvoie null quand le texte n'est pas compris : l'appli dit alors « horaires inconnus » plutôt que de se tromper.
+const OH_D = { Mo: 1, Tu: 2, We: 3, Th: 4, Fr: 5, Sa: 6, Su: 0 }, OH_M = { Jan: 0, Feb: 1, Mar: 2, Apr: 3, May: 4, Jun: 5, Jul: 6, Aug: 7, Sep: 8, Oct: 9, Nov: 10, Dec: 11 };
+const ohCache = new Map();
+function frHolidays(y) {
+  // Pâques (algorithme de Butcher), puis lundi de Pâques, Ascension, lundi de Pentecôte, et les fêtes fixes
+  const a = y % 19, b = Math.floor(y / 100), c = y % 100, d = Math.floor(b / 4), e = b % 4, f = Math.floor((b + 8) / 25), g = Math.floor((b - f + 1) / 3);
+  const h = (19 * a + b - d - g + 15) % 30, i = Math.floor(c / 4), k = c % 4, l = (32 + 2 * e + 2 * i - h - k) % 7, m = Math.floor((a + 11 * h + 22 * l) / 451);
+  const mo = Math.floor((h + l - 7 * m + 114) / 31) - 1, da = ((h + l - 7 * m + 114) % 31) + 1, E = new Date(y, mo, da);
+  const plus = n => { const x = new Date(E); x.setDate(x.getDate() + n); return x.toDateString(); };
+  return new Set([plus(1), plus(39), plus(50), ...[[0, 1], [4, 1], [4, 8], [6, 14], [7, 15], [10, 1], [10, 11], [11, 25]].map(([mm, dd]) => new Date(y, mm, dd).toDateString())]);
+}
+const isHoliday = dt => frHolidays(dt.getFullYear()).has(dt.toDateString());
+function ohParse(s) {
+  if (ohCache.has(s)) return ohCache.get(s);
+  let out = null;
+  try {
+    const t = String(s).trim().replace(/\s*;\s*$/, '');
+    if (t === '24/7') out = [{ days: null, months: null, ph: false, iv: [[0, 1440]] }];
+    else {
+      out = [];
+      for (let r of t.split(/\s*;\s*|\s*\|\|\s*/)) {
+        r = r.replace(/"[^"]*"/g, '').trim(); if (!r) continue;
+        const rule = { days: null, months: null, ph: false, iv: null };
+        // mois : « Jul-Aug », « Apr-Oct », « Dec »
+        let mm = r.match(/^((?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)(?:-(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec))?(?:,(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)(?:-(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec))?)*)(?::|\s+|$)/);
+        if (mm) {
+          rule.months = new Set();
+          for (const part of mm[1].split(',')) { const [a, b] = part.split('-').map(x => OH_M[x]); for (let k = a; ; k = (k + 1) % 12) { rule.months.add(k); if (k === (b ?? a)) break; } }
+          r = r.slice(mm[0].length).trim();
+        }
+        // jours : « Mo-Fr », « Sa,Su », « PH », « Mo-Sa,PH »
+        mm = r.match(/^((?:Mo|Tu|We|Th|Fr|Sa|Su|PH)(?:-(?:Mo|Tu|We|Th|Fr|Sa|Su))?(?:\s*,\s*(?:Mo|Tu|We|Th|Fr|Sa|Su|PH)(?:-(?:Mo|Tu|We|Th|Fr|Sa|Su))?)*)(?:\s+|$)/);
+        if (mm) {
+          rule.days = new Set();
+          for (const part of mm[1].split(/\s*,\s*/)) {
+            if (part === 'PH') { rule.ph = true; continue; }
+            const [a, b] = part.split('-').map(x => OH_D[x]);
+            for (let k = a; ; k = (k + 1) % 7) { rule.days.add(k); if (k === (b ?? a)) break; }
+          }
+          r = r.slice(mm[0].length).trim();
+        }
+        if (/^(off|closed)$/i.test(r)) rule.iv = [];
+        else if (r === '' && (rule.days || rule.months)) rule.iv = [[0, 1440]];
+        else {
+          rule.iv = [];
+          for (const p of r.split(/\s*,\s*/)) {
+            const q = p.match(/^(\d{1,2}):(\d{2})\s*-\s*(\d{1,2}):(\d{2})\+?$/); if (!q) throw 0;
+            const a = +q[1] * 60 + +q[2]; let b = +q[3] * 60 + +q[4]; if (b <= a) b += 1440; rule.iv.push([a, b]);
+          }
+        }
+        if (!rule.days && !rule.months && !rule.ph && out.length) throw 0; // règle sans sélecteur au milieu : pas comprise
+        out.push(rule);
+      }
+      if (!out.length) out = null;
+    }
+  } catch { out = null; }
+  ohCache.set(s, out); return out;
+}
+// plages d'ouverture (minutes) du jour de dt ; null = inconnu
+function ohDay(s, dt) {
+  const R = ohParse(s); if (!R) return null;
+  const hol = isHoliday(dt), wd = dt.getDay(), mo = dt.getMonth(); let iv = [], hit = false, phRule = false;
+  for (const r of R) {
+    if (r.months && !r.months.has(mo)) continue;
+    const dayOk = r.days ? r.days.has(wd) : !r.ph;
+    if (hol && r.ph) { iv = r.iv; hit = true; phRule = true; continue; }
+    if (dayOk && !(phRule && hol)) { iv = r.iv; hit = true; }
+  }
+  // jour férié sans règle « PH » : on ne sait pas
+  if (hol && !R.some(r => r.ph)) return null;
+  return hit ? iv : [];
+}
+// ouvert à cet instant ? { open: true|false|null, until, next } (minutes depuis minuit du jour)
+function ohAt(s, t) {
+  if (!s) return { open: null };
+  const dt = new Date(t), min = dt.getHours() * 60 + dt.getMinutes();
+  const prev = new Date(dt); prev.setDate(prev.getDate() - 1);
+  const ivP = ohDay(s, prev), iv = ohDay(s, dt);
+  if (iv == null) return { open: null };
+  // plage d'hier qui déborde après minuit
+  if (ivP) for (const [a, b] of ivP) if (b > 1440 && min < b - 1440) return { open: true, until: b - 1440 };
+  for (const [a, b] of iv) if (min >= a && min < b) return { open: true, until: b % 1440 };
+  const nx = iv.map(x => x[0]).filter(a => a > min).sort((a, b) => a - b)[0];
+  const ls = iv.map(x => x[1]).filter(b => b <= min).sort((a, b) => b - a)[0];
+  return { open: false, next: nx != null ? nx : null, last: ls != null ? ls : null };
+}
+const mnHm = m => String(Math.floor(m / 60) % 24).padStart(2, '0') + ':' + String(m % 60).padStart(2, '0');
+// « ouvert jusqu'à 19:30 », « fermé · ouvre à 15:00 », « fermé ce jour-là », « horaires inconnus »
+function ohTxt(o, sameDay) {
+  if (!o || o.open == null) return tr('horaires inconnus');
+  if (o.open) return o.until != null && o.until !== 0 && o.until !== 1440 ? `${tr('ouvert jusqu\'à')} ${mnHm(o.until)}` : tr('ouvert');
+  return o.next != null ? `${tr('fermé · ouvre à')} ${mnHm(o.next)}` : o.last != null ? `${tr('fermé depuis')} ${mnHm(o.last)}` : tr(sameDay ? 'fermé aujourd\'hui' : 'fermé ce jour-là');
+}
+
 // ---------- Préparer la sortie : étapes (plusieurs jours) et eau le long de la trace ----------
 // points utiles près de la trace, gardés sur la trace : [{ along, k, nm, d }] ; null = pas de données pour cette zone
 const PREP_NIGHT = { r: 3, c: 2, a: 1 }; // fin d'étape : refuge gardé > cabane > abri
@@ -8241,13 +8359,13 @@ async function prepPois(t) {
   for (let i = 0; i < t.pts.length; i++) {
     const p = t.pts[i];
     if (i && hav(p, t.pts[i - 1]) < 150 && i % 4) continue;
-    for (let y = -1; y <= 1; y++) for (let x = -1; x <= 1; x++) near.add(cell(p.lat + y * G, p.lon + x * G));
+    for (let y = -2; y <= 2; y++) for (let x = -2; x <= 2; x++) near.add(cell(p.lat + y * G, p.lon + x * G));
   }
-  for (const T of poiTiles.values()) for (const [lat, lon, k, nm] of T) {
-    const tol = k === 'w' || k === 's' ? 250 : PREP_NIGHT[k] ? 400 : 0;
+  for (const T of poiTiles.values()) for (const [lat, lon, k, nm, x] of T) {
+    const tol = k === 'w' || k === 's' ? 250 : PREP_NIGHT[k] ? 400 : FOOD[k] ? 500 : 0;
     if (!tol || !near.has(cell(lat, lon))) continue;
     const pr = project(t, { lat, lon }, true);
-    if (pr && pr.dist <= tol) out.push({ along: pr.along, k, nm: nm || '', d: pr.dist });
+    if (pr && pr.dist <= tol) { const o = { along: pr.along, k, nm: nm || '', d: pr.dist, lat, lon }; if (FOOD[k] && x) o.oh = x; out.push(o); }
   }
   return (t.prepPois = out.sort((a, b) => a.along - b.along));
 }
@@ -8470,6 +8588,7 @@ async function prepRender() {
   draw(pois);
   prepOffline(); prepSafety();
   if (!pois) {
+    prepFood(null);
     $('prepWater').innerHTML = `<p class="note">${escH(tr(navigator.onLine === false ? 'Hors connexion : points d\'eau indisponibles pour le moment.' : 'Points d\'eau connus en France et dans les pays voisins seulement : pas de données ici.'))}</p>`;
     return;
   }
@@ -8486,6 +8605,53 @@ async function prepRender() {
   $('prepWater').innerHTML = gapHtml || `<p class="ok">✓ <span>${escH(tr(W.n ? 'Un point d\'eau potable au moins tous les' : 'Parcours court : pas de long tronçon sans eau'))}</span>${W.n ? ' ' + fmtDist(W.lim) : ''}</p>`;
   if (W.gaps.length) prepHintSet(n, true);
   prepPoiList();
+  prepFood(pois, prepStages(n, pois));
+}
+// ---------- ravitaillement : épiceries et boulangeries près de la trace, ouvertes ou non à ton passage ----------
+// heure de passage à une distance le long de la trace (départ prévu, jours suivants, pauses comprises)
+function prepEtaAt(along, stages, times) {
+  const i = Math.max(0, stages.findIndex(s => along <= s.to + 1)), s = stages[i];
+  return times[i].start + baseSecs(s.from, Math.max(s.from, along)) * 1300;
+}
+let prepFoodOpen = false;
+function prepFood(pois, stages) {
+  const sec = $('prepFoodSec');
+  if (!pois || !foodKnown()) { sec.hidden = true; return; }
+  sec.hidden = false;
+  const times = prepTimes(stages), food = pois.filter(p => FOOD[p.k]);
+  // commerces à moins de 300 m l'un de l'autre = un seul arrêt (le bourg)
+  const lim = prepBike() ? 60000 : 25000, marks = [0, ...food.map(p => p.along), track.total], gaps = [];
+  for (let i = 1; i < marks.length; i++) if (marks[i] - marks[i - 1] >= lim) gaps.push({ from: marks[i - 1], to: marks[i], start: i === 1, end: i === marks.length - 1 });
+  for (const p of food) { p.eta = prepEtaAt(p.along, stages, times); p.o = ohAt(p.oh || '', p.eta); p.day = Math.max(0, stages.findIndex(s => p.along <= s.to + 1)); }
+  const where = g => g.start && g.end ? escH(tr('Sur tout le parcours')) : g.start ? `${escH(tr('Départ'))} → ${kmN(g.to)}${kmU()}` : g.end ? `${kmN(g.from)}${kmU()} → ${escH(tr('arrivée'))}` : `${kmN(g.from)} → ${kmN(g.to)}${kmU()}`;
+  let html = '';
+  if (gaps.length) html += `<div class="gap"><b>⚠️ ${escH(tr(gaps.length > 1 ? 'Tronçons sans commerce connu' : 'Tronçon sans commerce connu'))}</b>${gaps.map(g => `<span class="gap-row">${where(g)} : <b>${fmtDist(g.to - g.from)}</b></span>`).join('')}<small>${escH(tr('Emporte de quoi manger pour ces tronçons.'))}</small></div>`;
+  // jours où des commerces existent mais aucun n'est ouvert à ton passage (dimanche, pause de midi, jour férié…)
+  const shut = [];
+  for (let d = 0; d < stages.length; d++) { const f = food.filter(p => p.day === d); if (f.length && !f.some(p => p.o.open !== false)) shut.push(d); }
+  if (shut.length) html += `<div class="gap"><b>🔒 ${escH(tr('Commerces fermés à ton passage'))}</b>${shut.map(d => `<span class="gap-row">${stages.length > 1 ? `${escH(tr('Jour'))} ${d + 1} · ` : ''}${escH(dayLab(times[d].start))}</span>`).join('')}<small>${escH(tr('Pars plus tôt, change de jour, ou prévois tes courses avant.'))}</small></div>`;
+  if (!gaps.length && !shut.length) html += `<p class="ok">✓ <span>${escH(tr(food.length ? 'Des commerces sur le parcours' : 'Parcours court, pas de commerce repéré'))}</span></p>`;
+  $('prepFood').innerHTML = html;
+  const btn = $('prepFoodBtn'), list = $('prepFoodList');
+  btn.hidden = !food.length; list.hidden = !food.length || !prepFoodOpen;
+  if (!food.length) return;
+  const nOpen = food.filter(p => p.o.open === true).length;
+  btn.innerHTML = prepFoodOpen ? `▾ <span>${escH(tr('Masquer la liste'))}</span>` : `▸ <span>${escH(tr('Voir'))}</span> ${food.length} <span>${escH(tr(food.length > 1 ? 'commerces' : 'commerce'))}</span> · ${nOpen} <span>${escH(tr(nOpen > 1 ? 'ouverts à ton passage' : 'ouvert à ton passage'))}</span>`;
+  btn.onclick = () => { prepFoodOpen = !prepFoodOpen; prepFood(pois, stages); };
+  if (list.hidden) return;
+  let out = '', day = -1;
+  for (const p of food) {
+    if (stages.length > 1 && p.day !== day) { day = p.day; out += `<li class="pp-day"><span>${escH(tr('Jour'))}</span> ${day + 1} · ${escH(dayLab(times[day].start))}</li>`; }
+    const cls = p.o.open === true ? 'op' : p.o.open === false ? 'cl' : 'un';
+    out += `<li><button class="pp-row" data-a="${Math.round(p.along)}" data-k="${p.k}"><b>${kmN(p.along)}${kmU()}</b><span>${POI[p.k][0]} ${escH(p.nm || tr(POI[p.k][2]))}<em class="oh ${cls}">${hm(p.eta)} · ${escH(ohTxt(p.o))}</em></span><small>${p.d > 30 ? fmtDist(Math.round(p.d / 10) * 10) : ''}</small></button></li>`;
+  }
+  list.innerHTML = out + `<li class="pp-note">${escH(tr('Heure de passage estimée, pauses comprises. Horaires OpenStreetMap : vérifie sur place.'))}</li>`;
+  list.querySelectorAll('.pp-row').forEach(b => b.onclick = () => {
+    const p = food.find(q => Math.round(q.along) === +b.dataset.a && q.k === b.dataset.k); if (!p) return;
+    if (!poiOn()) { store.set('poi', '1'); $('optPoi').checked = true; }
+    prepLeave(`${POI[p.k][0]} ${p.nm || tr(POI[p.k][2])} · ${tr('passage vers')} ${hm(p.eta)} · ${ohTxt(p.o)}`);
+    map.flyTo({ center: [p.lon, p.lat], zoom: 16 });
+  });
 }
 // partir sans réseau : trace gardée, carte et chemins le long de la trace, points utiles
 // les traces préparées sont rangées dans un dossier à part de « Mes traces » : hors des 30 dernières traces ouvertes, qui s'effacent
@@ -8724,6 +8890,7 @@ async function prepRoadbook() {
   const stages = prepStages(n, pois), times = prepTimes(stages), bike = prepBike(), e = escH, t = s => e(tr(s));
   const km = d => kmN(d) + kmU(), s0 = T.pts[0], s1 = T.pts[T.pts.length - 1], ll = p => `${p.lat.toFixed(5)}, ${p.lon.toFixed(5)}`;
   const W = pois ? prepWaterGaps(pois) : null, pl = pois ? pois.filter(p => p.k === 'w' || p.k === 's' || PREP_NIGHT[p.k]) : [];
+  const fd = pois ? pois.filter(p => FOOD[p.k]) : [];
   const notes = (T.wpts || []).map(w => { const pr = project(T, w, true); return pr && pr.dist < 300 ? { along: pr.along, name: w.name || w.desc || '' } : null; }).filter(x => x && x.name);
   // profil entre deux distances : remplissage dégradé, points d'eau (bleu) et refuges sous la courbe, étapes en bandes
   const eleAt = d => { const i = pointAt(T, d).i; return T.ele[Math.min(i, T.ele.length - 1)] ?? 0; };
@@ -8755,6 +8922,7 @@ async function prepRoadbook() {
 ${prof(s.from, s.to, 700, 120)}
 ${gaps.length ? gaps.map(g => `<p class="warn">⚠️ ${km(Math.max(g.from, s.from))} → ${km(Math.min(g.to, s.to))} : ${t('pas de point d\'eau potable connu')}${g.src.length ? ` (${g.src.length} ${t(g.src.length > 1 ? 'sources, eau non garantie' : 'source, eau non garantie')})` : ''} — ${t('prévoir de quoi boire')}</p>`).join('') : ''}
 ${inDay.length ? `<ul class="pts">${inDay.map(poiLine).join('')}</ul>` : ''}
+${(() => { const f = fd.filter(p => p.along >= s.from - 1 && p.along <= s.to + 1); if (!f.length) return ''; return `<ul class="pts food">${f.map(p => { const eta = prepEtaAt(p.along, stages, times), o = ohAt(p.oh || '', eta); return `<li><b>${km(p.along)}</b> ${POI[p.k][0]} ${e(p.nm || tr(POI[p.k][2]))} <i class="${o.open === true ? 'op' : o.open === false ? 'cl' : ''}">${t('vers')} ${hm(eta)} · ${e(ohTxt(o))}</i></li>`; }).join('')}</ul>`; })()}
 ${noteL.length ? `<ul class="pts notes">${noteL.map(x => `<li><b>${km(x.along)}</b> 📍 ${e(x.name)}</li>`).join('')}</ul>` : ''}
 <p class="end">${end}</p></section>`;
   }).join('');
@@ -8780,7 +8948,7 @@ h2{font-size:12.5px;letter-spacing:.07em;text-transform:uppercase;color:#2F5E45;
 .dn{font-size:20px;font-weight:800;color:#2F5E45}.km{color:#5d6963;font-variant-numeric:tabular-nums}
 .warn{margin:8px 0 0;padding:8px 10px;border-radius:10px;background:#fbefd8;color:#5b3d00;font-size:13.5px}
 .pts{list-style:none;margin:8px 0 0;padding:0}.pts li{padding:5px 0;border-top:1px solid #edf0ea;font-size:13.5px}.pts b{display:inline-block;min-width:58px;font-variant-numeric:tabular-nums}.pts i{color:#6b746f;font-style:normal;font-size:12px}
-.when{margin:8px 0 0;font-size:14px}.end{margin:10px 0 0;padding:9px 12px;border-radius:12px;background:#e6efe8;font-size:14px}
+.when{margin:8px 0 0;font-size:14px}.food i.op{color:#2F5E45}.food i.cl{color:#b45309}.end{margin:10px 0 0;padding:9px 12px;border-radius:12px;background:#e6efe8;font-size:14px}
 .sos{border:2px solid #c62828}.sos h2{color:#c62828}.nums{display:grid;grid-template-columns:auto 1fr;gap:4px 14px;align-items:center}.nums b{font-size:24px;color:#c62828;font-variant-numeric:tabular-nums}
 .coords{margin:10px 0 0;font-variant-numeric:tabular-nums}.note{color:#5d6963;font-size:12.5px}
 .qrbox{display:flex;gap:14px;align-items:center}.qr{width:118px;height:118px;flex:none}a{color:#2F5E45;word-break:break-all}

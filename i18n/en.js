@@ -8,6 +8,33 @@ const km = (n, half) => n === 1 && !half ? '1 kilometre' : (half ? n + '.5' : n)
 const nd = s => String(s).replace(/\.$/, '');
 const plural = (n, one, many) => n + ' ' + (+n > 1 ? many : one);
 const exact = {
+  // ---- ravitaillement (v278)
+  "horaires inconnus": "hours unknown",
+  "ouvert jusqu'à": "open until",
+  "ouvert": "open",
+  "fermé": "closed",
+  "fermé · ouvre à": "closed · opens at",
+  "fermé depuis": "closed since",
+  "fermé aujourd'hui": "closed today",
+  "fermé ce jour-là": "closed that day",
+  "Épicerie": "Grocery",
+  "Boulangerie": "Bakery",
+  "Ravitaillement": "Food supplies",
+  "Tronçons sans commerce connu": "Sections with no known shop",
+  "Tronçon sans commerce connu": "Section with no known shop",
+  "Emporte de quoi manger pour ces tronçons.": "Carry enough food for these sections.",
+  "Commerces fermés à ton passage": "Shops closed when you pass",
+  "Pars plus tôt, change de jour, ou prévois tes courses avant.": "Start earlier, change day, or shop beforehand.",
+  "Des commerces sur le parcours": "Shops along the route",
+  "Parcours court, pas de commerce repéré": "Short route, no shop found",
+  "commerces": "shops",
+  "commerce": "shop",
+  "ouverts à ton passage": "open when you pass",
+  "ouvert à ton passage": "open when you pass",
+  "Heure de passage estimée, pauses comprises. Horaires OpenStreetMap : vérifie sur place.": "Estimated passing time, breaks included. OpenStreetMap hours: check on site.",
+  "passage vers": "passing around",
+  "Prochain ravitaillement": "Next food stop",
+  "ravitaillement": "food",
   // ---- navigation et Où aller (v277)
   "étape": "stage",
   "🚶 Balade libre": "🚶 Free roam",
@@ -965,6 +992,7 @@ patterns.unshift(
   [/^Sommet dans (.+?)\.$/, (m, t) => `Summit in ${t(m[1])}.`],
   [/^(.+?) parcourus\.(?: Encore (.+?)(?: et (\d+) mètres de montée)?\. Arrivée vers (.+?)\.)?$/, (m, t) => `${t(m[1])} done.` + (m[2] ? ` ${t(m[2])}${m[3] ? ' and ' + m[3] + ' metres of climbing' : ''} to go. Arriving around ${m[4]}.` : '')],
   [/^(.+?) parcourus en (.+?)\.(?: Encore (.+?)(?: et (\d+) mètres de montée)?\. Arrivée vers (.+?)\.)?$/, (m, t) => `${t(m[1])} done in ${m[2]}.` + (m[3] ? ` ${t(m[3])}${m[4] ? ' and ' + m[4] + ' metres of climbing' : ''} to go. Arriving around ${m[5]}.` : '')],
+  [/^(Épicerie|Boulangerie) dans (.+?)(?:, (?!(?:ouvert|fermé)\.$)(.+?))?(?:, (ouvert|fermé))?\.$/, (m, t) => ({ 'Épicerie': 'Grocery', Boulangerie: 'Bakery' })[m[1]] + ' in ' + t(m[2]) + (m[3] ? ', ' + m[3] : '') + (m[4] ? ', ' + { ouvert: 'open', fermé: 'closed' }[m[4]] : '') + '.'],
   [/^(Point d'eau potable|Source|Refuge gardé|Cabane|Abri|Toilettes) dans (.+?)(?:, (.+?))?\.$/, (m, t) => ({ "Point d'eau potable": 'Drinking water', Source: 'Spring', 'Refuge gardé': 'Staffed hut', Cabane: 'Cabin', Abri: 'Shelter', Toilettes: 'Toilets' })[m[1]] + ' in ' + t(m[2]) + (m[3] ? ', ' + m[3] : '') + '.'],
   [/^(.+) parcourus · (.+)$/, (m, t) => t(m[1]) + ' done · ' + m[2]]
 );

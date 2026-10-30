@@ -8,6 +8,33 @@ const plural = (n, one, many) => n + ' ' + (+n > 1 ? many : one);
 const kmEs = (n, half) => half ? (n ? (n === 1 ? 'un kilómetro y medio' : n + ' kilómetros y medio') : 'medio kilómetro') : (n === 1 ? 'un kilómetro' : n + ' kilómetros');
 const lowFirst = s => s.charAt(0).toLowerCase() + s.slice(1);
 const exact = {
+  // ---- ravitaillement (v278)
+  "horaires inconnus": "horario desconocido",
+  "ouvert jusqu'à": "abierto hasta",
+  "ouvert": "abierto",
+  "fermé": "cerrado",
+  "fermé · ouvre à": "cerrado · abre a las",
+  "fermé depuis": "cerrado desde",
+  "fermé aujourd'hui": "cerrado hoy",
+  "fermé ce jour-là": "cerrado ese día",
+  "Épicerie": "Tienda",
+  "Boulangerie": "Panadería",
+  "Ravitaillement": "Avituallamiento",
+  "Tronçons sans commerce connu": "Tramos sin tiendas conocidas",
+  "Tronçon sans commerce connu": "Tramo sin tiendas conocidas",
+  "Emporte de quoi manger pour ces tronçons.": "Lleva comida para estos tramos.",
+  "Commerces fermés à ton passage": "Tiendas cerradas a tu paso",
+  "Pars plus tôt, change de jour, ou prévois tes courses avant.": "Sal antes, cambia de día o compra antes.",
+  "Des commerces sur le parcours": "Tiendas en la ruta",
+  "Parcours court, pas de commerce repéré": "Ruta corta, sin tiendas",
+  "commerces": "tiendas",
+  "commerce": "tienda",
+  "ouverts à ton passage": "abiertas a tu paso",
+  "ouvert à ton passage": "abierta a tu paso",
+  "Heure de passage estimée, pauses comprises. Horaires OpenStreetMap : vérifie sur place.": "Hora de paso estimada, con pausas. Horarios de OpenStreetMap: compruébalos.",
+  "passage vers": "paso hacia las",
+  "Prochain ravitaillement": "Próximo avituallamiento",
+  "ravitaillement": "avituallamiento",
   // ---- navigation et Où aller (v277)
   "étape": "etapa",
   "🚶 Balade libre": "🚶 Paseo libre",
@@ -966,6 +993,7 @@ patterns.unshift(
   [/^Sommet dans (.+?)\.$/, (m, t) => `Cima en ${t(m[1])}.`],
   [/^(.+?) parcourus\.(?: Encore (.+?)(?: et (\d+) mètres de montée)?\. Arrivée vers (.+?)\.)?$/, (m, t) => `${t(m[1])} recorridos.` + (m[2] ? ` Faltan ${t(m[2])}${m[3] ? ' y ' + m[3] + ' metros de subida' : ''}. Llegada hacia las ${m[4]}.` : '')],
   [/^(.+?) parcourus en (.+?)\.(?: Encore (.+?)(?: et (\d+) mètres de montée)?\. Arrivée vers (.+?)\.)?$/, (m, t) => `${t(m[1])} recorridos en ${m[2]}.` + (m[3] ? ` Faltan ${t(m[3])}${m[4] ? ' y ' + m[4] + ' metros de subida' : ''}. Llegada hacia las ${m[5]}.` : '')],
+  [/^(Épicerie|Boulangerie) dans (.+?)(?:, (?!(?:ouvert|fermé)\.$)(.+?))?(?:, (ouvert|fermé))?\.$/, (m, t) => ({ 'Épicerie': 'Tienda', Boulangerie: 'Panadería' })[m[1]] + ' en ' + t(m[2]) + (m[3] ? ', ' + m[3] : '') + (m[4] ? ', ' + { ouvert: 'abierta', fermé: 'cerrada' }[m[4]] : '') + '.'],
   [/^(Point d'eau potable|Source|Refuge gardé|Cabane|Abri|Toilettes) dans (.+?)(?:, (.+?))?\.$/, (m, t) => ({ "Point d'eau potable": 'Agua potable', Source: 'Fuente', 'Refuge gardé': 'Refugio guardado', Cabane: 'Cabaña', Abri: 'Abrigo', Toilettes: 'Aseos' })[m[1]] + ' en ' + t(m[2]) + (m[3] ? ', ' + m[3] : '') + '.'],
   [/^(.+) parcourus · (.+)$/, (m, t) => t(m[1]) + ' recorridos · ' + m[2]]
 );
