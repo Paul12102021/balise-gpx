@@ -42,13 +42,13 @@ footer { margin-top: 40px; color: var(--muted); font-size: 14px; }
 <body>
 <main>
 <header><img src="icon-192.png" alt=""><h1>Politique de confidentialité de Pisteo</h1></header>
-<p class="date">Dernière mise à jour : 30 octobre 2026</p>
+<p class="date">Dernière mise à jour : 31 octobre 2026</p>
 
 <div class="box">
   <b>En bref</b>
   <ul>
     <li>Pisteo fonctionne <b>sans compte</b>, <b>sans publicité</b> et <b>sans outil de mesure d'audience</b>.</li>
-    <li>Tes traces, tes sorties, ta position et tes réglages restent <b>sur ton téléphone</b>. L'éditeur de Pisteo n'y a pas accès et ne les reçoit jamais.</li>
+    <li>Tes traces, tes sorties, ta position et tes réglages restent <b>sur ton téléphone</b>. L'éditeur de Pisteo n'y a pas accès. Seule exception, à ta demande : le <b>suivi en direct</b>, qui envoie ta position pour que les personnes à qui tu donnes le lien puissent te suivre ; elle est effacée 24 h après la fin du partage.</li>
     <li>Pour afficher les cartes, calculer un itinéraire ou chercher un lieu, l'appli interroge des services en ligne, qui reçoivent seulement ce qui est nécessaire (la zone de carte affichée, les points d'un itinéraire, le texte d'une recherche).</li>
     <li>Rien n'est vendu ni partagé à des fins publicitaires.</li>
   </ul>
@@ -68,7 +68,9 @@ footer { margin-top: 40px; color: var(--muted); font-size: 14px; }
 <p>Ces données ne quittent ton téléphone que si tu le décides : export d’un GPX, création d’une sauvegarde, envoi d’une sortie sur Strava, ou envoi d’un avis par e-mail (le message contient alors ton texte, la version de Pisteo et le modèle de ton téléphone). Le fichier de sauvegarde est créé sur ton téléphone ; c'est toi qui choisis où le ranger (Drive, mail, ordinateur…). Il ne contient pas la connexion Strava.</p>
 
 <h2>Ta position</h2>
-<p>Pisteo utilise la position de ton téléphone pour te placer sur la carte, te guider le long de la trace, t'alerter si tu en sors et enregistrer ta sortie. La position n'est utilisée que pendant que l'appli est ouverte, et seulement après ton autorisation, que tu peux retirer à tout moment dans les réglages du téléphone. Elle n'est jamais envoyée à l'éditeur de Pisteo.</p>
+<p>Pisteo utilise la position de ton téléphone pour te placer sur la carte, te guider le long de la trace, t'alerter si tu en sors et enregistrer ta sortie. Elle n'est utilisée que pendant que l'appli est ouverte, ou pendant une navigation ou un enregistrement que tu as lancés (y compris écran verrouillé, avec une notification visible tant que c'est le cas), et seulement après ton autorisation, que tu peux retirer à tout moment dans les réglages du téléphone.</p>
+<p><b>Suivi en direct.</b> Seulement si tu l'actives (« Suivi en direct par un proche ») : pendant la navigation, ta position est envoyée toutes les 3 minutes au relais Pisteo (Cloudflare), avec le nom et le tracé simplifié du parcours, la distance restante et le niveau de batterie. Ces informations ne sont visibles que par les personnes qui ont le lien, une adresse aléatoire impossible à deviner. Le partage s'arrête à la fin de la navigation (ou quand tu touches « Arrêter », au plus tard après 24 h), puis tout est effacé 24 h plus tard. Aucun nom ni compte n'y est associé.</p>
+<p>En dehors du suivi en direct, ta position n'est jamais envoyée à l'éditeur de Pisteo.</p>
 
 <h2>Les services en ligne utilisés</h2>
 <p>Comme pour n'importe quel site web, chaque service contacté reçoit l'adresse IP de ton téléphone et des informations techniques sur le navigateur. Chacun applique sa propre politique de confidentialité.</p>
@@ -90,19 +92,20 @@ footer { margin-top: 40px; color: var(--muted); font-size: 14px; }
     <tr><td>Statistiques anonymes (relais Pisteo, Cloudflare)</td><td>Améliorer l'appli : savoir quelles fonctions servent, repérer les bugs. Désactivable dans Réglages › « Partager des statistiques anonymes »</td><td>Une fois par jour, des compteurs de la veille (par ex. « 2 navigations, 12 km à vélo, météo affichée 1 fois »), la langue, la version de l'appli et du système (par ex. Android 14), appli ou navigateur, quelques réglages, l'ancienneté de l'installation (en jours), le pays d'envoi (déduit par notre hébergeur Cloudflare au moment de l'envoi ; l'adresse IP n'est pas conservée), et pendant les sorties la batterie consommée et la précision du GPS par tranche (bonne, moyenne, mauvaise), ainsi que des temps de chargement et les réussites ou échecs des services d'itinéraire. <b>Aucun identifiant, aucune position, aucun tracé</b> ; les compteurs de tous les appareils sont additionnés par jour.</td></tr>
     <tr><td>Google Drive</td><td>Seulement si tu actives la sauvegarde Drive : enregistrer et restaurer ta sauvegarde</td><td>Le fichier de sauvegarde (sorties, traces, réglages, liste des cartes), rangé dans un dossier caché réservé à Pisteo sur <b>ton</b> Drive. Pisteo n'a accès qu'à ce dossier, pas à tes autres fichiers (autorisation « drive.appdata »). Aucune copie ne passe par l'éditeur.</td></tr>
     <tr><td>Catalogue Pisteo (relais Cloudflare, api.pisteo.app)</td><td>Liste des parcours recommandés ; publication d'un parcours, seulement si tu le proposes ; signalement d'un parcours</td><td>Pour une proposition : le tracé, son nom, sa description, ses points notés et ses photos (réenregistrées sans position GPS ni autres métadonnées), qui deviennent publics sans ton nom. Ton adresse IP n'est gardée que sous forme chiffrée, pour limiter le nombre de propositions et de signalements</td></tr>
+    <tr><td>Suivi en direct (relais Pisteo, Cloudflare, api.pisteo.app)</td><td>Seulement si tu partages un lien de suivi : permettre à tes proches de voir où tu es</td><td>Pendant le partage, toutes les 3 minutes : ta position (et sa précision), l'heure, la distance restante et parcourue, le niveau de batterie ; au départ, le nom et le tracé simplifié du parcours. Lisible par toute personne ayant le lien ; effacé 24 h après la fin du partage. La page de suivi affiche la carte OpenFreeMap.</td></tr>
     <tr><td>Strava, via un relais Cloudflare</td><td>Seulement si tu connectes ton compte Strava : connexion et envoi des sorties</td><td>Le fichier GPX de la sortie envoyée et ton jeton de connexion. Le relais transmet la demande à Strava sans rien enregistrer.</td></tr>
   </tbody>
 </table>
 
 <h2>Ce que Pisteo ne fait pas</h2>
 <ul>
-  <li>Pas de compte utilisateur ni de serveur qui stocke tes données.</li>
+  <li>Pas de compte utilisateur, et pas de serveur qui garde tes sorties ou ta position (sauf, à ta demande, pendant un suivi en direct et 24 h après).</li>
   <li>Pas de publicité, pas de traceur, pas de mesure d'audience.</li>
   <li>Pas de revente ni de partage de données à des fins commerciales.</li>
 </ul>
 
 <h2>Combien de temps les données sont gardées</h2>
-<p>Tes données restent sur ton téléphone tant que tu ne les supprimes pas. Les traces ouvertes sont limitées aux 30 dernières ; les sorties enregistrées sont gardées sans limite.</p>
+<p>Tes données restent sur ton téléphone tant que tu ne les supprimes pas. Les traces ouvertes sont limitées aux 30 dernières ; les sorties enregistrées sont gardées sans limite. Les positions d'un suivi en direct sont effacées du relais 24 h après la fin du partage.</p>
 
 <h2>Supprimer tes données</h2>
 <ul>
@@ -111,10 +114,11 @@ footer { margin-top: 40px; color: var(--muted); font-size: 14px; }
   <li>Google Drive : désactive la sauvegarde automatique dans l'appli, puis retire l'accès de Pisteo sur myaccount.google.com › Sécurité › Applications tierces : la sauvegarde rangée dans le dossier caché est alors supprimée de ton Drive.</li>
   <li>Strava : « Se déconnecter de Strava » dans l'appli, puis retire l'accès de Pisteo dans les réglages de ton compte Strava. Les sorties déjà envoyées sur Strava se suppriment depuis Strava.</li>
 </ul>
-<p>L'éditeur ne détenant aucune de tes données, il n'a rien à supprimer de son côté.</p>
+<ul style="margin-top:0"><li>Suivi en direct : touche « Arrêter » (ou termine la navigation) ; les positions sont effacées automatiquement 24 h après. Pour un effacement immédiat, écris à l'adresse ci-dessus en donnant le lien de suivi.</li></ul>
+<p>En dehors d'un suivi en direct récent, l'éditeur ne détient aucune de tes données et n'a rien à supprimer de son côté.</p>
 
 <h2>Tes droits</h2>
-<p>Conformément au RGPD, tu peux demander l'accès, la rectification ou l'effacement de données te concernant en écrivant à <a href="mailto:pisteo.app@gmail.com">pisteo.app@gmail.com</a>. En pratique, Pisteo ne détenant aucune donnée sur toi, la réponse portera sur les services listés plus haut. Tu peux aussi adresser une réclamation à la <a href="https://www.cnil.fr">CNIL</a>.</p>
+<p>Conformément au RGPD, tu peux demander l'accès, la rectification ou l'effacement de données te concernant en écrivant à <a href="mailto:pisteo.app@gmail.com">pisteo.app@gmail.com</a>. En pratique, Pisteo ne détient aucune donnée sur toi, hormis les positions d'un suivi en direct de moins de 24 h ; la réponse portera sur les services listés plus haut. Tu peux aussi adresser une réclamation à la <a href="https://www.cnil.fr">CNIL</a>.</p>
 
 <h2>Enfants</h2>
 <p>Pisteo ne s'adresse pas spécialement aux enfants et ne collecte sciemment aucune donnée les concernant.</p>
