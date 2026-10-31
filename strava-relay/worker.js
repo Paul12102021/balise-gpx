@@ -17,13 +17,16 @@
 // Alertes sur le téléphone de Paul (appli gratuite ntfy, sans compte) :
 //   NTFY_TOPIC  (secret)  nom de canal ntfy.sh, long et impossible à deviner ; vide = pas d'alerte
 //   → panne gênante qui commence ou se termine (services), et chaque matin s'il y a eu des erreurs chez les utilisateurs la veille
+//
+// Suivi en direct (routes /live…, page pisteo.app/suivi/#<id>) : table « live » dans la base STATS, créée toute seule.
+//   Un lien par sortie ; la position n'est lisible que par qui a le lien ; effacée 24 h après la fin du partage.
 
 const API = 'https://www.strava.com/api/v3';
 
 export default {
   // vérification des services extérieurs (déclencheur Cron du worker, toutes les heures) → https://api.pisteo.app/etat
   // espacée : rien la nuit, toutes les 2 h en journée, toutes les heures tant qu'un service est en panne (voir etatDue)
-  async scheduled(ev, env, ctx) { ctx.waitUntil(Promise.all([stFold(env).catch(() => 0).then(() => morningCheck(env)).catch(() => 0), etatDue(env).then(go => go && etatCheck(env))])); },
+  async scheduled(ev, env, ctx) { ctx.waitUntil(Promise.all([liveClean(env).catch(() => 0), stFold(env).catch(() => 0).then(() => morningCheck(env)).catch(() => 0), etatDue(env).then(go => go && etatCheck(env))])); },
   async fetch(req, env, ctx) {
     const origin = req.headers.get('Origin') || '';
     const allowed = (env.ALLOWED_ORIGIN || '').split(',').map(s => s.trim()).filter(Boolean);
@@ -47,6 +50,10 @@ export default {
     if (!okOrigin) return new Response('Origine refusée', { status: 403, headers: cors });
     if (path === '/stats' && req.method === 'POST') {
       try { return await statsIn(req, env, json); } catch (e) { return json({ ok: false }, 500); }
+    }
+    if (path.startsWith('/live')) {
+      try { return await live(req, env, path, json); }
+      catch (e) { return json({ ok: false, message: 'Erreur du serveur, réessaie plus tard.' }, 500); }
     }
     if (path.startsWith('/catalogue')) {
       try { return await catalogue(req, env, path, json); }
@@ -916,3 +923,49 @@ async function etatGet(env, url, ctx) {
   return new Response(`<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Pisteo · état des services</title>
 <style>body{font:15px system-ui;margin:16px;background:#f6f7f5;color:#1d2a24}</style><h1>État des services</h1><p>${etatResume(e)} · <a href="?format=page&maintenant=1">revérifier</a></p>${etatTable(e)}`, { headers: { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store' } });
 }
+
+// =====================================================================
+// Suivi en direct : la personne qui marche envoie sa position (toutes les quelques minutes),
+// ses proches ouvrent pisteo.app/suivi/#<id> et voient le parcours, le chemin fait et la dernière position.
+// POST /live            { name, line, until }          → { id, token }   (line : parcours simplifié [[lon,lat]…])
+// POST /live/<id>       { lat, lon, t, acc, along, rem } + Authorization: Bearer <token>
+// POST /live/<id>/stop  (Authorization)                 → fin du partage
+// GET  /live/<id>       → { name, line, pos, trail, until, ended }
+// =====================================================================
+const LIVE_SQL = 'CREATE TABLE IF NOT EXISTS live (id TEXT PRIMARY KEY, token TEXT NOT NULL, name TEXT, line TEXT, until INTEGER NOT NULL, pos TEXT, trail TEXT, ended INTEGER NOT NULL DEFAULT 0, created INTEGER NOT NULL)';
+let liveReady = false;
+async function liveInit(env) { if (!liveReady) { await env.STATS.prepare(LIVE_SQL).run(); liveReady = true; } }
+const liveRand = n => { const a = 'abcdefghijkmnopqrstuvwxyz23456789', b = crypto.getRandomValues(new Uint8Array(n)); return [...b].map(x => a[x % a.length]).join(''); };
+const num = (v, lo, hi) => typeof v === 'number' && isFinite(v) && v >= lo && v <= hi;
+async function live(req, env, path, json) {
+  await liveInit(env);
+  const now = Date.now();
+  if (path === '/live' && req.method === 'POST') {
+    const b = await req.json().catch(() => ({}));
+    const name = String(b.name || 'Sortie').slice(0, 80);
+    let line = Array.isArray(b.line) ? b.line.filter(p => Array.isArray(p) && num(p[0], -180, 180) && num(p[1], -90, 90)).slice(0, 1500).map(p => [+p[0].toFixed(5), +p[1].toFixed(5)]) : [];
+    const until = Math.min(num(b.until, now, now + 72 * 36e5) ? b.until : now + 24 * 36e5, now + 72 * 36e5);
+    const id = liveRand(10), token = liveRand(24);
+    await env.STATS.prepare('INSERT INTO live (id, token, name, line, until, trail, created) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)').bind(id, token, name, JSON.stringify(line), until, '[]', now).run();
+    return json({ ok: true, id, token, until });
+  }
+  const m = path.match(/^\/live\/([a-z0-9]{10})(\/stop)?$/); if (!m) return json({ ok: false }, 404);
+  const row = await env.STATS.prepare('SELECT * FROM live WHERE id = ?1').bind(m[1]).first();
+  if (!row) return json({ ok: false, message: 'Ce suivi n\'existe plus.' }, 404);
+  if (req.method === 'GET') {
+    return json({ ok: true, name: row.name, line: JSON.parse(row.line || '[]'), pos: row.pos ? JSON.parse(row.pos) : null, trail: JSON.parse(row.trail || '[]'),
+      until: row.until, ended: !!row.ended || row.until < now, now });
+  }
+  if (req.method !== 'POST') return json({ ok: false }, 405);
+  if ((req.headers.get('Authorization') || '') !== 'Bearer ' + row.token) return json({ ok: false }, 403);
+  if (m[2]) { await env.STATS.prepare('UPDATE live SET ended = 1, until = ?2 WHERE id = ?1').bind(row.id, Math.min(row.until, now)).run(); return json({ ok: true }); }
+  if (row.ended || row.until < now) return json({ ok: false, ended: true }, 410);
+  const b = await req.json().catch(() => ({}));
+  if (!num(b.lat, -90, 90) || !num(b.lon, -180, 180)) return json({ ok: false }, 400);
+  const pos = { lat: +b.lat.toFixed(5), lon: +b.lon.toFixed(5), t: num(b.t, now - 36e5, now + 6e4) ? b.t : now, acc: num(b.acc, 0, 1e5) ? Math.round(b.acc) : null,
+    along: num(b.along, 0, 1e7) ? Math.round(b.along) : null, rem: num(b.rem, 0, 1e7) ? Math.round(b.rem) : null, bat: num(b.bat, 0, 100) ? Math.round(b.bat) : null };
+  const trail = JSON.parse(row.trail || '[]'); trail.push([pos.lon, pos.lat, pos.t]);
+  await env.STATS.prepare('UPDATE live SET pos = ?2, trail = ?3 WHERE id = ?1').bind(row.id, JSON.stringify(pos), JSON.stringify(trail.slice(-600))).run();
+  return json({ ok: true, until: row.until });
+}
+async function liveClean(env) { await liveInit(env); await env.STATS.prepare('DELETE FROM live WHERE until < ?1').bind(Date.now() - 864e5).run(); }
