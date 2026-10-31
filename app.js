@@ -5,7 +5,7 @@
 
 // La page et le code doivent être de la même version. Sinon (page gardée en cache
 // par le téléphone ou par GitHub), on recharge une page fraîche, au plus 3 fois.
-const APP_VERSION = 285;
+const APP_VERSION = 286;
 // lien « pisteo.app/?moi=1 » (ou ?moi=0) : cet appareil est compté à part dans les statistiques (développeur).
 // Lu avant tout rechargement de version, qui ne garde pas les paramètres de l'adresse.
 try {
@@ -7427,6 +7427,32 @@ function toggleMore(open, instant) {
   want ? moreMotion().open(instant) : moreMotion().close(instant);
 }
 $('btnMore').onclick = () => toggleMore(); $('grip').onclick = () => toggleMore();
+// ---------- appli Android : la notification de navigation montre l'essentiel (écran verrouillé) ----------
+// d'habitude : restant · D+ · arrivée ; à moins de 300 m d'un virage : le virage ; hors trace : l'alerte
+let notifTxt = '', notifT = 0, notifMode = '';
+function notifText() {
+  const tone = $('navTop').dataset.tone, txt = $('ntTxt').textContent.trim(), d = $('ntDist').textContent.trim();
+  if (tone === 'off' || tone === 'done' || tone === 'gps') return ['alert', txt + (d ? ' · ' + d : '')];
+  if (nextDist <= 300 && d) return ['turn', `${d} : ${txt}`];
+  if (!track) return ['free', `${fmtDist(freeD)} ${tr('parcourus')}`];
+  const info = remainingInfo(); if (!info) return null;
+  const parts = [`${fmtDist(info.rem)} ${tr('restants')}`];
+  if (track.hasEle && info.up >= 10) parts.push('D+ ' + fmtM(info.up));
+  if (info.secs > 0) parts.push(`${tr('arrivée')} ${hm(Date.now() + info.secs * 1000)}`);
+  return ['stats', parts.join(' · ')];
+}
+function notifUpdate() {
+  if (!AND || !AND.tracking || !bgOn || !nav) { notifMode = ''; return; }
+  const r = notifText(); if (!r) return;
+  const [mode, t] = r, now = Date.now();
+  if (t === notifTxt) return;
+  // texte qui change à chaque pas (virage, alerte) : au plus toutes les 8 s ; chiffres : toutes les 30 s ; changement de genre : tout de suite
+  if (mode === notifMode && now - notifT < (mode === 'stats' || mode === 'free' ? 30000 : 8000)) return;
+  notifTxt = t; notifT = now; notifMode = mode;
+  try { AND.tracking(true, t); } catch {}
+}
+updateStats = (fn => function () { const r = fn.apply(this, arguments); try { notifUpdate(); } catch {} return r; })(updateStats);
+bgTrack = (fn => function () { notifTxt = ''; notifMode = ''; return fn.apply(this, arguments); })(bgTrack);
 // ---------- suivi en direct : un lien pour que des proches voient ta position (page pisteo.app/suivi/) ----------
 // la position part vers le relais Pisteo toutes les 3 minutes ; le partage s'arrête à la fin de la navigation (24 h au plus)
 const LIVE_API = STRAVA_RELAY + '/live', LIVE_EVERY = 180e3;

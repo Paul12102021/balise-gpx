@@ -8,6 +8,8 @@ const km = (n, half) => n === 1 && !half ? '1 kilometre' : (half ? n + '.5' : n)
 const nd = s => String(s).replace(/\.$/, '');
 const plural = (n, one, many) => n + ' ' + (+n > 1 ? many : one);
 const exact = {
+  "parcourus": "covered",
+  "restants": "left",
   "Suivi en direct par un proche": "Live tracking for someone close",
   "Suivi en direct actif": "Live tracking on",
   "Suivi en direct": "Live tracking",

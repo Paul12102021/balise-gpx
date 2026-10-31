@@ -8,6 +8,8 @@ const plural = (n, one, many) => n + ' ' + (+n > 1 ? many : one);
 const kmEs = (n, half) => half ? (n ? (n === 1 ? 'un kilómetro y medio' : n + ' kilómetros y medio') : 'medio kilómetro') : (n === 1 ? 'un kilómetro' : n + ' kilómetros');
 const lowFirst = s => s.charAt(0).toLowerCase() + s.slice(1);
 const exact = {
+  "parcourus": "recorridos",
+  "restants": "restantes",
   "Suivi en direct par un proche": "Seguimiento en directo",
   "Suivi en direct actif": "Seguimiento en directo activo",
   "Suivi en direct": "Seguimiento en directo",
