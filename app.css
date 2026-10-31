@@ -1144,3 +1144,6 @@ body.dropping::after { content: 'Dépose le fichier GPX pour l\'ouvrir'; positio
 .side-only { display: none; }
 body.side .side-only { display: block; }
 #prepToPhone { margin-top: 8px; width: 100%; }
+
+.surf-chip { background: var(--field); border-radius: 12px; padding: 6px 10px; margin: 0 0 4px; cursor: pointer; }
+.surf-chip[hidden] { display: none; }

@@ -8,6 +8,10 @@ const km = (n, half) => n === 1 && !half ? '1 kilometre' : (half ? n + '.5' : n)
 const nd = s => String(s).replace(/\.$/, '');
 const plural = (n, one, many) => n + ' ' + (+n > 1 ? many : one);
 const exact = {
+  'Types de voie (route, piste, chemin)': 'Surface types (road, cycle path, track)',
+  'Recherche des types de voie…': 'Looking up surface types…',
+  'Pas de réseau : les types de voie viennent d\'OpenStreetMap.': 'No network: surface types come from OpenStreetMap.',
+  'Types de voie indisponibles (serveurs OpenStreetMap saturés), réessaie dans un moment.': 'Surface types unavailable (OpenStreetMap servers busy), try again shortly.',
   'Bande cyclable': 'Cycle lane',
   'Chemin': 'Track',
   'Petite route': 'Minor road',

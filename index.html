@@ -9,13 +9,13 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<meta name="balise-version" content="290">
+<meta name="balise-version" content="291">
 <title>Pisteo</title>
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" href="icon.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
 <link rel="stylesheet" href="vendor/maplibre-gl.css">
-<link rel="stylesheet" href="app.css?v=290">
+<link rel="stylesheet" href="app.css?v=291">
 </head>
 <body>
 <div id="map" aria-label="Carte"></div>
@@ -158,6 +158,10 @@
         <svg viewBox="0 0 24 24"><path d="M9 18h6M10 21h4"/><path d="M12 3a6 6 0 0 0-3.5 10.9c.6.5 1 1.2 1 2.1h5c0-.9.4-1.6 1-2.1A6 6 0 0 0 12 3z"/></svg>
         <span>Éclairage la nuit</span>
       </button>
+      <button role="menuitem" id="btnSurf" class="closebtn icon wx-btn" hidden aria-label="Types de voie le long du parcours" title="Types de voie">
+        <svg viewBox="0 0 24 24"><path d="M4 21 9 3M20 21 15 3"/><path d="M12 5v2M12 11v2M12 17v2"/></svg>
+        <span>Types de voie (route, piste, chemin)</span>
+      </button>
       <button role="menuitem" id="btnReverse" class="closebtn icon" hidden aria-label="Inverser le sens de la trace" title="Inverser le sens">
         <svg viewBox="0 0 24 24"><path d="M7 4 3 8l4 4"/><path d="M3 8h13"/><path d="m17 12 4 4-4 4"/><path d="M21 16H8"/></svg>
         <span>Inverser le sens</span>
@@ -194,6 +198,7 @@
     <span id="sunChip" class="chip sun-chip"></span>
   </div>
   <div id="litChip" class="lit-chip" hidden></div>
+  <div id="surfChip" class="surf-chip" hidden><div id="surfMix" class="rt-mix"></div></div>
   <div class="prof-wrap">
     <canvas id="profile" aria-label="Profil altimétrique"></canvas>
   </div>
@@ -1024,8 +1029,8 @@
 
 <script src="vendor/maplibre-gl.js"></script>
 <script src="vendor/qrcode.js"></script>
-<script src="i18n/en.js?v=290"></script>
-<script src="i18n/es.js?v=290"></script>
-<script src="app.js?v=290"></script>
+<script src="i18n/en.js?v=291"></script>
+<script src="i18n/es.js?v=291"></script>
+<script src="app.js?v=291"></script>
 </body>
 </html>

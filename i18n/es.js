@@ -8,6 +8,10 @@ const plural = (n, one, many) => n + ' ' + (+n > 1 ? many : one);
 const kmEs = (n, half) => half ? (n ? (n === 1 ? 'un kilómetro y medio' : n + ' kilómetros y medio') : 'medio kilómetro') : (n === 1 ? 'un kilómetro' : n + ' kilómetros');
 const lowFirst = s => s.charAt(0).toLowerCase() + s.slice(1);
 const exact = {
+  'Types de voie (route, piste, chemin)': 'Tipos de vía (carretera, carril bici, camino)',
+  'Recherche des types de voie…': 'Buscando los tipos de vía…',
+  'Pas de réseau : les types de voie viennent d\'OpenStreetMap.': 'Sin red: los tipos de vía vienen de OpenStreetMap.',
+  'Types de voie indisponibles (serveurs OpenStreetMap saturés), réessaie dans un moment.': 'Tipos de vía no disponibles (servidores de OpenStreetMap saturados), inténtalo en un momento.',
   'Bande cyclable': 'Carril bici pintado',
   'Chemin': 'Camino',
   'Petite route': 'Carretera secundaria',

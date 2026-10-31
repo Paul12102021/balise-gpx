@@ -5,7 +5,7 @@
 
 // La page et le code doivent être de la même version. Sinon (page gardée en cache
 // par le téléphone ou par GitHub), on recharge une page fraîche, au plus 3 fois.
-const APP_VERSION = 290;
+const APP_VERSION = 291;
 // lien « pisteo.app/?moi=1 » (ou ?moi=0) : cet appareil est compté à part dans les statistiques (développeur).
 // Lu avant tout rechargement de version, qui ne garde pas les paramètres de l'adresse.
 try {
@@ -1090,7 +1090,7 @@ async function showTrack(t, fit = true) {
   const mine = track;
   await ready;
   if (track !== mine) return; // une autre trace a été ouverte entre-temps
-  setSrc('track', lineFeature(track.pts)); setDone(doneInfo().along / (track.total || 1), true); litUI();
+  setSrc('track', lineFeature(track.pts)); setDone(doneInfo().along / (track.total || 1), true); litUI(); surfUI();
   startMk.setLngLat([t.pts[0].lon, t.pts[0].lat]).addTo(map); drawNotes(); osmLoad();
   const last = t.pts[t.pts.length - 1];
   endMk.setLngLat([last.lon, last.lat]).addTo(map);
@@ -1107,10 +1107,10 @@ function closeTrack(quiet) {
   const savedText = store.get('gpx');
   if (nav) stopNav();
   track = null; progress = null; done = null; clearRejoin(); $('loopBar').hidden = true; $('rtBar').hidden = true;
-  litShown = false; wxOn = false; wxDep = null; scrubD = null; if (scrubMk) scrubMk.remove(); wxApply(); trChipsUpdate(); // la météo part avec la trace
+  litShown = false; surfShown = false; wxOn = false; wxDep = null; scrubD = null; if (scrubMk) scrubMk.remove(); wxApply(); trChipsUpdate(); // la météo part avec la trace
   // parcours balisés : on quitte leur affichage avec la trace (sauf si leur panneau est ouvert)
   if (rtMapOn && $('routes').hidden) rtHideMap();
-  setSrc('track', EMPTY); setSrc('turn', EMPTY); litUI();
+  setSrc('track', EMPTY); setSrc('turn', EMPTY); litUI(); surfUI();
   startMk.remove(); endMk.remove(); drawNotes(); trackDescUI(); osmNotes = []; osmDraw();
   store.set('gpx', '');
   try { sheetFull(); } catch {}
@@ -5684,11 +5684,13 @@ function drawProfileOn(cv) {
   // marge gauche à la largeur des altitudes affichées (pas d'espace perdu avant elles)
   const ticks = eleTicks(lo, hi, [10, 20, 50, 100, 200, 250, 500, 1000]);
   const L0 = Math.ceil(Math.max(14, ...ticks.map(t => ctx.measureText(t[1]).width))) + 5; cv._L0 = L0;
-  const LB = track.lit && litShown ? 7 : 0; // bande « éclairage »
+  const SB = surfShown && surfFor(track) ? 7 : 0; // bande « types de voie »
+  const LB = (track.lit && litShown ? 7 : 0) + SB; // bande « éclairage »
   const B = (T ? 26 : 16) + LB, w = W - L0 - 4, h = H - B - 4 - T; // météo : place pour la bande « ciel » au-dessus des km
   const X = d => L0 + d / track.total * w, Y = e => 4 + T + (1 - (e - lo) / (hi - lo)) * h;
   if (T) wxBands(ctx, X, 4 + T, h);
-  if (LB) litBand(ctx, X, 4 + T + h + (T ? 15 : 2));
+  if (LB > SB) litBand(ctx, X, 4 + T + h + (T ? 15 : 2));
+  if (SB) surfBand(ctx, X, 4 + T + h + (T ? 15 : 2) + LB - SB);
   ctx.strokeStyle = cssVar('--line'); ctx.lineWidth = 1; ctx.textAlign = 'right'; ctx.textBaseline = 'middle';
   for (const [v, lab] of ticks) {
     const y = Math.round(Y(v)) + .5; ctx.beginPath(); ctx.moveTo(L0, y); ctx.lineTo(W, y); ctx.stroke(); ctx.fillText(lab, L0 - 4, y);
@@ -8360,6 +8362,98 @@ function isDarkNow() {
 $('btnLit').onclick = () => { litShown = !litShown; litUI(); drawProfile(); };
 $('optLit').checked = store.get('litNight') === '1';
 $('optLit').onchange = e => store.set('litNight', e.target.checked ? '1' : '0');
+
+// ---------- types de voie le long de la trace (menu « … ») : piste cyclable, chemin, petite route, route… ----------
+// Les voies OpenStreetMap autour de la trace ; tous les 20 m, la voie la plus proche qui va dans le même sens.
+var surfShown = false, surfBusy = false;
+const surfCache = new Map();
+function surfFor(t) { return t && t.pts.length > 1 ? surfCache.get(litKey(t.pts, t.total)) || null : null; }
+async function surfCompute(p) {
+  const sp = simplifyDP(p.pts, 3000), coords = [];
+  for (let i = 0; i < sp.length; i += 199) coords.push(sp.slice(i, i + 200).map(q => q.lat.toFixed(5) + ',' + q.lon.toFixed(5)).join(','));
+  const f = `[highway][highway!~"${NET_SKIP}"]`;
+  const json = await overpassFast(`[out:json][timeout:90];(${coords.map(c => `way(around:25,${c})${f};`).join('')});out tags geom qt;`, null, true, null, false);
+  if (!json || !json.elements) throw new Error('pas de réponse');
+  const C = 0.0003, grid = new Map(), cell = (la, lo) => Math.floor(la / C) + ':' + Math.floor(lo / C);
+  for (const w of json.elements) {
+    if (w.type !== 'way' || !w.geometry) continue;
+    const k = rtWayKind(w.tags || {}), g = w.geometry;
+    for (let i = 1; i < g.length; i++) {
+      const s0 = g[i - 1], s1 = g[i]; if (!s0 || !s1) continue;
+      const s = [s0, s1, k, bearing(s0, s1)];
+      const la0 = Math.min(s0.lat, s1.lat), la1 = Math.max(s0.lat, s1.lat), lo0 = Math.min(s0.lon, s1.lon), lo1 = Math.max(s0.lon, s1.lon);
+      if ((la1 - la0) / C > 40 || (lo1 - lo0) / C > 40) continue;
+      for (let y = Math.floor(la0 / C) - 1; y <= Math.floor(la1 / C) + 1; y++) for (let x = Math.floor(lo0 / C) - 1; x <= Math.floor(lo1 / C) + 1; x++) {
+        const key = y + ':' + x; let arr = grid.get(key); if (!arr) grid.set(key, arr = []); arr.push(s);
+      }
+    }
+  }
+  const STEP = 20, ks = [];
+  for (let d = 0; d <= p.total; d += STEP) {
+    const q = pointAt(p, d), dir = bearing(pointAt(p, Math.max(0, d - 10)), pointAt(p, Math.min(p.total, d + 10)));
+    let best = null, bs = Infinity;
+    for (const s of grid.get(cell(q.lat, q.lon)) || []) {
+      const dist = segDist(q, s[0], s[1]); if (dist > 25) continue;
+      const turn = Math.abs(angDiff(dir, s[3])), same = turn < 40 || turn > 140; // une voie qui croise compte moins
+      const sc = dist + (same ? 0 : 15); if (sc < bs) { bs = sc; best = s[2]; }
+    }
+    ks.push(best || 'au');
+  }
+  // petits morceaux isolés (≤ 40 m, souvent un carrefour) : pris comme ce qui les entoure
+  for (let i = 1; i < ks.length - 1; i++) {
+    if (ks[i] === ks[i - 1]) continue;
+    let j = i; while (j < ks.length && ks[j] === ks[i]) j++;
+    if (j - i <= 2 && j < ks.length && ks[j] === ks[i - 1]) for (let m = i; m < j; m++) ks[m] = ks[i - 1];
+  }
+  const segs = [];
+  ks.forEach((k, i) => { const a0 = Math.min(1, i * STEP / p.total), b0 = Math.min(1, (i + 1) * STEP / p.total), last = segs[segs.length - 1]; if (a0 >= 1) return; if (last && last[2] === k) last[1] = b0; else segs.push([a0, b0, k]); });
+  return segs;
+}
+function surfUI() {
+  const segs = track && surfShown && !nav ? surfFor(track) : null;
+  $('btnSurf').hidden = !track || nav; $('btnSurf').classList.toggle('on', !!segs);
+  const feats = [];
+  if (segs) {
+    const m = {};
+    for (const [a0, b0, k] of segs) {
+      m[k] = (m[k] || 0) + (b0 - a0);
+      const c = []; for (let d = a0 * track.total; d <= b0 * track.total + 1; d += Math.max(8, (b0 - a0) * track.total / 60)) { const q = pointAt(track, Math.min(d, b0 * track.total)); c.push([q.lon, q.lat]); }
+      if (c.length > 1) feats.push({ type: 'Feature', properties: { col: RT_MIX.find(x => x[0] === k)[2] }, geometry: { type: 'LineString', coordinates: c } });
+    }
+    rtMixShow($('surfMix'), m);
+  }
+  $('surfChip').hidden = !segs;
+  const data = { type: 'FeatureCollection', features: feats };
+  try {
+    if (map.getSource('surf')) map.getSource('surf').setData(data);
+    else if (feats.length) {
+      map.addSource('surf', { type: 'geojson', data });
+      const w = (x, y) => ['interpolate', ['linear'], ['zoom'], 9, x, 16, y];
+      map.addLayer({ id: 'surf-casing', type: 'line', source: 'surf', layout: { 'line-join': 'round', 'line-cap': 'round' }, paint: { 'line-color': '#fff', 'line-width': w(6, 14) } });
+      map.addLayer({ id: 'surf', type: 'line', source: 'surf', layout: { 'line-join': 'round', 'line-cap': 'round' }, paint: { 'line-color': ['get', 'col'], 'line-width': w(4, 9) } });
+    }
+  } catch { /* carte pas prête */ }
+}
+// bande de couleur sous le profil
+function surfBand(ctx, X, y) {
+  for (const [a0, b0, k] of surfFor(track) || []) { ctx.fillStyle = RT_MIX.find(x => x[0] === k)[2]; ctx.fillRect(X(a0 * track.total), y, Math.max(1, X(b0 * track.total) - X(a0 * track.total)), 4); }
+}
+$('btnSurf').onclick = async () => {
+  if (surfShown) { surfShown = false; surfUI(); drawProfile(); return; }
+  const t = track; if (!t || surfBusy) return;
+  if (!surfFor(t)) {
+    if (navigator.onLine === false) { toast('Pas de réseau : les types de voie viennent d\'OpenStreetMap.', 4000); return; }
+    surfBusy = true; toast('Recherche des types de voie…', 20000);
+    try { surfCache.set(litKey(t.pts, t.total), await surfCompute(t)); if (surfCache.size > 20) surfCache.delete(surfCache.keys().next().value); $('toast').hidden = true; }
+    catch { toast('Types de voie indisponibles (serveurs OpenStreetMap saturés), réessaie dans un moment.', 5000); return; }
+    finally { surfBusy = false; }
+    if (track !== t) return;
+  }
+  surfShown = true; surfUI(); drawProfile();
+};
+$('surfChip').onclick = () => { surfShown = false; surfUI(); drawProfile(); };
+startNav = (fn => async function () { const r = await fn.apply(this, arguments); surfUI(); return r; })(startNav);
+stopNav = (fn => function () { const r = fn.apply(this, arguments); surfUI(); return r; })(stopNav);
 
 // ---------- ramène-moi au départ ----------
 var navHome = null;
