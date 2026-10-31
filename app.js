@@ -5,7 +5,7 @@
 
 // La page et le code doivent être de la même version. Sinon (page gardée en cache
 // par le téléphone ou par GitHub), on recharge une page fraîche, au plus 3 fois.
-const APP_VERSION = 284;
+const APP_VERSION = 285;
 // lien « pisteo.app/?moi=1 » (ou ?moi=0) : cet appareil est compté à part dans les statistiques (développeur).
 // Lu avant tout rechargement de version, qui ne garde pas les paramètres de l'adresse.
 try {
@@ -7427,6 +7427,76 @@ function toggleMore(open, instant) {
   want ? moreMotion().open(instant) : moreMotion().close(instant);
 }
 $('btnMore').onclick = () => toggleMore(); $('grip').onclick = () => toggleMore();
+// ---------- suivi en direct : un lien pour que des proches voient ta position (page pisteo.app/suivi/) ----------
+// la position part vers le relais Pisteo toutes les 3 minutes ; le partage s'arrête à la fin de la navigation (24 h au plus)
+const LIVE_API = STRAVA_RELAY + '/live', LIVE_EVERY = 180e3;
+let live = null; try { live = JSON.parse(store.get('live') || 'null'); } catch {}
+if (live && !(live.until > Date.now())) { live = null; store.set('live', ''); }
+let liveSent = 0, liveTry = 0, liveBat = null;
+try { navigator.getBattery && navigator.getBattery().then(b => { liveBat = b; }).catch(() => {}); } catch {}
+const liveUrl = l => 'https://pisteo.app/suivi/#' + l.id;
+function liveUI() {
+  const on = !!live;
+  $('npLive').textContent = tr(on ? '📡 Suivi actif' : 'Suivi en direct'); $('npLive').classList.toggle('on', on);
+  $('btnLive').classList.toggle('on', on);
+  $('btnLive').querySelector('span').textContent = tr(on ? 'Suivi en direct actif' : 'Suivi en direct par un proche');
+}
+async function liveSend(pos, force) {
+  if (!live || !pos || pos.sim) return;
+  const now = Date.now();
+  if (!(live.until > now)) { liveEnd(true); return; }
+  if (!force && (now - liveSent < LIVE_EVERY || now - liveTry < 60e3)) return;
+  liveTry = now;
+  let rem, along;
+  try { if (track) { const i = remainingInfo(), d = doneInfo(); rem = i ? Math.round(i.rem) : undefined; along = d && d.started ? Math.round(d.along) : undefined; } else if (nav) along = Math.round(freeD); } catch {}
+  const body = { lat: pos.lat, lon: pos.lon, t: Math.min(pos.t || now, now), acc: pos.acc != null ? Math.round(pos.acc) : undefined, rem, along, bat: liveBat ? Math.round(liveBat.level * 100) : undefined };
+  try {
+    const r = await fetch(LIVE_API + '/' + live.id, { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + live.token }, body: JSON.stringify(body), keepalive: true });
+    if (r.status === 410 || r.status === 404) { liveEnd(true); return; }
+    if (r.ok && live) { liveSent = now; live.last = now; store.set('live', JSON.stringify(live)); }
+  } catch {}
+}
+onPos = (fn => function (pos) { const r = fn.apply(this, arguments); try { if (live) liveSend(pos); } catch {} return r; })(onPos);
+function liveShare() {
+  if (!live) return;
+  const url = liveUrl(live), txt = tr('Suis ma sortie en direct sur la carte :');
+  if (AND && AND.shareText) { try { AND.shareText(txt + ' ' + url, 'Pisteo'); return; } catch {} }
+  if (navigator.share) { navigator.share({ title: 'Pisteo', text: txt, url }).catch(() => {}); return; }
+  toast(copyText(txt + ' ' + url) ? tr('Lien copié : colle-le dans un message.') : url, 5000);
+}
+async function liveStart() {
+  if (navigator.onLine === false) { toast(tr('Pas de connexion : le suivi en direct a besoin du réseau.'), 4000); return; }
+  const name = track ? track.name : tr('Balade'), line = track ? simplifyLine(track.pts, Math.max(30, track.total / 1200)) : [];
+  try {
+    const r = await fetch(LIVE_API, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name, line, until: Date.now() + 24 * 36e5 }) });
+    const j = await r.json(); if (!r.ok || !j.id) throw 0;
+    live = { id: j.id, token: j.token, until: j.until, name }; store.set('live', JSON.stringify(live)); liveSent = liveTry = 0;
+    stat('live_debut'); liveUI(); liveShare();
+    if (me) liveSend(me, true);
+    if (!nav && actState === 'idle') toast(tr('Lien prêt. Ta position partira dès que tu lances la navigation.'), 5000);
+  } catch { toast(tr('Le suivi en direct n\'a pas pu démarrer. Réessaie dans un instant.'), 4500); }
+}
+async function liveEnd(quiet) {
+  const l = live; if (!l) return;
+  live = null; store.set('live', ''); liveUI(); stat('live_fin');
+  try { await fetch(LIVE_API + '/' + l.id + '/stop', { method: 'POST', headers: { Authorization: 'Bearer ' + l.token }, keepalive: true }); } catch {}
+  if (!quiet) toast(tr('Suivi en direct arrêté : le lien affiche maintenant « terminé ».'), 3500);
+}
+function liveOpen() {
+  if (!live) {
+    askCard(tr('Suivi en direct'), tr('Tes proches voient ta position sur une carte avec un simple lien, sans appli. Elle est envoyée toutes les 3 minutes, et le partage s\'arrête à la fin de la navigation (24 h au plus).'),
+      [['Annuler', 'ghost'], ['Partager le lien', 'go', liveStart]]);
+    return;
+  }
+  const st = live.last ? `${tr('Dernière position envoyée à')} ${hm(live.last)}.` : tr(nav || actState !== 'idle' ? 'En attente de la position GPS…' : 'Ta position partira dès que tu lances la navigation.');
+  askCard(tr('Suivi en direct actif'), st, [['Arrêter', 'ghost', () => liveEnd()], ['Renvoyer le lien', 'ghost', liveShare], ['OK', 'go']]);
+}
+$('btnLive').onclick = liveOpen; $('npLive').onclick = liveOpen;
+// fin de la navigation (et pas d'enregistrement en cours) : le partage s'arrête tout seul
+function liveMaybeEnd() { setTimeout(() => { if (live && !nav && actState === 'idle') liveEnd(); }, 1500); }
+stopNav = (fn => function () { const r = fn.apply(this, arguments); liveMaybeEnd(); return r; })(stopNav);
+endActivity = (fn => async function () { const r = await fn.apply(this, arguments); liveMaybeEnd(); return r; })(endActivity);
+liveUI();
 // ---------- ligne du titre : météo, éclairage, inverser, envoyer rangés dans « … » ----------
 (() => {
   const menu = $('trMenu'), more = $('btnTrMore'), items = [...menu.querySelectorAll('button')];
@@ -9583,7 +9653,7 @@ const STAT_BTN = {
   btnNav: 'nav_btn', btnNew: 'autre_trajet', destLoop: 'boucle_ouvrir', lpGo: 'boucle', lbAgain: 'boucle_autre', lbEdit: 'boucle_modifier', lbKeep: 'boucle_garder', lbGo: 'boucle_naviguer',
   destPlan: 'point_par_point', ptView: 'pp_apercu', ptDone: 'pp_naviguer', destPick: 'choisir_carte', destFree: 'balade_libre', destRoutes: 'balises_ouvrir', rtpGo: 'balise_naviguer', rtpKeep: 'balise_garder',
   btnWx: 'meteo', wxDepBtn: 'meteo_depart', depOk: 'meteo_depart_ok', wxInfo: 'meteo_legende', btnLit: 'eclairage', btnReverse: 'inverser', btnWatch: 'envoyer_parcours', wtLink: 'lien_partage', wtQr: 'qr_code', wtPropose: 'catalogue_proposer',
-  btnSaveTr: 'trace_enregistrer', btnOpen: 'gpx_ouvrir', btnSorties: 'mes_sorties', btnMaps: 'mes_cartes', btnStrava: 'strava_ouvrir', btnBackup: 'sauvegarde_ouvrir', btnFeedback: 'avis', btnImport: 'gpx_importer_tuile', eaGpx: 'vide_gpx', eaLoop: 'vide_boucle', eaRoutes: 'vide_balises',
+  btnSaveTr: 'trace_enregistrer', btnOpen: 'gpx_ouvrir', btnSorties: 'mes_sorties', btnMaps: 'mes_cartes', btnStrava: 'strava_ouvrir', btnBackup: 'sauvegarde_ouvrir', btnFeedback: 'avis', btnImport: 'gpx_importer_tuile', eaGpx: 'vide_gpx', eaLoop: 'vide_boucle', eaRoutes: 'vide_balises', btnLive: 'live_ouvrir', npLive: 'live_ouvrir_nav',
   stvConnect: 'strava_connecter', sdStrava: 'sortie_strava', sdStvView: 'strava_voir', sdShare: 'sortie_partager', sdExport: 'sortie_export', sdFollow: 'sortie_refaire', sdPhAdd: 'photo_ajouter', phCam: 'photo_camera',
   gdNow: 'drive_maintenant', gdRestore: 'drive_restaurer', btnRejoin: 'retour_trace', btnOverview: 'vue_ensemble', npHome: 'retour_depart', npResume: 'reprendre_parcours', btnLayer: 'fond_changer',
   btnPip: 'pip', btnEcoFab: 'eco_bouton', btnRecFab: 'rec_bouton', npRec: 'rec_panneau', npReport: 'signaler_osm', npProfOnly: 'profil_seul', btnExit: 'terminer', finSave: 'sortie_garder', finDelete: 'sortie_jeter', finContinue: 'sortie_continuer',

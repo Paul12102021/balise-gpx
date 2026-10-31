@@ -99,6 +99,7 @@ body.sheet-mini:not(.side):not(.nav) .sheet .trackname { cursor: pointer; }
 .tr-menu .closebtn.icon.wx-btn.on svg { stroke: currentColor; }
 .tr-menu .closebtn.icon.wx-btn.on span::after { content: " ✓"; }
 #btnTrMore { position: relative; }
+.linkbtn#npLive.on { color: var(--go-ink); font-weight: 600; text-decoration: none; }
 #btnTrMore svg circle { fill: currentColor; stroke: none; }
 #btnTrMore.dot::after { content: ""; position: absolute; top: 3px; right: 3px; width: 8px; height: 8px; border-radius: 50%; background: var(--go); border: 2px solid var(--panel); }
 /* sans trace : trois points de départ au lieu d'un profil vide */

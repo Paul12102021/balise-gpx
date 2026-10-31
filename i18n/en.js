@@ -8,6 +8,21 @@ const km = (n, half) => n === 1 && !half ? '1 kilometre' : (half ? n + '.5' : n)
 const nd = s => String(s).replace(/\.$/, '');
 const plural = (n, one, many) => n + ' ' + (+n > 1 ? many : one);
 const exact = {
+  "Suivi en direct par un proche": "Live tracking for someone close",
+  "Suivi en direct actif": "Live tracking on",
+  "Suivi en direct": "Live tracking",
+  "📡 Suivi actif": "📡 Tracking on",
+  "Suis ma sortie en direct sur la carte :": "Follow my outing live on the map:",
+  "Pas de connexion : le suivi en direct a besoin du réseau.": "No connection: live tracking needs the network.",
+  "Lien prêt. Ta position partira dès que tu lances la navigation.": "Link ready. Your position will be sent once you start navigating.",
+  "Le suivi en direct n'a pas pu démarrer. Réessaie dans un instant.": "Live tracking couldn't start. Try again in a moment.",
+  "Suivi en direct arrêté : le lien affiche maintenant « terminé ».": "Live tracking stopped: the link now shows \"ended\".",
+  "Tes proches voient ta position sur une carte avec un simple lien, sans appli. Elle est envoyée toutes les 3 minutes, et le partage s'arrête à la fin de la navigation (24 h au plus).": "Your loved ones see your position on a map with a simple link, no app needed. It is sent every 3 minutes, and sharing stops when navigation ends (24 h max).",
+  "Partager le lien": "Share the link",
+  "Dernière position envoyée à": "Last position sent at",
+  "En attente de la position GPS…": "Waiting for GPS position…",
+  "Ta position partira dès que tu lances la navigation.": "Your position will be sent once you start navigating.",
+  "Renvoyer le lien": "Send the link again",
   "Ouvre une trace pour voir distance et dénivelé": "Open a track to see distance and climb",
   "Plus d'actions": "More actions",
   "Éclairage la nuit": "Lighting at night",

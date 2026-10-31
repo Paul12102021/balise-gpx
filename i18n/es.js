@@ -8,6 +8,21 @@ const plural = (n, one, many) => n + ' ' + (+n > 1 ? many : one);
 const kmEs = (n, half) => half ? (n ? (n === 1 ? 'un kilómetro y medio' : n + ' kilómetros y medio') : 'medio kilómetro') : (n === 1 ? 'un kilómetro' : n + ' kilómetros');
 const lowFirst = s => s.charAt(0).toLowerCase() + s.slice(1);
 const exact = {
+  "Suivi en direct par un proche": "Seguimiento en directo",
+  "Suivi en direct actif": "Seguimiento en directo activo",
+  "Suivi en direct": "Seguimiento en directo",
+  "📡 Suivi actif": "📡 Seguimiento activo",
+  "Suis ma sortie en direct sur la carte :": "Sigue mi salida en directo en el mapa:",
+  "Pas de connexion : le suivi en direct a besoin du réseau.": "Sin conexión: el seguimiento en directo necesita red.",
+  "Lien prêt. Ta position partira dès que tu lances la navigation.": "Enlace listo. Tu posición se enviará en cuanto inicies la navegación.",
+  "Le suivi en direct n'a pas pu démarrer. Réessaie dans un instant.": "El seguimiento en directo no pudo iniciarse. Inténtalo de nuevo.",
+  "Suivi en direct arrêté : le lien affiche maintenant « terminé ».": "Seguimiento detenido: el enlace ahora muestra «terminado».",
+  "Tes proches voient ta position sur une carte avec un simple lien, sans appli. Elle est envoyée toutes les 3 minutes, et le partage s'arrête à la fin de la navigation (24 h au plus).": "Tus allegados ven tu posición en un mapa con un simple enlace, sin app. Se envía cada 3 minutos y se detiene al terminar la navegación (24 h como máximo).",
+  "Partager le lien": "Compartir el enlace",
+  "Dernière position envoyée à": "Última posición enviada a las",
+  "En attente de la position GPS…": "Esperando la posición GPS…",
+  "Ta position partira dès que tu lances la navigation.": "Tu posición se enviará en cuanto inicies la navegación.",
+  "Renvoyer le lien": "Reenviar el enlace",
   "Ouvre une trace pour voir distance et dénivelé": "Abre un track para ver distancia y desnivel",
   "Plus d'actions": "Más acciones",
   "Éclairage la nuit": "Iluminación de noche",

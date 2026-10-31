@@ -9,13 +9,13 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<meta name="balise-version" content="284">
+<meta name="balise-version" content="285">
 <title>Pisteo</title>
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" href="icon.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
 <link rel="stylesheet" href="vendor/maplibre-gl.css">
-<link rel="stylesheet" href="app.css?v=284">
+<link rel="stylesheet" href="app.css?v=285">
 </head>
 <body>
 <div id="map" aria-label="Carte"></div>
@@ -107,6 +107,7 @@
       <button id="npWx" class="linkbtn">Météo</button>
       <button id="npProfOnly" class="linkbtn">Profil seul</button>
       <button id="npReport" class="linkbtn">Signaler</button>
+      <button id="npLive" class="linkbtn">Suivi en direct</button>
       <button id="npPhoto" class="linkbtn">Photo</button>
       <button id="npExit" class="linkbtn">Abandonner</button>
       <button id="npSos" class="linkbtn sos-link">Secours</button>
@@ -160,6 +161,10 @@
       <button role="menuitem" id="btnReverse" class="closebtn icon" hidden aria-label="Inverser le sens de la trace" title="Inverser le sens">
         <svg viewBox="0 0 24 24"><path d="M7 4 3 8l4 4"/><path d="M3 8h13"/><path d="m17 12 4 4-4 4"/><path d="M21 16H8"/></svg>
         <span>Inverser le sens</span>
+      </button>
+      <button role="menuitem" id="btnLive" class="closebtn icon wx-btn" aria-label="Suivi en direct : partager ma position" title="Suivi en direct">
+        <svg viewBox="0 0 24 24"><circle cx="12" cy="11" r="2.2"/><path d="M8.2 7.2a5.4 5.4 0 0 0 0 7.6M15.8 7.2a5.4 5.4 0 0 1 0 7.6M5.4 4.4a9.4 9.4 0 0 0 0 13.2M18.6 4.4a9.4 9.4 0 0 1 0 13.2"/><path d="M12 13.2V21"/></svg>
+        <span>Suivi en direct par un proche</span>
       </button>
       <button role="menuitem" id="btnWatch" class="closebtn icon" hidden aria-label="Envoyer le parcours (lien, montre, fichier GPX)" title="Envoyer">
         <svg viewBox="0 0 24 24"><circle cx="18" cy="5" r="2.5"/><circle cx="6" cy="12" r="2.5"/><circle cx="18" cy="19" r="2.5"/><path d="m8.2 10.8 7.6-4.4M8.2 13.2l7.6 4.4"/></svg>
@@ -1008,8 +1013,8 @@
 
 <script src="vendor/maplibre-gl.js"></script>
 <script src="vendor/qrcode.js"></script>
-<script src="i18n/en.js?v=284"></script>
-<script src="i18n/es.js?v=284"></script>
-<script src="app.js?v=284"></script>
+<script src="i18n/en.js?v=285"></script>
+<script src="i18n/es.js?v=285"></script>
+<script src="app.js?v=285"></script>
 </body>
 </html>
