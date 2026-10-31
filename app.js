@@ -5,7 +5,7 @@
 
 // La page et le code doivent être de la même version. Sinon (page gardée en cache
 // par le téléphone ou par GitHub), on recharge une page fraîche, au plus 3 fois.
-const APP_VERSION = 291;
+const APP_VERSION = 292;
 // lien « pisteo.app/?moi=1 » (ou ?moi=0) : cet appareil est compté à part dans les statistiques (développeur).
 // Lu avant tout rechargement de version, qui ne garde pas les paramètres de l'adresse.
 try {
@@ -3394,6 +3394,7 @@ async function fetchRoute(a, b, ms = 12000, style) {
     const j = await brFetch(`${ll(a)}|${ll(b)}`, style, ctrl.signal), f = j.features && j.features[0];
     const pts = f.geometry.coordinates.map(c => ({ lon: c[0], lat: c[1], ele: c[2] != null ? c[2] : null }));
     if (j.lit) litMark(f, pts);
+    surfMark(f, pts);
     return { pts, len: +f.properties['track-length'] || 0, signals: brSignals(f) };
   } finally { clearTimeout(timer); }
 }
@@ -3763,6 +3764,7 @@ async function routeVia(pts, ms, style) {
     const j = await brFetch(pts.map(ll).join('|'), style, ctrl.signal), f = j.features[0];
     const out = f.geometry.coordinates.map(c => ({ lon: c[0], lat: c[1], ele: c[2] != null ? c[2] : null }));
     if (j.lit) litMark(f, out);
+    surfMark(f, out);
     out.signals = brSignals(f);
     return out;
   } catch (e) {
@@ -3884,6 +3886,7 @@ function loopGPX(pts, name, notes) {
     pts.map(p => `    <trkpt lat="${p.lat.toFixed(6)}" lon="${p.lon.toFixed(6)}">${p.ele != null ? `<ele>${(+p.ele).toFixed(1)}</ele>` : ''}</trkpt>`).join('\n') + '\n  </trkseg></trk>\n</gpx>\n';
 }
 function showLoop(pts) {
+  surfRemember(pts);
   const p = makePath(pts, ''), bike = profile === 'trekking';
   const name = `Boucle ${bike ? 'à vélo' : 'à pied'} de ${fmtDist(p.total)}`;
   const text = loopGPX(pts, name);
@@ -8294,6 +8297,7 @@ function litMark(f, pts) {
 var litCache = new Map(); // var : showTrack peut être appelé au démarrage, avant cette ligne
 const litKey = (pts, total) => `${pts[0].lat.toFixed(4)},${pts[0].lon.toFixed(4)}|${pts[pts.length - 1].lat.toFixed(4)},${pts[pts.length - 1].lon.toFixed(4)}|${Math.round(total / 20)}`;
 function litRemember(pts) {
+  surfRemember(pts);
   if (!pts || pts.length < 2 || !pts.some(p => p.lit)) return;
   let tot = 0; const cum = [0]; for (let k = 1; k < pts.length; k++) cum.push(tot += hav(pts[k - 1], pts[k]));
   if (!tot) return;
@@ -8366,13 +8370,14 @@ $('optLit').onchange = e => store.set('litNight', e.target.checked ? '1' : '0');
 // ---------- types de voie le long de la trace (menu « … ») : piste cyclable, chemin, petite route, route… ----------
 // Les voies OpenStreetMap autour de la trace ; tous les 20 m, la voie la plus proche qui va dans le même sens.
 var surfShown = false, surfBusy = false;
-const surfCache = new Map();
+var surfCache = new Map(); // var : un itinéraire peut être calculé avant cette ligne
 function surfFor(t) { return t && t.pts.length > 1 ? surfCache.get(litKey(t.pts, t.total)) || null : null; }
 async function surfCompute(p) {
-  const sp = simplifyDP(p.pts, 3000), coords = [];
-  for (let i = 0; i < sp.length; i += 199) coords.push(sp.slice(i, i + 200).map(q => q.lat.toFixed(5) + ',' + q.lon.toFixed(5)).join(','));
-  const f = `[highway][highway!~"${NET_SKIP}"]`;
-  const json = await overpassFast(`[out:json][timeout:90];(${coords.map(c => `way(around:25,${c})${f};`).join('')});out tags geom qt;`, null, true, null, false);
+  // trace simplifiée (≈ 1 point / 60 m) et une seule zone autour : demande bien plus légère pour le serveur
+  const sp = simplifyDP(p.pts, clamp(Math.round(p.total / 60), 100, 1500));
+  const line = sp.map(q => q.lat.toFixed(5) + ',' + q.lon.toFixed(5)).join(',');
+  const f = `[highway][highway!~"${NET_SKIP}"][footway!~"^(sidewalk|crossing)$"][service!~"^(driveway|parking_aisle)$"]`;
+  const json = await overpassFast(`[out:json][timeout:60];way(around:20,${line})${f};out tags geom qt;`, null, true, null, false);
   if (!json || !json.elements) throw new Error('pas de réponse');
   const C = 0.0003, grid = new Map(), cell = (la, lo) => Math.floor(la / C) + ':' + Math.floor(lo / C);
   for (const w of json.elements) {
@@ -8438,15 +8443,47 @@ function surfUI() {
 function surfBand(ctx, X, y) {
   for (const [a0, b0, k] of surfFor(track) || []) { ctx.fillStyle = RT_MIX.find(x => x[0] === k)[2]; ctx.fillRect(X(a0 * track.total), y, Math.max(1, X(b0 * track.total) - X(a0 * track.total)), 4); }
 }
+// itinéraire BRouter : les étiquettes de chaque voie sont déjà dans la réponse, rien à demander de plus
+function surfMark(f, pts) {
+  try {
+    const m = f.properties && f.properties.messages; if (!m || m.length < 2) return;
+    const iW = m[0].indexOf('WayTags'); if (iW < 0) return;
+    let i = 0;
+    for (const r of m.slice(1)) {
+      const t = {}; for (const kv of String(r[iW] || '').split(' ')) { const e = kv.indexOf('='); if (e > 0) t[kv.slice(0, e)] = kv.slice(e + 1); }
+      const k = rtWayKind(t), lon = +r[0] / 1e6, lat = +r[1] / 1e6;
+      while (i < pts.length) { pts[i].sk = k; const hit = Math.abs(pts[i].lon - lon) < 2e-6 && Math.abs(pts[i].lat - lat) < 2e-6; i++; if (hit) break; }
+    }
+    while (i < pts.length) { pts[i].sk = pts[i - 1] ? pts[i - 1].sk : 'au'; i++; }
+    surfRemember(pts);
+  } catch {}
+}
+// mémorisé par la forme du tracé, comme l'éclairage (refait après retouche du tracé : litRemember l'appelle)
+function surfRemember(pts) {
+  try {
+    if (!pts || pts.length < 2 || !pts.some(p => p.sk)) return;
+    let tot = 0; const cum = [0]; for (let k = 1; k < pts.length; k++) cum.push(tot += hav(pts[k - 1], pts[k]));
+    if (!tot) return;
+    const segs = [];
+    for (let k = 1; k < pts.length; k++) {
+      const st = pts[k].sk || 'au', a0 = cum[k - 1] / tot, b0 = cum[k] / tot, last = segs[segs.length - 1];
+      if (last && last[2] === st) last[1] = b0; else segs.push([a0, b0, st]);
+    }
+    surfCache.set(litKey(pts, tot), segs);
+    if (surfCache.size > 20) surfCache.delete(surfCache.keys().next().value);
+  } catch {}
+}
 $('btnSurf').onclick = async () => {
   if (surfShown) { surfShown = false; surfUI(); drawProfile(); return; }
   const t = track; if (!t || surfBusy) return;
   if (!surfFor(t)) {
     if (navigator.onLine === false) { toast('Pas de réseau : les types de voie viennent d\'OpenStreetMap.', 4000); return; }
-    surfBusy = true; toast('Recherche des types de voie…', 20000);
+    surfBusy = true; const t0 = Date.now();
+    const tick = () => toast(`${tr('Recherche des types de voie…')} ${Math.round((Date.now() - t0) / 1000)} s`, 3000);
+    tick(); const iv = setInterval(tick, 1000);
     try { surfCache.set(litKey(t.pts, t.total), await surfCompute(t)); if (surfCache.size > 20) surfCache.delete(surfCache.keys().next().value); $('toast').hidden = true; }
     catch { toast('Types de voie indisponibles (serveurs OpenStreetMap saturés), réessaie dans un moment.', 5000); return; }
-    finally { surfBusy = false; }
+    finally { clearInterval(iv); surfBusy = false; }
     if (track !== t) return;
   }
   surfShown = true; surfUI(); drawProfile();
