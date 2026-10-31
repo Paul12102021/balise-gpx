@@ -8,6 +8,10 @@ const plural = (n, one, many) => n + ' ' + (+n > 1 ? many : one);
 const kmEs = (n, half) => half ? (n ? (n === 1 ? 'un kilómetro y medio' : n + ' kilómetros y medio') : 'medio kilómetro') : (n === 1 ? 'un kilómetro' : n + ' kilómetros');
 const lowFirst = s => s.charAt(0).toLowerCase() + s.slice(1);
 const exact = {
+  'Bande cyclable': 'Carril bici pintado',
+  'Chemin': 'Camino',
+  'Petite route': 'Carretera secundaria',
+  'Route': 'Carretera',
   "Astuces": "Consejos",
   "Glisse le panneau du bas vers le bas": "Desliza el panel inferior hacia abajo",
   " : la carte passe en plein écran.": ": el mapa pasa a pantalla completa.",

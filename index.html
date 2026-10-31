@@ -9,13 +9,13 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<meta name="balise-version" content="289">
+<meta name="balise-version" content="290">
 <title>Pisteo</title>
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" href="icon.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
 <link rel="stylesheet" href="vendor/maplibre-gl.css">
-<link rel="stylesheet" href="app.css?v=289">
+<link rel="stylesheet" href="app.css?v=290">
 </head>
 <body>
 <div id="map" aria-label="Carte"></div>
@@ -834,6 +834,7 @@
         <div class="rt-card-h"><span id="rtpDot" class="rt-dot"></span><div class="rt-prev-t"><b id="rtpTitle"></b><span id="rtpSub"></span></div><button id="rtpClose" class="rt-x" aria-label="Fermer l'aperçu">✕</button></div>
         <p id="rtpDesc" class="note rt-desc" hidden></p>
         <div id="rtpPhotos" class="rt-photos" hidden></div>
+        <div id="rtpMix" class="rt-mix" hidden></div>
         <canvas id="rtpProf" class="rt-prof"></canvas>
         <div class="rt-prev-acts"><button id="rtpView" class="btn small">Aperçu</button><button id="rtpKeep" class="btn small">Garder</button><button id="rtpGo" class="btn small go">Naviguer</button></div>
         <button id="rtpReport" class="linkbtn rt-rep" hidden>Signaler ce parcours</button>
@@ -864,7 +865,7 @@
 </div>
 
 <div id="rtBar" class="loop-bar" hidden>
-  <div class="lb-info"><b id="rtbTitle"></b><span id="rtbSub"></span></div>
+  <div class="lb-info"><b id="rtbTitle"></b><span id="rtbSub"></span><div id="rtbMix" class="rt-mix" hidden></div></div>
   <div class="lb-acts">
     <button id="rtbBack" class="btn small">↩ Autres parcours</button>
     <button id="rtbKeep" class="btn small">Garder</button>
@@ -1023,8 +1024,8 @@
 
 <script src="vendor/maplibre-gl.js"></script>
 <script src="vendor/qrcode.js"></script>
-<script src="i18n/en.js?v=289"></script>
-<script src="i18n/es.js?v=289"></script>
-<script src="app.js?v=289"></script>
+<script src="i18n/en.js?v=290"></script>
+<script src="i18n/es.js?v=290"></script>
+<script src="app.js?v=290"></script>
 </body>
 </html>

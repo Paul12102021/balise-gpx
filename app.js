@@ -5,7 +5,7 @@
 
 // La page et le code doivent être de la même version. Sinon (page gardée en cache
 // par le téléphone ou par GitHub), on recharge une page fraîche, au plus 3 fois.
-const APP_VERSION = 289;
+const APP_VERSION = 290;
 // lien « pisteo.app/?moi=1 » (ou ?moi=0) : cet appareil est compté à part dans les statistiques (développeur).
 // Lu avant tout rechargement de version, qui ne garde pas les paramètres de l'adresse.
 try {
@@ -4704,7 +4704,7 @@ function rtShow(it, pts, partial, update) {
   rt.res = { text, name };
   $('rtbTitle').textContent = name;
   $('rtbSub').textContent = `${RT_CAT[it.cat].label} · ${fmtDist(p.total)}${p.hasEle ? ' · D+ ' + fmtM(p.totalUp) : ''} · environ ${fmtDur(est)}` + (partial ? ` · portion autour ${rt.fromMap || !me ? 'du point choisi' : 'de toi'}` : '');
-  if (!update) { $('rtbKeep').textContent = 'Garder'; $('rtbKeep').disabled = false; }
+  if (!update) { $('rtbKeep').textContent = 'Garder'; $('rtbKeep').disabled = false; const res = rt.res; rtMixLoad($('rtbMix'), it, () => rt.res === res); }
   $('rtBar').hidden = false;
   if (update) return;
   setTimeout(() => { try { map.fitBounds(boundsOf([pts]), { padding: { top: 80, bottom: sheetPad() + $('rtBar').offsetHeight + 30, left: 30, right: 70 }, bearing: 0, pitch: 0, duration: 600 }); } catch {} }, 350);
@@ -4805,7 +4805,7 @@ function rtCardMode(mode) { // null | 'pick' | 'prev'
   $('routes').classList.toggle('has-card', !!mode);
   if (!$('routes').hidden) rtSetCollapsed(true);
 }
-function rtUnselect() { rt.sel = null; rt.selPts = null; rtSelDraw([]); rtCardMode(null); rtRender(); }
+function rtUnselect() { rt.sel = null; rt.selPts = null; rtSelDraw([]); rtMixDraw(null); rtCardMode(null); rtRender(); }
 function rtMiniProfile(cv, p) {
   const dpr = window.devicePixelRatio || 1, W = cv.clientWidth, H = cv.clientHeight;
   if (!W) return;
@@ -4826,6 +4826,81 @@ function rtMiniProfile(cv, p) {
   const area = new Path2D(path); area.lineTo(X(p.total), 2 + h); area.lineTo(L0, 2 + h); area.closePath();
   ctx.fillStyle = col; ctx.globalAlpha = .18; ctx.fill(area); ctx.globalAlpha = 1; ctx.strokeStyle = col; ctx.lineWidth = 2; ctx.stroke(path);
 }
+// ---------- Types de voie d'un parcours vélo (piste cyclable, petite route, route…) ----------
+// Une demande OpenStreetMap à part : les chemins de l'itinéraire avec leurs étiquettes. Chaque chemin
+// compte pour sa longueur ; pour un grand itinéraire, seulement ceux de la portion chargée.
+const RT_MIX = [
+  ['pc', 'Piste cyclable', '#2e8b57'], ['bd', 'Bande cyclable', '#8bc34a'], ['ch', 'Chemin', '#a0703c'],
+  ['pr', 'Petite route', '#e8a317'], ['rt', 'Route', '#d64541'], ['au', 'Autre', '#9a9a9a'],
+];
+function rtWayKind(t) {
+  const h = t.highway || '', side = ['cycleway', 'cycleway:both', 'cycleway:right', 'cycleway:left'].map(k => t[k] || '');
+  if (h === 'cycleway' || (/^(path|footway|bridleway|track|pedestrian)$/.test(h) && t.bicycle === 'designated')) return 'pc';
+  if (side.includes('track')) return 'pc';
+  if (side.some(v => v === 'lane' || v === 'opposite_lane')) return 'bd';
+  if (/^(track|path|footway|bridleway|steps)$/.test(h)) return 'ch';
+  if (/^(primary|secondary|tertiary|trunk)(_link)?$/.test(h)) return 'rt';
+  if (/^(residential|unclassified|service|living_street|road|pedestrian|busway)$/.test(h)) return 'pr';
+  return 'au';
+}
+rt.mix = new Map();
+const rtMixOk = it => it.src !== 'c' && /^\d+$/.test(String(it.id)) && /^(bicycle|mtb)$/.test((it.tags && it.tags.route) || '');
+function rtMixFor(it) {
+  const key = rtKey(it);
+  if (!rt.mix.has(key)) {
+    const p = (async () => {
+      const box = it.big ? `(${rtBox(it.at, rtCut())})` : '';
+      const q = `[out:json][timeout:25];rel(${it.id});(._;rel(r););->.r;(way(r.r:"")${box};way(r.r:"main")${box};way(r.r:"forward")${box};way(r.r:"route")${box};);out tags geom qt;`;
+      const json = await overpassFast(q, null, true, null, true);
+      const tot = {}, f = []; let all = 0;
+      for (const w of (json && json.elements) || []) {
+        if (w.type !== 'way' || !w.geometry) continue;
+        const g = w.geometry.filter(Boolean), len = rtLen(g);
+        const k = rtWayKind(w.tags || {}); tot[k] = (tot[k] || 0) + len; all += len;
+        if (g.length > 1) f.push({ type: 'Feature', properties: { col: RT_MIX.find(x => x[0] === k)[2] }, geometry: { type: 'LineString', coordinates: g.map(q => [q.lon, q.lat]) } });
+      }
+      if (all < 100) throw new Error('vide');
+      const m = {}; for (const k in tot) m[k] = tot[k] / all;
+      return { m, f };
+    })();
+    rt.mix.set(key, p); p.catch(() => rt.mix.delete(key));
+  }
+  return rt.mix.get(key);
+}
+// barre de couleur + légende « Piste cyclable 62 % · Petite route 30 % … »
+function rtMixShow(el, m) {
+  el.innerHTML = ''; el.hidden = !m; if (!m) return;
+  const parts = RT_MIX.map(([k, l, c]) => ({ l, c, v: m[k] || 0 })).filter(x => x.v >= 0.005);
+  const bar = document.createElement('div'); bar.className = 'rt-mix-bar';
+  const leg = document.createElement('div'); leg.className = 'rt-mix-leg';
+  for (const x of parts) {
+    const s = document.createElement('span'); s.style.flex = x.v; s.style.background = x.c; bar.appendChild(s);
+    const pct = Math.round(x.v * 100);
+    const i = document.createElement('span'); i.innerHTML = '<i></i>'; i.firstChild.style.background = x.c;
+    i.append(`${tr(x.l)} ${pct < 1 ? '< 1' : pct} %`); leg.appendChild(i);
+  }
+  el.append(bar, leg);
+}
+// le tracé coloré par type de voie, par-dessus la ligne du parcours
+let rtMixOn = false;
+function rtMixDraw(feats) {
+  const data = { type: 'FeatureCollection', features: feats || [] };
+  rtMixOn = !!(feats && feats.length);
+  if (!map.getSource('rtmix')) {
+    if (!rtMixOn) return;
+    map.addSource('rtmix', { type: 'geojson', data });
+    const w = (a, b) => ['interpolate', ['linear'], ['zoom'], 9, a, 16, b];
+    map.addLayer({ id: 'rtmix-casing', type: 'line', source: 'rtmix', layout: { 'line-join': 'round', 'line-cap': 'round' }, paint: { 'line-color': '#fff', 'line-width': w(6, 14) } });
+    map.addLayer({ id: 'rtmix', type: 'line', source: 'rtmix', layout: { 'line-join': 'round', 'line-cap': 'round' }, paint: { 'line-color': ['get', 'col'], 'line-width': w(4, 9) } });
+  } else map.getSource('rtmix').setData(data);
+}
+// plus d'aperçu ni de parcours ouvert (fermé, navigation lancée…) : on retire les couleurs
+setInterval(() => { if (rtMixOn && $('rtPrev').hidden && $('rtBar').hidden) rtMixDraw(null); }, 700);
+function rtMixLoad(el, it, still) {
+  rtMixShow(el, null); rtMixDraw(null);
+  if (!rtMixOk(it)) return;
+  rtMixFor(it).then(r => { if (!still()) return; rtMixShow(el, r.m); rtMixDraw(r.f); }, () => {});
+}
 function rtPrevFill(it, pts, partial) {
   const p = makePath(pts, it.name);
   rt.selPts = pts; rt.selPartial = partial;
@@ -4838,7 +4913,7 @@ async function rtSelect(it) {
   rt.sel = it; rt.selPts = null;
   if ($('routes').hidden) rtSheetOpen(true);
   $('rtpDot').style.background = rtColor(it); $('rtpTitle').textContent = it.name;
-  $('rtpSub').textContent = 'Chargement du tracé…'; rtMiniProfile($('rtpProf'), null);
+  $('rtpSub').textContent = 'Chargement du tracé…'; rtMiniProfile($('rtpProf'), null); rtMixShow($('rtpMix'), null); rtMixDraw(null);
   $('rtpGo').disabled = $('rtpKeep').disabled = $('rtpView').disabled = true; $('rtpKeep').textContent = 'Garder';
   const doneTxt = it.done && it.dms ? tr(`Parcouru le ${new Date(it.done).toLocaleDateString(LOC, { day: 'numeric', month: 'long', year: 'numeric' })} en ${fmtDur(it.dms / 1000)}`) : '';
   $('rtpDesc').textContent = [doneTxt, it.cdesc || ''].filter(Boolean).join('\n'); $('rtpDesc').hidden = !doneTxt && !it.cdesc; $('rtpReport').hidden = it.src !== 'c';
@@ -4856,6 +4931,7 @@ async function rtSelect(it) {
   const pts = rtOrient(g.pts, me || it.at);
   rtSelDraw([rtFeat(it, pts)]);
   rtPrevFill(it, pts, g.partial);
+  rtMixLoad($('rtpMix'), it, () => rt.sel === it);
   $('rtpGo').disabled = $('rtpKeep').disabled = $('rtpView').disabled = false;
   // toute la ligne visible au-dessus du panneau
   setTimeout(() => { try { map.fitBounds(boundsOf([pts]), { padding: { top: 90, bottom: rtPeek() + 30, left: 30, right: 70 }, bearing: 0, pitch: 0, duration: 600, maxZoom: 15 }); } catch {} }, 80);

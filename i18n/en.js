@@ -8,6 +8,10 @@ const km = (n, half) => n === 1 && !half ? '1 kilometre' : (half ? n + '.5' : n)
 const nd = s => String(s).replace(/\.$/, '');
 const plural = (n, one, many) => n + ' ' + (+n > 1 ? many : one);
 const exact = {
+  'Bande cyclable': 'Cycle lane',
+  'Chemin': 'Track',
+  'Petite route': 'Minor road',
+  'Route': 'Road',
   "Astuces": "Tips",
   "Glisse le panneau du bas vers le bas": "Swipe the bottom panel down",
   " : la carte passe en plein écran.": ": the map goes full screen.",
