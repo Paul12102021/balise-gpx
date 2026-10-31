@@ -931,7 +931,7 @@ const patterns = [
   [/^Restauré : (.+?)\.?( Réglages appliqués, l'appli redémarre…| Réglages appliqués\.)?$/, (m, t) => 'Restored: ' + m[1].split(', et ').map(x => x.startsWith('la liste de ') ? 'the list of ' + t(x.slice(12)) : t(x.replace(/ à retélécharger dans Réglages → Mes cartes$/, ' §'))).join(', and ').replace(/ §/, ' to download again in Settings → My maps') + '.' + (m[2] ? (m[2].includes('redémarre') ? ' Settings applied, restarting…' : ' Settings applied.') : '')],
   [/^(\d+) cartes? de ta sauvegarde (?:sont|est) à retélécharger \(~(.+)\)\. Mieux vaut être en Wi-Fi\.$/, m => `${plural(m[1], 'map', 'maps')} from your backup to download again (~${m[2]}). Wi-Fi recommended.`],
   [/^⚠️ Enregistrement interrompu (\d+) fois \((.+) sans position, (.+) tracés en ligne droite\)\..*$/, m => `⚠️ Recording interrupted ${m[1]} time${m[1] > 1 ? 's' : ''} (${m[2]} without position, ${m[3]} drawn as straight lines). The phone probably paused the app with the screen off.`],
-  [/^Boucle (à vélo|à pied) de (.+)$/, (m, t) => `${m[2]} ${m[1] === 'à vélo' ? 'bike' : 'walking'} loop`],
+  [/^Boucle (à vélo|à pied) de ([\d.,]+ ?(?:km|m|mi|ft))(.*)$/, (m, t) => `${m[2]} ${m[1] === 'à vélo' ? 'bike' : 'walking'} loop${m[3]}`],
   [/^(.*)environ (.+?)( \(demandé : (.+)\))?$/, (m, t) => `${m[1] ? t(m[1]) : ''}about ${m[2]}${m[3] ? ` (requested: ${m[4]})` : ''}`],
   [/^(.+) jusqu'à (.+) (à vélo|à pied)(?:, itinéraire (.+))?$/, (m, t) => `${m[1]} to ${m[2]} ${m[3] === 'à vélo' ? 'by bike' : 'on foot'}${m[4] ? ', ' + t(m[4]) + ' route' : ''}`],
   [/^Vers (.+)$/, 'To $1'],

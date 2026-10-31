@@ -5,7 +5,7 @@
 
 // La page et le code doivent être de la même version. Sinon (page gardée en cache
 // par le téléphone ou par GitHub), on recharge une page fraîche, au plus 3 fois.
-const APP_VERSION = 287;
+const APP_VERSION = 288;
 // lien « pisteo.app/?moi=1 » (ou ?moi=0) : cet appareil est compté à part dans les statistiques (développeur).
 // Lu avant tout rechargement de version, qui ne garde pas les paramètres de l'adresse.
 try {
@@ -3853,7 +3853,7 @@ async function makeLoop() {
         clearInterval(tick); showLoop(night.pts); return;
       }
     }
-    for (let tryN = 0; tryN < 4; tryN++) {
+    for (let tryN = 0; tryN < 4 || (tryN < 6 && (!best || best.err > 0.35)); tryN++) {
       let pts;
       try { pts = removeSpurs(await routeVia(loopPoints(start, r, ang), 45000)); litRemember(pts); }
       catch (e) {
@@ -3863,6 +3863,8 @@ async function makeLoop() {
       const p = makePath(pts, ''), m = measure(p), err = Math.abs(m - target) / target;
       if (!best || err < best.err) best = { pts, err, m };
       if (err < 0.08) break;
+      // boucle ratatinée (un aller-retour retiré, un cul-de-sac…) : agrandir ne suffit pas, on change aussi de direction
+      if (m < target * 0.4) ang = (ang + 75) % 360;
       r *= clamp(target / m, 0.5, 2); // on agrandit ou on réduit la boucle
     }
   } catch (e) {

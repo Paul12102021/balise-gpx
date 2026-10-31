@@ -53,13 +53,22 @@ h1 { margin: 0; font-size: 17px; font-weight: 650; flex: 1; min-width: 0; white-
 'use strict';
 // Suivi en direct : https://pisteo.app/suivi/#<id> · la position vient du relais Pisteo (strava-relay/worker.js, routes /live)
 const API = 'https://api.pisteo.app/live/';
-const id = (location.hash.slice(1).match(/^[a-z0-9]{10}/) || [])[0];
 const $ = i => document.getElementById(i);
+// langue : celle du navigateur (français, anglais ou espagnol)
+const L = (navigator.languages || [navigator.language || 'fr']).map(l => l.slice(0, 2).toLowerCase()).find(l => ['fr', 'en', 'es'].includes(l)) || 'en';
+const T = {
+  en: { 'Lien de suivi incomplet : demande à la personne de te le renvoyer.': 'Incomplete tracking link: ask the person to send it again.', 'Ce suivi est terminé depuis plus d\'un jour, ou le lien est incorrect.': 'This tracking ended more than a day ago, or the link is wrong.', 'Pas de connexion. La page réessaie toute seule.': 'No connection. The page will retry on its own.', 'Sortie': 'Outing', 'Suivi en direct': 'Live tracking', 'Partage terminé': 'Sharing ended', 'dernière position à': 'last position at', 'En attente de la première position (GPS)…': 'Waiting for the first position (GPS)…', 'Dernière position': 'Last position', 'peut-être sans réseau': 'maybe no signal', 'Restant': 'Left', 'Parcouru': 'Covered', 'Batterie': 'Battery', 'Recentrer': 'Recenter', 'Y aller (Google Maps)': 'Go there (Google Maps)', 'Mis à jour toutes les minutes': 'Updated every minute', 'à l\'instant': 'just now', 'il y a': '', 'min': 'min ago', 'h': 'h' },
+  es: { 'Lien de suivi incomplet : demande à la personne de te le renvoyer.': 'Enlace de seguimiento incompleto: pide a la persona que te lo reenvíe.', 'Ce suivi est terminé depuis plus d\'un jour, ou le lien est incorrect.': 'Este seguimiento terminó hace más de un día, o el enlace es incorrecto.', 'Pas de connexion. La page réessaie toute seule.': 'Sin conexión. La página lo reintentará sola.', 'Sortie': 'Salida', 'Suivi en direct': 'Seguimiento en directo', 'Partage terminé': 'Seguimiento terminado', 'dernière position à': 'última posición a las', 'En attente de la première position (GPS)…': 'Esperando la primera posición (GPS)…', 'Dernière position': 'Última posición', 'peut-être sans réseau': 'quizá sin cobertura', 'Restant': 'Restante', 'Parcouru': 'Recorrido', 'Batterie': 'Batería', 'Recentrer': 'Centrar', 'Y aller (Google Maps)': 'Ir allí (Google Maps)', 'Mis à jour toutes les minutes': 'Actualizado cada minuto', 'à l\'instant': 'ahora mismo', 'il y a': 'hace', 'min': 'min', 'h': 'h' }
+};
+const t = k => (L !== 'fr' && T[L] && T[L][k] != null) ? T[L][k] : k;
+document.documentElement.lang = L;
+if (L !== 'fr') { $('center').textContent = t('Recentrer'); $('maps').textContent = t('Y aller (Google Maps)'); document.querySelector('.foot').firstChild.textContent = t('Mis à jour toutes les minutes') + ' · '; }
+const id = (location.hash.slice(1).match(/^[a-z0-9]{10}/) || [])[0];
 const msg = t => { $('msgTxt').textContent = t; $('msg').hidden = false; $('card').hidden = true; };
-if (!id) { msg('Lien de suivi incomplet : demande à la personne de te le renvoyer.'); return; }
-const km = m => m == null ? '–' : m < 1000 ? Math.round(m) + ' m' : (m / 1000).toFixed(m < 10000 ? 1 : 0).replace('.', ',') + ' km';
-const ago = ms => { const m = Math.round(ms / 6e4); return m < 1 ? 'à l\'instant' : m < 60 ? `il y a ${m} min` : `il y a ${Math.floor(m / 60)} h ${String(m % 60).padStart(2, '0')}`; };
-const hm = t => new Date(t).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
+if (!id) { msg(t('Lien de suivi incomplet : demande à la personne de te le renvoyer.')); return; }
+const km = m => m == null ? '–' : m < 1000 ? Math.round(m) + ' m' : (m / 1000).toFixed(m < 10000 ? 1 : 0).replace('.', L === 'en' ? '.' : ',') + ' km';
+const ago = ms => { const m = Math.round(ms / 6e4); const d = m < 60 ? `${m} ${t('min')}` : `${Math.floor(m / 60)} h ${String(m % 60).padStart(2, '0')}`; return m < 1 ? t('à l\'instant') : L === 'en' ? d + (m < 60 ? '' : ' ago') : `${t('il y a')} ${d}`; };
+const hm = x => new Date(x).toLocaleTimeString(L === 'en' ? 'en-GB' : L, { hour: '2-digit', minute: '2-digit' });
 const map = new maplibregl.Map({ container: 'map', style: 'https://tiles.openfreemap.org/styles/liberty', center: [2.5, 46.6], zoom: 5, attributionControl: { compact: true } });
 let meMk = null, first = true, last = null;
 const src = (k, coords) => { const g = { type: 'Feature', geometry: { type: 'LineString', coordinates: coords } }; map.getSource(k) ? map.getSource(k).setData(g) : null; };
@@ -79,22 +88,22 @@ function fit(d) {
 }
 async function load() {
   let d;
-  try { const r = await fetch(API + id, { cache: 'no-store' }); d = await r.json(); if (!r.ok) { if (r.status === 404) msg('Ce suivi est terminé depuis plus d\'un jour, ou le lien est incorrect.'); return; } }
-  catch { if (!last) msg('Pas de connexion. La page réessaie toute seule.'); return; }
+  try { const r = await fetch(API + id, { cache: 'no-store' }); d = await r.json(); if (!r.ok) { if (r.status === 404) msg(t('Ce suivi est terminé depuis plus d\'un jour, ou le lien est incorrect.')); return; } }
+  catch { if (!last) msg(t('Pas de connexion. La page réessaie toute seule.')); return; }
   last = d; $('msg').hidden = true; $('card').hidden = false;
-  document.title = (d.name || 'Sortie') + ' · Suivi en direct';
-  $('name').textContent = d.name || 'Sortie';
+  document.title = (d.name || t('Sortie')) + ' · ' + t('Suivi en direct');
+  $('name').textContent = d.name || t('Sortie');
   src('line', d.line || []); src('trail', (d.trail || []).map(p => [p[0], p[1]]));
   const p = d.pos, age = p ? d.now - p.t : null, old = age != null && age > 15 * 6e4;
   $('dot').className = 'live' + (d.ended ? ' off' : old || !p ? ' old' : '');
   $('when').className = 'when' + (old && !d.ended ? ' old' : '');
-  $('when').textContent = d.ended ? (p ? `Partage terminé · dernière position à ${hm(p.t)}` : 'Partage terminé')
-    : !p ? 'En attente de la première position (GPS)…'
-    : `Dernière position ${ago(age)} (${hm(p.t)})` + (old ? ' · peut-être sans réseau' : '');
+  $('when').textContent = d.ended ? (p ? `${t('Partage terminé')} · ${t('dernière position à')} ${hm(p.t)}` : t('Partage terminé'))
+    : !p ? t('En attente de la première position (GPS)…')
+    : `${t('Dernière position')} ${ago(age)} (${hm(p.t)})` + (old ? ' · ' + t('peut-être sans réseau') : '');
   const st = [];
-  if (p && p.rem != null) st.push(['Restant', km(p.rem)]);
-  if (p && p.along != null) st.push(['Parcouru', km(p.along)]);
-  if (p && p.bat != null) st.push(['Batterie', p.bat + ' %']);
+  if (p && p.rem != null) st.push([t('Restant'), km(p.rem)]);
+  if (p && p.along != null) st.push([t('Parcouru'), km(p.along)]);
+  if (p && p.bat != null) st.push([t('Batterie'), p.bat + ' %']);
   $('stats').innerHTML = st.map(([a, b]) => `<div><span>${a}</span><b>${b}</b></div>`).join('');
   $('maps').hidden = !p;
   if (p) {
