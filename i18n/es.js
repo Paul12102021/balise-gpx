@@ -8,6 +8,9 @@ const plural = (n, one, many) => n + ' ' + (+n > 1 ? many : one);
 const kmEs = (n, half) => half ? (n ? (n === 1 ? 'un kilómetro y medio' : n + ' kilómetros y medio') : 'medio kilómetro') : (n === 1 ? 'un kilómetro' : n + ' kilómetros');
 const lowFirst = s => s.charAt(0).toLowerCase() + s.slice(1);
 const exact = {
+  "Traces du dossier mises à jour": "Tracks de la carpeta actualizados",
+  "À retélécharger": "Por volver a descargar",
+  "Chemins incomplets": "Caminos incompletos",
   "Ouvrir un GPX": "Abrir un GPX",
   "Depuis ton téléphone": "Desde tu teléfono",
   "Noter, un souci, une idée ?": "Valorar, un problema, una idea",
@@ -923,6 +926,7 @@ const patterns = [
   [/^le serveur (?:IGN|de la carte) répond (\d+)$/, 'el servidor responde $1'],
   [/^Espace utilisé : (.+)$/, 'Espacio usado: $1'],
   [/^(Le long de la trace|Zone de (.+) km²|(Département|Espagne|Autriche|Belgique|Canada|États-Unis), (.+)) · carte (.+?) · (.+?) · (.+?)( · .+)?$/, (m, t) => `${m[1].startsWith('Le long') ? 'A lo largo del track' : m[1].startsWith('Zone') ? `Zona de ${m[2]} km²` : t(m[3]) + ', ' + t(m[4])} · mapa ${t(m[5])} · ${m[6]} · ${m[7]}${m[8] ? ' · ' + t(m[8].slice(3)) : ''}`],
+  [/^Chemins incomplets \((\d+) km\)$/, 'Caminos incompletos ($1 km)'], [/^Itinéraires hors connexion ✓ \((\d+) km de chemins\)$/, 'Rutas sin conexión ✓ ($1 km de caminos)'],
   [/^incomplet$/, 'incompleto'], [/^à retélécharger$/, 'por volver a descargar'], [/^standard$/, 'estándar'], [/^détaillé$/, 'detallado'],
   [/^chemins incomplets \((\d+) km\)$/, 'caminos incompletos ($1 km)'],
   [/^itinéraires hors connexion ✓ \((\d+) km de chemins\)$/, 'rutas sin conexión ✓ ($1 km de caminos)'],

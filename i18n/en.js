@@ -8,6 +8,9 @@ const km = (n, half) => n === 1 && !half ? '1 kilometre' : (half ? n + '.5' : n)
 const nd = s => String(s).replace(/\.$/, '');
 const plural = (n, one, many) => n + ' ' + (+n > 1 ? many : one);
 const exact = {
+  "Traces du dossier mises à jour": "Folder tracks updated",
+  "À retélécharger": "To download again",
+  "Chemins incomplets": "Paths incomplete",
   "Ouvrir un GPX": "Open a GPX",
   "Depuis ton téléphone": "From your phone",
   "Noter, un souci, une idée ?": "Rate, a problem, an idea?",
@@ -922,6 +925,7 @@ const patterns = [
   [/^le serveur (?:IGN|de la carte) répond (\d+)$/, 'the map server answers $1'],
   [/^Espace utilisé : (.+)$/, 'Space used: $1'],
   [/^(Le long de la trace|Zone de (.+) km²|(Département|Espagne|Autriche|Belgique|Canada|États-Unis), (.+)) · carte (.+?) · (.+?) · (.+?)( · .+)?$/, (m, t) => `${m[1].startsWith('Le long') ? 'Along the track' : m[1].startsWith('Zone') ? `Area of ${m[2]} km²` : t(m[3]) + ', ' + t(m[4])} · ${t(m[5])} map · ${m[6]} · ${m[7]}${m[8] ? ' · ' + t(m[8].slice(3)) : ''}`],
+  [/^Chemins incomplets \((\d+) km\)$/, 'Paths incomplete ($1 km)'], [/^Itinéraires hors connexion ✓ \((\d+) km de chemins\)$/, 'Offline routing ✓ ($1 km of paths)'],
   [/^incomplet$/, 'incomplete'], [/^à retélécharger$/, 'to download again'], [/^standard$/, 'standard'], [/^détaillé$/, 'detailed'],
   [/^chemins incomplets \((\d+) km\)$/, 'paths incomplete ($1 km)'],
   [/^itinéraires hors connexion ✓ \((\d+) km de chemins\)$/, 'offline routing ✓ ($1 km of paths)'],

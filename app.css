@@ -357,6 +357,16 @@ body.nav .toast { top: auto; bottom: calc(var(--nav-h, 92px) + 90px); }
 .dl-row small { color: var(--muted); min-width: 0; }
 .dl-box select { width: 100%; }
 .pack-acts { display: flex; align-items: center; gap: 4px; flex: none; }
+/* cartes téléchargées : nom et détails sur toute la largeur, boutons en dessous */
+.lib-list li.pack-li { flex-wrap: wrap; align-items: flex-start; }
+.pack-li .lib-item { flex: 1 1 0; padding-bottom: 6px; }
+.pack-li .lib-del { margin-top: 6px; }
+.pack-li .pack-acts { flex: 1 1 100%; flex-wrap: wrap; gap: 8px; padding: 0 0 12px; }
+.pack-li .pack-acts:empty { display: none; }
+.pack-state { font-size: 12.5px; color: #B26A00; }
+.pack-state.ok { color: var(--go-ink); }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .pack-state:not(.ok) { color: #F0B354; } }
+:root[data-theme="dark"] .pack-state:not(.ok) { color: #F0B354; }
 .btn.small { min-height: 36px; padding: 0 10px; font-size: 13px; }
 .check { flex: none; width: 24px; height: 24px; margin: 0; accent-color: var(--go); }
 

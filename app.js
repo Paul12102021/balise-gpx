@@ -5,7 +5,7 @@
 
 // La page et le code doivent être de la même version. Sinon (page gardée en cache
 // par le téléphone ou par GitHub), on recharge une page fraîche, au plus 3 fois.
-const APP_VERSION = 282;
+const APP_VERSION = 283;
 // lien « pisteo.app/?moi=1 » (ou ?moi=0) : cet appareil est compté à part dans les statistiques (développeur).
 // Lu avant tout rechargement de version, qui ne garde pas les paramètres de l'adresse.
 try {
@@ -6702,8 +6702,12 @@ async function renderPacks() {
     const li = document.createElement('li');
     const info = document.createElement('div'); info.className = 'lib-item';
     info.innerHTML = '<b></b><span></span>';
-    info.querySelector('b').textContent = p.name;
-    info.querySelector('span').textContent = `${p.kind === 'trace' ? 'Le long de la trace' : p.kind === 'zone' ? `Zone de ${Math.round(bboxKm2(p.bbox)).toLocaleString(LOC)} km²` : (p.cc && p.cc !== 'fr' ? ccOf(p.cc).name : 'Département') + ', ' + p.detail} · carte ${provName(p.prov || 'ign')} · ${fmtMo(p.bytes / 1024)} · ${fmtDate(p.date)}` + (p.complete ? '' : p.restored ? ' · à retélécharger' : ` · incomplet`) + (p.graph ? (p.graph.partial ? ` · chemins incomplets (${p.graph.km} km)` : ` · itinéraires hors connexion ✓ (${p.graph.km} km de chemins)`) : '');
+    info.querySelector('b').textContent = p.name; info.querySelector('b').title = p.name;
+    // une ligne pour ce que c'est, une ligne pour l'état (incomplet, chemins…)
+    info.querySelector('span').textContent = `${p.kind === 'trace' ? 'Le long de la trace' : p.kind === 'zone' ? `Zone de ${Math.round(bboxKm2(p.bbox)).toLocaleString(LOC)} km²` : (p.cc && p.cc !== 'fr' ? ccOf(p.cc).name : 'Département') + ', ' + p.detail} · carte ${provName(p.prov || 'ign')} · ${fmtMo(p.bytes / 1024)} · ${fmtDate(p.date)}`;
+    const state = [p.complete ? '' : p.restored ? 'À retélécharger' : 'Téléchargement incomplet',
+      p.graph ? (p.graph.partial ? `Chemins incomplets (${p.graph.km} km)` : `Itinéraires hors connexion ✓ (${p.graph.km} km de chemins)`) : ''].filter(Boolean);
+    for (const t of state) { const st = document.createElement('small'); st.className = 'pack-state' + (/✓/.test(t) ? ' ok' : ''); st.textContent = t; info.appendChild(st); }
     if (dl && dl.packId === p.id) { const live = document.createElement('span'); live.className = 'dl-live'; live.dataset.pack = p.id; live.textContent = 'En cours…'; info.appendChild(live); }
     const acts = document.createElement('div'); acts.className = 'pack-acts';
     if (!p.complete) {
@@ -6747,8 +6751,8 @@ async function renderPacks() {
     const del = document.createElement('button'); del.className = 'lib-del'; del.setAttribute('aria-label', 'Supprimer ' + p.name);
     del.innerHTML = '<svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></svg>';
     del.onclick = () => deletePack(p);
-    acts.append(see, del);
-    li.append(info, acts); list.appendChild(li);
+    acts.append(see);
+    li.className = 'pack-li'; li.append(info, del, acts); list.appendChild(li);
   }
 }
 async function deletePack(p) {
@@ -8859,7 +8863,8 @@ async function prepTripSync() {
   if (!track) return;
   const f = store.get(prepTripKey()); if (!f) return;
   if (store.get(prepTripKey() + '|sig') === prepSig()) return;
-  await prepDaysSave(f);
+  const n = await prepDaysSave(f);
+  if (n) toast(tr('Traces du dossier mises à jour') + ` · ${f}`, 3500, { label: tr('Voir'), run: () => { libFolder = f; openLib(); } });
 }
 let prepOffOpen = false;
 async function prepOffline() {
