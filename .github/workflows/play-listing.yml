@@ -1,0 +1,21 @@
+# Fiche Play Store : envoie les descriptions et les captures de play-store/ (bouton « Run workflow »).
+# Clé : secret PLAY_SERVICE_ACCOUNT_JSON (compte pisteo-github, droit « fiche Play Store »).
+name: Fiche Play Store
+on:
+  workflow_dispatch:
+    inputs:
+      texte_seul:
+        description: "Seulement les textes (sans les captures)"
+        type: boolean
+        default: false
+jobs:
+  fiche:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with: { python-version: '3.12' }
+      - run: pip install --quiet google-api-python-client google-auth
+      - name: Envoi de la fiche
+        env: { PLAY_JSON: '${{ secrets.PLAY_SERVICE_ACCOUNT_JSON }}' }
+        run: python play-store/upload.py ${{ inputs.texte_seul && '--texte' || '' }}
