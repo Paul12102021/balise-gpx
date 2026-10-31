@@ -8,6 +8,12 @@ const plural = (n, one, many) => n + ' ' + (+n > 1 ? many : one);
 const kmEs = (n, half) => half ? (n ? (n === 1 ? 'un kilómetro y medio' : n + ' kilómetros y medio') : 'medio kilómetro') : (n === 1 ? 'un kilómetro' : n + ' kilómetros');
 const lowFirst = s => s.charAt(0).toLowerCase() + s.slice(1);
 const exact = {
+  "Ouvrir un GPX": "Abrir un GPX",
+  "Depuis ton téléphone": "Desde tu teléfono",
+  "Noter, un souci, une idée ?": "Valorar, un problema, una idea",
+  "Écrire un message": "Escribir un mensaje",
+  "Pisteo te plaît ? Une note sur le Play Store aide beaucoup. Un souci, une idée ? Écris-nous, on lit tous les messages.": "¿Te gusta Pisteo? Una valoración en Play Store ayuda mucho. ¿Un problema, una idea? Escríbenos, leemos todos los mensajes.",
+  "Agrandir ou réduire le panneau": "Ampliar o reducir el panel",
   // ---- portes de sortie, où dormir (v280)
   "lieux pour la nuit": "sitios para dormir",
   "lieu pour la nuit": "sitio para dormir",

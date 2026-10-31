@@ -8,6 +8,12 @@ const km = (n, half) => n === 1 && !half ? '1 kilometre' : (half ? n + '.5' : n)
 const nd = s => String(s).replace(/\.$/, '');
 const plural = (n, one, many) => n + ' ' + (+n > 1 ? many : one);
 const exact = {
+  "Ouvrir un GPX": "Open a GPX",
+  "Depuis ton téléphone": "From your phone",
+  "Noter, un souci, une idée ?": "Rate, a problem, an idea?",
+  "Écrire un message": "Write a message",
+  "Pisteo te plaît ? Une note sur le Play Store aide beaucoup. Un souci, une idée ? Écris-nous, on lit tous les messages.": "Enjoying Pisteo? A rating on the Play Store helps a lot. A problem, an idea? Write to us, we read every message.",
+  "Agrandir ou réduire le panneau": "Expand or collapse the panel",
   // ---- portes de sortie, où dormir (v280)
   "lieux pour la nuit": "places to sleep",
   "lieu pour la nuit": "place to sleep",

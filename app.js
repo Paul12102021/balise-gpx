@@ -5,7 +5,7 @@
 
 // La page et le code doivent être de la même version. Sinon (page gardée en cache
 // par le téléphone ou par GitHub), on recharge une page fraîche, au plus 3 fois.
-const APP_VERSION = 281;
+const APP_VERSION = 282;
 // lien « pisteo.app/?moi=1 » (ou ?moi=0) : cet appareil est compté à part dans les statistiques (développeur).
 // Lu avant tout rechargement de version, qui ne garde pas les paramètres de l'adresse.
 try {
@@ -1113,6 +1113,7 @@ function closeTrack(quiet) {
   setSrc('track', EMPTY); setSrc('turn', EMPTY); litUI();
   startMk.remove(); endMk.remove(); drawNotes(); trackDescUI(); osmNotes = []; osmDraw();
   store.set('gpx', '');
+  try { sheetFull(); } catch {}
   $('trackName').textContent = 'Aucune trace chargée'; $('btnClose').hidden = true; $('btnReverse').hidden = true; $('btnWatch').hidden = true; $('btnSaveTr').hidden = true; $('btnNew').hidden = true; $('btnNew').parentElement.classList.remove('has-new');
   drawProfile(); updateStats(); updateOfflineInfo();
   if (!quiet) toast('Trace fermée', 5000, savedText ? { label: 'Annuler', run: () => loadText(savedText) } : null);
@@ -1177,6 +1178,7 @@ function reverseTrack() {
   toast(rev ? 'Trace remise dans son sens d\'origine' : 'Trace inversée : départ et arrivée échangés', 3000);
 }
 function loadText(text, save = true) {
+  try { sheetFull(); } catch {}
   try {
     const t = parseGPX(text);
     showTrack(t);
@@ -1903,7 +1905,8 @@ $('viTest').onclick = voiceSample;
 // ---------- Donner mon avis : un e-mail prérempli (pas de serveur) ----------
 const FB_MAIL = 'pisteo.app@gmail.com';
 let fbKind = 'Problème';
-$('btnFeedback').onclick = () => { $('feedback').hidden = false; setTimeout(() => $('fbText').focus(), 200); };
+function openFeedback() { $('feedback').hidden = false; setTimeout(() => $('fbText').focus(), 200); }
+$('btnFeedback').onclick = openFeedback;
 $('fbClose').onclick = () => { $('feedback').hidden = true; };
 $('feedback').onclick = e => { if (e.target === $('feedback')) $('feedback').hidden = true; };
 $('fbKind').querySelectorAll('button').forEach(b => b.onclick = () => {
@@ -2526,6 +2529,7 @@ map.on('rotate', () => { if (nav && (!track || (rejoin && rejoin.straight))) gui
 }));
 
 async function startNav(free = false) {
+  try { sheetFull(); } catch {}
   if (!track && !free) { openDest(); return; }
   // en navigation, la carte ne montre que ta trace : les parcours balisés sont retirés
   if (rtMapOn) { rtHideMap(); closeRoutes(); }
@@ -7229,10 +7233,11 @@ function askReview() {
   store.set('avisAsk', '1'); try { stat('avis_demande'); } catch {}
   askCard('Ça t\'a plu ?', 'Sortie enregistrée, bravo ! Pisteo t\'a été utile ?', [
     ['Pas vraiment', 'ghost', () => { try { stat('avis_non'); } catch {}
-      askCard('Pas vraiment', 'Dis-nous ce qui t\'a gêné : on lit tous les messages.', [['Non merci', 'ghost'], ['Donner mon avis', 'go', () => $('btnFeedback').click()]]); }],
+      askCard('Pas vraiment', 'Dis-nous ce qui t\'a gêné : on lit tous les messages.', [['Non merci', 'ghost'], ['Donner mon avis', 'go', openFeedback]]); }],
     ['Oui, j\'ai aimé', 'go', () => { try { stat('avis_oui'); } catch {}
       askCard('Ça t\'a plu ?', 'Merci ! Une note sur le Play Store aide beaucoup Pisteo à se faire connaître.', [['Plus tard', 'ghost'], ['Noter Pisteo', 'go', () => {
         try { stat('avis_note'); } catch {}
+        store.set('avisNote', '1'); fbSubUI();
         if (AND && AND.askReview) { try { AND.askReview(); return; } catch {} }
         if (AND && AND.openExternal) { try { AND.openExternal(PLAY_URL); return; } catch {} }
         window.open(PLAY_URL, '_blank');
@@ -7252,8 +7257,19 @@ function openPlayReview() {
   if (AND && AND.openExternal) { try { AND.openExternal(PLAY_URL); return; } catch {} }
   window.open(PLAY_URL, '_blank');
 }
-$('btnRate').hidden = !(AND || PLAY_PUBLIC);
-$('btnRate').onclick = openPlayReview;
+// « Mon avis » regroupe noter + écrire : tant que Pisteo n'a pas été noté, on propose les deux ;
+// après (Google ne dit pas si la note a été donnée : on retient qu'on a touché « Noter »), on écrit directement
+const canRate = () => !!(AND || PLAY_PUBLIC) && !store.get('avisNote');
+function fbSubUI() { $('fbSub').textContent = tr(canRate() ? 'Noter, un souci, une idée ?' : 'Un souci, une idée ?'); }
+fbSubUI();
+$('btnFeedback').onclick = () => {
+  if (!canRate()) { openFeedback(); return; }
+  askCard(tr('Mon avis'), tr('Pisteo te plaît ? Une note sur le Play Store aide beaucoup. Un souci, une idée ? Écris-nous, on lit tous les messages.'), [
+    ['Écrire un message', 'ghost', openFeedback],
+    ['Noter Pisteo', 'go', () => { store.set('avisNote', '1'); fbSubUI(); openPlayReview(); }]
+  ]);
+};
+$('btnImport').onclick = () => $('fileIn').click();
 $('btnShareApp').onclick = async () => {
   try { stat('partage_appli'); } catch {}
   // tant que l'appli n'est pas publique, le lien Play Store ne marche que pour les testeurs : on partage le site
@@ -7320,23 +7336,36 @@ function moreMotion() {
       const col = document.querySelector('.fab-col'), hud = document.querySelector('.hud');
       const room = innerHeight - h - (hud ? hud.offsetHeight : 0) - 24;
       document.body.classList.toggle('fab-hide', !!col && !$('more').hidden && room < col.offsetHeight);
+    }, undefined, undefined, {
+      is: () => document.body.classList.contains('sheet-mini'),
+      set: on => document.body.classList.toggle('sheet-mini', on),
+      ok: () => !isSide() && !nav
     }));
 }
 function toggleMore(open, instant) {
+  if (document.body.classList.contains('sheet-mini')) { if (open !== false) sheetFull(); return; } // vue mini : un toucher sur la poignée remonte le panneau
   const want = open === undefined ? $('more').hidden : !!open;
   if (isSide()) { applyMore(want); return; } // grand écran : le panneau a toute la hauteur, pas d'animation
   want ? moreMotion().open(instant) : moreMotion().close(instant);
 }
 $('btnMore').onclick = () => toggleMore(); $('grip').onclick = () => toggleMore();
+// sortir de la vue mini (trace ouverte ou fermée, navigation lancée, grand écran…)
+function sheetFull() { if (document.body.classList.contains('sheet-mini')) moreMotion().exitMini(); }
+// un toucher sur le titre en vue mini remonte aussi le panneau
+$('trackName').addEventListener('click', () => { if (document.body.classList.contains('sheet-mini')) sheetFull(); });
 
 // Ouvrir / réduire un panneau du bas en douceur : le panneau glisse (il suit le doigt pendant le geste),
 // puis le contenu est ajouté ou retiré une fois le mouvement fini.
-function sheetMotion(panel, content, apply, report, after, steps) {
+// mini (facultatif) : un cran sous la vue normale, seul le titre reste visible → la carte prend tout l'écran
+function sheetMotion(panel, content, apply, report, after, steps, mini) {
   let y = 0, raf = 0;
   const vis = () => Math.max(0, panel.offsetHeight - Math.max(0, y));
   const setY = v => { y = v; panel.style.transform = v ? `translateY(${v}px)` : ''; report(vis()); };
   // écart de hauteur entre ouvert et réduit (contenu affiché au moment de la mesure)
   const gap = () => { const hOpen = panel.offsetHeight; content.hidden = true; const hClosed = panel.offsetHeight; content.hidden = false; return Math.max(0, hOpen - hClosed); };
+  // écart de hauteur entre la vue normale et la vue mini (mesuré panneau réduit)
+  const miniGap = () => { const ch = content.hidden; content.hidden = true; const a = panel.offsetHeight; mini.set(true); const b = panel.offsetHeight; mini.set(false); content.hidden = ch; return Math.max(0, a - b); };
+  const toMini = to => animate(to, () => { setY(0); apply(false); mini.set(true); report(vis()); });
   const ease = t => 1 - Math.pow(1 - t, 3);
   function animate(to, done) {
     cancelAnimationFrame(raf);
@@ -7360,9 +7389,25 @@ function sheetMotion(panel, content, apply, report, after, steps) {
       animate(gap(), () => { setY(0); apply(false); report(vis()); });
     },
     // pendant le geste : base = position de départ, G = course totale
-    drag: { start() { cancelAnimationFrame(raf); const was = !content.hidden; if (!was) apply(true); const G = gap(); const base = was ? y : G; setY(base); return { was, G, base }; },
-            move(st, dy) { let v = st.base + dy; if (v < 0) v *= 0.3; else if (v > st.G) v = st.G + (v - st.G) * 0.3; setY(v); },
+    drag: { start() {
+              cancelAnimationFrame(raf);
+              const wasMini = !!(mini && mini.is()); if (wasMini) mini.set(false);
+              const was = !content.hidden; if (!was) apply(true);
+              const G = gap(), M = !was && mini && mini.ok() ? miniGap() : 0;
+              const base = was ? y : G + (wasMini ? M : 0); setY(base); return { was, G, M, base, wasMini };
+            },
+            move(st, dy) { const max = st.G + (st.M || 0); let v = st.base + dy; if (v < 0) v *= 0.3; else if (v > max) v = max + (v - max) * 0.3; setY(v); },
             end(st, dy, vy) {
+              // vue normale ⇄ vue mini (carte en grand)
+              if (!st.was && st.M) {
+                const up = dy < -40 || (vy < -0.5 && dy < -24), down = dy > 50 || (vy > 0.5 && dy > 24);
+                if (st.wasMini) {
+                  if (!up) { toMini(st.G + st.M); return; }
+                  if (y < st.G * 0.5) { animate(0); return; } // grand glissé vers le haut : on va jusqu'à tout afficher
+                  animate(st.G, () => { setY(0); apply(false); report(vis()); }); return;
+                }
+                if (down) { toMini(st.G + st.M); return; }
+              }
               // un petit glissé rapide (doigt qui bouge en touchant un bouton) ne compte pas : il faut au moins ~24 px
               const goOpen = st.was ? !(dy > 50 || (vy > 0.5 && dy > 24)) : (dy < -40 || (vy < -0.5 && dy < -24));
               // panneau à étages : glisser vers le bas passe d'abord à la vue réduite, vers le haut revient à la vue complète
@@ -7380,6 +7425,7 @@ function sheetMotion(panel, content, apply, report, after, steps) {
             } }
   };
   try { new ResizeObserver(() => report(vis())).observe(panel); } catch {}
+  m.exitMini = () => { if (!mini || !mini.is()) return; cancelAnimationFrame(raf); const h0 = panel.offsetHeight; mini.set(false); setY(panel.offsetHeight - h0); animate(0); };
   return m;
 }
 
@@ -9434,7 +9480,7 @@ const STAT_BTN = {
   btnNav: 'nav_btn', btnNew: 'autre_trajet', destLoop: 'boucle_ouvrir', lpGo: 'boucle', lbAgain: 'boucle_autre', lbEdit: 'boucle_modifier', lbKeep: 'boucle_garder', lbGo: 'boucle_naviguer',
   destPlan: 'point_par_point', ptView: 'pp_apercu', ptDone: 'pp_naviguer', destPick: 'choisir_carte', destFree: 'balade_libre', destRoutes: 'balises_ouvrir', rtpGo: 'balise_naviguer', rtpKeep: 'balise_garder',
   btnWx: 'meteo', wxDepBtn: 'meteo_depart', depOk: 'meteo_depart_ok', wxInfo: 'meteo_legende', btnLit: 'eclairage', btnReverse: 'inverser', btnWatch: 'envoyer_parcours', wtLink: 'lien_partage', wtQr: 'qr_code', wtPropose: 'catalogue_proposer',
-  btnSaveTr: 'trace_enregistrer', btnOpen: 'gpx_ouvrir', btnSorties: 'mes_sorties', btnMaps: 'mes_cartes', btnStrava: 'strava_ouvrir', btnBackup: 'sauvegarde_ouvrir', btnFeedback: 'avis',
+  btnSaveTr: 'trace_enregistrer', btnOpen: 'gpx_ouvrir', btnSorties: 'mes_sorties', btnMaps: 'mes_cartes', btnStrava: 'strava_ouvrir', btnBackup: 'sauvegarde_ouvrir', btnFeedback: 'avis', btnImport: 'gpx_importer_tuile',
   stvConnect: 'strava_connecter', sdStrava: 'sortie_strava', sdStvView: 'strava_voir', sdShare: 'sortie_partager', sdExport: 'sortie_export', sdFollow: 'sortie_refaire', sdPhAdd: 'photo_ajouter', phCam: 'photo_camera',
   gdNow: 'drive_maintenant', gdRestore: 'drive_restaurer', btnRejoin: 'retour_trace', btnOverview: 'vue_ensemble', npHome: 'retour_depart', npResume: 'reprendre_parcours', btnLayer: 'fond_changer',
   btnPip: 'pip', btnEcoFab: 'eco_bouton', btnRecFab: 'rec_bouton', npRec: 'rec_panneau', npReport: 'signaler_osm', npProfOnly: 'profil_seul', btnExit: 'terminer', finSave: 'sortie_garder', finDelete: 'sortie_jeter', finContinue: 'sortie_continuer',

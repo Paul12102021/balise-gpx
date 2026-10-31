@@ -9,13 +9,13 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<meta name="balise-version" content="281">
+<meta name="balise-version" content="282">
 <title>Pisteo</title>
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" href="icon.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
 <link rel="stylesheet" href="vendor/maplibre-gl.css">
-<link rel="stylesheet" href="app.css?v=281">
+<link rel="stylesheet" href="app.css?v=282">
 </head>
 <body>
 <div id="map" aria-label="Carte"></div>
@@ -148,7 +148,7 @@
 
 <!-- Aperçu : panneau du bas -->
 <section class="sheet ov-only" id="sheet">
-  <div class="grip" id="grip" role="button" aria-label="Afficher ou masquer les réglages"></div>
+  <div class="grip" id="grip" role="button" aria-label="Agrandir ou réduire le panneau"></div>
   <div class="trackrow">
     <div class="trackname" id="trackName">Aucune trace chargée</div>
     <button id="btnSaveTr" class="closebtn save" hidden aria-label="Enregistrer la trace dans Mes traces"></button>
@@ -207,8 +207,8 @@
       <button id="btnMaps" class="set-tile"><svg viewBox="0 0 24 24"><path d="M9 4 3 6v14l6-2 6 2 6-2V4l-6 2-6-2Z"/><path d="M9 4v14M15 6v14"/></svg><b>Mes cartes</b><small id="mapsSub">Hors ligne</small><small id="mapsStatus" class="dl-live" hidden></small></button>
       <button id="btnStrava" class="set-tile"><svg viewBox="0 0 24 24"><path d="M7 18a4.5 4.5 0 0 1-.6-9 6 6 0 0 1 11.4 1.5A3.75 3.75 0 0 1 17.5 18"/><path d="M12 12v8"/><path d="m9 15 3-3 3 3"/></svg><b>Strava</b><small id="stvStatus">Non connecté</small></button>
       <button id="btnBackup" class="set-tile"><svg viewBox="0 0 24 24"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M4 17v3h16v-3"/></svg><b>Sauvegarde</b><small>Sorties et traces</small></button>
-      <button id="btnFeedback" class="set-tile"><svg viewBox="0 0 24 24"><path d="M4 5h16v11H9l-5 4V5Z"/></svg><b>Mon avis</b><small>Un souci, une idée ?</small></button>
-      <button id="btnRate" class="set-tile" hidden><svg viewBox="0 0 24 24"><path d="m12 3 2.7 5.6 6.1.8-4.5 4.3 1.1 6.1L12 16.9l-5.4 2.9 1.1-6.1-4.5-4.3 6.1-.8L12 3Z"/></svg><b>Noter Pisteo</b><small>Sur le Play Store</small></button>
+      <button id="btnFeedback" class="set-tile"><svg viewBox="0 0 24 24"><path d="M4 5h16v11H9l-5 4V5Z"/></svg><b>Mon avis</b><small id="fbSub">Un souci, une idée ?</small></button>
+      <button id="btnImport" class="set-tile"><svg viewBox="0 0 24 24"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8l-5-5Z"/><path d="M14 3v5h5"/><path d="M12 11v6"/><path d="m9 14 3 3 3-3"/></svg><b>Ouvrir un GPX</b><small>Depuis ton téléphone</small></button>
       <button id="btnShareApp" class="set-tile"><svg viewBox="0 0 24 24"><circle cx="18" cy="5" r="2.5"/><circle cx="6" cy="12" r="2.5"/><circle cx="18" cy="19" r="2.5"/><path d="m8.2 10.8 7.6-4.4M8.2 13.2l7.6 4.4"/></svg><b>Partager Pisteo</b><small>À un ami, un club</small></button>
     </div>
 
@@ -986,8 +986,8 @@
 
 <script src="vendor/maplibre-gl.js"></script>
 <script src="vendor/qrcode.js"></script>
-<script src="i18n/en.js?v=281"></script>
-<script src="i18n/es.js?v=281"></script>
-<script src="app.js?v=281"></script>
+<script src="i18n/en.js?v=282"></script>
+<script src="i18n/es.js?v=282"></script>
+<script src="app.js?v=282"></script>
 </body>
 </html>
