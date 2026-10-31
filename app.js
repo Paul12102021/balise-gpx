@@ -5,7 +5,7 @@
 
 // La page et le code doivent être de la même version. Sinon (page gardée en cache
 // par le téléphone ou par GitHub), on recharge une page fraîche, au plus 3 fois.
-const APP_VERSION = 292;
+const APP_VERSION = 293;
 // lien « pisteo.app/?moi=1 » (ou ?moi=0) : cet appareil est compté à part dans les statistiques (développeur).
 // Lu avant tout rechargement de version, qui ne garde pas les paramètres de l'adresse.
 try {
@@ -3040,6 +3040,19 @@ const BIKE = {
 };
 const bikeStyle = 'fast';
 const styleName = s => BIKE[s] ? BIKE[s].name.toLowerCase() : '';
+// profil « Éviter les grandes routes » (boucles à vélo, pistes.brf) : départementales et nationales bien plus chères
+let greenId = null, greenP = null;
+function greenProfile(renew) {
+  if (renew) { greenId = null; greenP = null; }
+  if (greenId) return Promise.resolve(greenId);
+  greenP = greenP || (async () => {
+    const t = await fetch('pistes.brf?v=' + APP_VERSION).then(r => { if (!r.ok) throw new Error('profil'); return r.text(); });
+    const j = await fetch('https://brouter.de/brouter/profile', { method: 'POST', body: t }).then(r => r.json());
+    if (!j.profileid) { const e = new Error(j.error || 'profil refusé'); e.server = true; throw e; }
+    return (greenId = j.profileid);
+  })().catch(e => { greenP = null; throw e; });
+  return greenP;
+}
 let riverId = null, riverP = null;
 function riverProfile(renew) {
   if (renew) { riverId = null; riverP = null; }
@@ -3087,7 +3100,7 @@ async function brProf(style, estSecs = 0) {
     if (!isDarkNow() && Date.now() - litToastT > 60000) { litToastT = Date.now(); toast(tr('Arrivée après la tombée de la nuit : itinéraire par les rues éclairées'), 4500); }
     return nightProfile();
   }
-  return style === 'river' ? riverProfile() : 'trekking';
+  return style === 'river' ? riverProfile() : style === 'green' ? greenProfile() : 'trekking';
 }
 // Plan de secours : si BRouter (serveur bénévole unique) ne répond pas, on calcule l'itinéraire sur le
 // serveur OSRM de FOSSGIS (routing.openstreetmap.de, profils piéton et vélo, sans clé, 1 demande/s au plus).
@@ -3130,7 +3143,7 @@ async function brFetchMain(lonlats, style, signal) {
     const r = await fetch(`https://brouter.de/brouter?lonlats=${lonlats}&profile=${prof}&alternativeidx=0&format=geojson`, { signal });
     if (r.ok) { const j = await r.json(); if (prof === nightId) j.lit = true; return j; }
     const m = (await r.text().catch(() => '')).slice(0, 200);
-    if (k === 0 && /^custom_/.test(prof)) { if (prof === nightId) await nightProfile(true); else await riverProfile(true); continue; }
+    if (k === 0 && /^custom_/.test(prof)) { if (prof === nightId) await nightProfile(true); else if (prof === greenId) await greenProfile(true); else await riverProfile(true); continue; }
     const e = new Error(m || 'HTTP ' + r.status); e.server = true; throw e;
   }
 }
@@ -3714,10 +3727,14 @@ map.on('click', e => {
 // =====================================================================
 const loopCfg = { from: null, byTime: false, val: null, seed: Math.random() * 360 };
 let loopRes = null;
+// à vélo : grandes routes « Si besoin » (profil habituel) ou « À éviter »
+const lpGreen = () => store.get('loopGreen') === '1';
+const lpStyle = () => profile === 'trekking' && lpGreen() ? 'green' : undefined;
 function lpSpeed() { return profile === 'trekking' ? { v: 16, climb: 800 } : { v: 4.5, climb: 600 }; }
 function lpUI() {
   const bike = profile === 'trekking';
   $('lpFoot').classList.toggle('on', !bike); $('lpBike').classList.toggle('on', bike);
+  $('lpWayBlock').hidden = !bike; $('lpRoads').classList.toggle('on', !lpGreen()); $('lpGreen').classList.toggle('on', lpGreen());
   $('lpFromMe').classList.toggle('on', !loopCfg.from); $('lpFromMap').classList.toggle('on', !!loopCfg.from);
   $('lpFromTxt').textContent = loopCfg.from ? `Point choisi (${loopCfg.from.lat.toFixed(4)}, ${loopCfg.from.lon.toFixed(4)}) · touche « Un point sur la carte » pour en changer` : (me ? 'Position GPS actuelle' : 'La position GPS sera recherchée');
   $('lpByKm').classList.toggle('on', !loopCfg.byTime); $('lpByTime').classList.toggle('on', loopCfg.byTime);
@@ -3743,6 +3760,8 @@ $('destLoop').onclick = openLoop;
 $('loopClose').onclick = () => { $('loop').hidden = true; };
 $('loop').onclick = e => { if (e.target === $('loop')) $('loop').hidden = true; };
 $('lpFoot').onclick = () => { setProfile('hiking-mountain', true); loopCfg.val = null; lpUI(); };
+$('lpRoads').onclick = () => { store.set('loopGreen', '0'); lpUI(); };
+$('lpGreen').onclick = () => { store.set('loopGreen', '1'); lpUI(); };
 $('lpBike').onclick = () => { setProfile('trekking', true); loopCfg.val = null; lpUI(); };
 $('lpByKm').onclick = () => { loopCfg.byTime = false; loopCfg.val = null; lpUI(); };
 $('lpByTime').onclick = () => { loopCfg.byTime = true; loopCfg.val = null; lpUI(); };
@@ -3857,7 +3876,7 @@ async function makeLoop() {
     }
     for (let tryN = 0; tryN < 4 || (tryN < 6 && (!best || best.err > 0.35)); tryN++) {
       let pts;
-      try { pts = removeSpurs(await routeVia(loopPoints(start, r, ang), 45000)); litRemember(pts); }
+      try { pts = removeSpurs(await routeVia(loopPoints(start, r, ang), 45000, lpStyle())); litRemember(pts); }
       catch (e) {
         if (!e.server) throw e;
         ang = (ang + 60) % 360; continue; // point dans la mer, sans chemin… : autre direction

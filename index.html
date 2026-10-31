@@ -9,13 +9,13 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<meta name="balise-version" content="292">
+<meta name="balise-version" content="293">
 <title>Pisteo</title>
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" href="icon.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
 <link rel="stylesheet" href="vendor/maplibre-gl.css">
-<link rel="stylesheet" href="app.css?v=292">
+<link rel="stylesheet" href="app.css?v=293">
 </head>
 <body>
 <div id="map" aria-label="Carte"></div>
@@ -798,6 +798,10 @@
       <span class="lp-l">Je me déplace</span>
       <div class="seg"><button id="lpFoot">À pied</button><button id="lpBike">À vélo</button></div>
     </div>
+    <div id="lpWayBlock" class="lp-block" hidden>
+      <span class="lp-l">Grandes routes</span>
+      <div class="seg"><button id="lpRoads">Si besoin</button><button id="lpGreen">À éviter</button></div>
+    </div>
     <div class="lp-block">
       <span class="lp-l">Je veux faire</span>
       <div class="seg"><button id="lpByKm" class="on">Une distance</button><button id="lpByTime">Une durée</button></div>
@@ -1029,8 +1033,8 @@
 
 <script src="vendor/maplibre-gl.js"></script>
 <script src="vendor/qrcode.js"></script>
-<script src="i18n/en.js?v=292"></script>
-<script src="i18n/es.js?v=292"></script>
-<script src="app.js?v=292"></script>
+<script src="i18n/en.js?v=293"></script>
+<script src="i18n/es.js?v=293"></script>
+<script src="app.js?v=293"></script>
 </body>
 </html>

@@ -8,6 +8,9 @@ const km = (n, half) => n === 1 && !half ? '1 kilometre' : (half ? n + '.5' : n)
 const nd = s => String(s).replace(/\.$/, '');
 const plural = (n, one, many) => n + ' ' + (+n > 1 ? many : one);
 const exact = {
+  'Grandes routes': 'Main roads',
+  'Si besoin': 'If needed',
+  'À éviter': 'Avoid',
   'Types de voie (route, piste, chemin)': 'Surface types (road, cycle path, track)',
   'Recherche des types de voie…': 'Looking up surface types…',
   'Pas de réseau : les types de voie viennent d\'OpenStreetMap.': 'No network: surface types come from OpenStreetMap.',
