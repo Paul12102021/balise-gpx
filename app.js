@@ -5,7 +5,7 @@
 
 // La page et le code doivent être de la même version. Sinon (page gardée en cache
 // par le téléphone ou par GitHub), on recharge une page fraîche, au plus 3 fois.
-const APP_VERSION = 280;
+const APP_VERSION = 281;
 // lien « pisteo.app/?moi=1 » (ou ?moi=0) : cet appareil est compté à part dans les statistiques (développeur).
 // Lu avant tout rechargement de version, qui ne garde pas les paramètres de l'adresse.
 try {
@@ -8277,7 +8277,8 @@ function ohParse(s) {
   if (ohCache.has(s)) return ohCache.get(s);
   let out = null;
   try {
-    const t = String(s).trim().replace(/\s*;\s*$/, '');
+    // « Mo-Sa 08:00-20:00, Su 09:00-12:00 » : la virgule avant un jour sépare deux règles
+    const t = String(s).trim().replace(/\s*;\s*$/, '').replace(/(\d{2}:\d{2})\s*,\s*(?=(?:Mo|Tu|We|Th|Fr|Sa|Su|PH)\b)/g, '$1; ');
     if (t === '24/7') out = [{ days: null, months: null, ph: false, iv: [[0, 1440]] }];
     else {
       out = [];
@@ -8685,7 +8686,10 @@ function prepExits(pois, stages) {
   const sec = $('prepExitSec');
   if (!pois || !exitsKnown()) { sec.hidden = true; return; }
   sec.hidden = false;
-  const ex = pois.filter(p => p.k === 'g'), lim = prepBike() ? 60000 : 25000;
+  // gares voisines (même bourg, arrêts d'un même train de montagne) : la plus proche de la trace par tranche de 1,5 km
+  const ex = [];
+  for (const p of pois.filter(q => q.k === 'g')) { const l = ex[ex.length - 1]; if (l && p.along - l.along < 1500) { if (p.d < l.d) ex[ex.length - 1] = p; } else ex.push(p); }
+  const lim = prepBike() ? 60000 : 25000;
   const marks = [0, ...ex.map(p => p.along), track.total], gaps = [];
   for (let i = 1; i < marks.length; i++) if (marks[i] - marks[i - 1] >= lim) gaps.push({ from: marks[i - 1], to: marks[i], start: i === 1, end: i === marks.length - 1 });
   const where = g => g.start && g.end ? escH(tr('Sur tout le parcours')) : g.start ? `${escH(tr('Départ'))} → ${kmN(g.to)}${kmU()}` : g.end ? `${kmN(g.from)}${kmU()} → ${escH(tr('arrivée'))}` : `${kmN(g.from)} → ${kmN(g.to)}${kmU()}`;
