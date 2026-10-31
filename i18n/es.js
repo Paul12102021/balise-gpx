@@ -8,6 +8,19 @@ const plural = (n, one, many) => n + ' ' + (+n > 1 ? many : one);
 const kmEs = (n, half) => half ? (n ? (n === 1 ? 'un kilómetro y medio' : n + ' kilómetros y medio') : 'medio kilómetro') : (n === 1 ? 'un kilómetro' : n + ' kilómetros');
 const lowFirst = s => s.charAt(0).toLowerCase() + s.slice(1);
 const exact = {
+  "Astuces": "Consejos",
+  "Glisse le panneau du bas vers le bas": "Desliza el panel inferior hacia abajo",
+  " : la carte passe en plein écran.": ": el mapa pasa a pantalla completa.",
+  "« … » à côté du nom de la trace": "«…» junto al nombre del track",
+  " : météo, éclairage, inverser le sens, envoyer, suivi en direct par un proche.": ": tiempo, iluminación, invertir el sentido, enviar, seguimiento en directo.",
+  "Fais glisser ton doigt sur le profil": "Desliza el dedo por el perfil",
+  " pour voir l'altitude et la distance à cet endroit.": " para ver la altitud y la distancia en ese punto.",
+  "En navigation, touche une case du bas": "Durante la navegación, toca una casilla de abajo",
+  " pour choisir ce qu'elle affiche.": " para elegir lo que muestra.",
+  "Avant de partir en montagne": "Antes de ir a la montaña",
+  ", télécharge la carte : Réglages › Mes cartes.": ", descarga el mapa: Ajustes › Mis mapas.",
+  "Prise en main": "Primeros pasos",
+  "Accueil et astuces": "Bienvenida y consejos",
   "parcourus": "recorridos",
   "restants": "restantes",
   "Suivi en direct par un proche": "Seguimiento en directo",

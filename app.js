@@ -5,7 +5,7 @@
 
 // La page et le code doivent être de la même version. Sinon (page gardée en cache
 // par le téléphone ou par GitHub), on recharge une page fraîche, au plus 3 fois.
-const APP_VERSION = 288;
+const APP_VERSION = 289;
 // lien « pisteo.app/?moi=1 » (ou ?moi=0) : cet appareil est compté à part dans les statistiques (développeur).
 // Lu avant tout rechargement de version, qui ne garde pas les paramètres de l'adresse.
 try {
@@ -7225,19 +7225,22 @@ $('btnSim').onclick = startSim;
 // Écran d'accueil : une seule fois, au tout premier lancement (pas pour ceux qui ont déjà des traces)
 // =====================================================================
 let onbI = 0;
-const ONB_N = () => $('onb').querySelectorAll('.onb-s').length;
+// écrans visibles : les astuces seulement quand on rouvre l'accueil depuis les réglages (« Prise en main »)
+const onbSlides = () => [...$('onb').querySelectorAll('.onb-s')].filter(x => !x.classList.contains('onb-tips') || $('onb').classList.contains('help'));
+const ONB_N = () => onbSlides().length;
 function onbShow(i) {
   onbI = i;
-  $('onb').querySelectorAll('.onb-s').forEach((x, k) => x.classList.toggle('on', k === i));
-  $('onb').querySelectorAll('.onb-dots i').forEach((x, k) => x.classList.toggle('on', k === i));
+  $('onb').querySelectorAll('.onb-s').forEach(x => x.classList.remove('on'));
+  onbSlides().forEach((x, k) => x.classList.toggle('on', k === i));
+  $('onb').querySelector('.onb-dots').innerHTML = onbSlides().map((_, k) => `<i${k === i ? ' class="on"' : ''}></i>`).join('');
   const last = i === ONB_N() - 1;
   $('onbNext').hidden = last; $('onbSkip').textContent = last ? 'Explorer la carte' : 'Passer';
   $('onbFoot').classList.toggle('on', profile !== 'trekking'); $('onbBike').classList.toggle('on', profile === 'trekking');
 }
-function onbClose(how) { $('onb').hidden = true; store.set('onb', '1'); try { stat('onb_' + how); } catch {} }
+function onbClose(how) { $('onb').hidden = true; $('onb').classList.remove('help'); store.set('onb', '1'); try { stat('onb_' + how); } catch {} }
 $('onbNext').onclick = () => onbShow(onbI + 1);
 $('onbSkip').onclick = () => onbClose(onbI === ONB_N() - 1 ? 'carte' : 'passer_' + onbI);
-const onbMode = p => { setProfile(p, true); try { stat(p === 'trekking' ? 'onb_velo' : 'onb_pied'); } catch {} onbShow(2); };
+const onbMode = p => { setProfile(p, true); try { stat(p === 'trekking' ? 'onb_velo' : 'onb_pied'); } catch {} onbShow(onbI + 1); };
 $('onbFoot').onclick = () => onbMode('hiking-mountain');
 $('onbBike').onclick = () => onbMode('trekking');
 // première action : directement dans la bonne fenêtre (la position est demandée à ce moment-là)
@@ -7305,7 +7308,8 @@ $('btnFeedback').onclick = () => {
     ['Noter Pisteo', 'go', () => { store.set('avisNote', '1'); fbSubUI(); openPlayReview(); }]
   ]);
 };
-$('btnImport').onclick = () => $('fileIn').click();
+// « Prise en main » : les astuces d'abord, puis l'accueil du premier lancement
+$('btnHelp').onclick = () => { toggleMore(false, true); $('onb').classList.add('help'); onbShow(0); $('onb').hidden = false; };
 // réglages : l'essentiel d'abord, le reste derrière « Plus de réglages »
 $('setMoreBtn').onclick = () => {
   const b = $('setMoreBtn'), r = $('setRare'), open = r.hidden;
@@ -7529,7 +7533,7 @@ liveUI();
 (() => {
   const menu = $('trMenu'), more = $('btnTrMore'), items = [...menu.querySelectorAll('button')];
   const sync = () => {
-    more.hidden = items.every(b => b.hidden);
+    more.hidden = !track || items.every(b => b.hidden);
     more.classList.toggle('dot', items.some(b => !b.hidden && b.classList.contains('on'))); // météo ou éclairage affichés
     if (more.hidden) close();
   };
@@ -9683,7 +9687,7 @@ const STAT_BTN = {
   btnNav: 'nav_btn', btnNew: 'autre_trajet', destLoop: 'boucle_ouvrir', lpGo: 'boucle', lbAgain: 'boucle_autre', lbEdit: 'boucle_modifier', lbKeep: 'boucle_garder', lbGo: 'boucle_naviguer',
   destPlan: 'point_par_point', ptView: 'pp_apercu', ptDone: 'pp_naviguer', destPick: 'choisir_carte', destFree: 'balade_libre', destRoutes: 'balises_ouvrir', rtpGo: 'balise_naviguer', rtpKeep: 'balise_garder',
   btnWx: 'meteo', wxDepBtn: 'meteo_depart', depOk: 'meteo_depart_ok', wxInfo: 'meteo_legende', btnLit: 'eclairage', btnReverse: 'inverser', btnWatch: 'envoyer_parcours', wtLink: 'lien_partage', wtQr: 'qr_code', wtPropose: 'catalogue_proposer',
-  btnSaveTr: 'trace_enregistrer', btnOpen: 'gpx_ouvrir', btnSorties: 'mes_sorties', btnMaps: 'mes_cartes', btnStrava: 'strava_ouvrir', btnBackup: 'sauvegarde_ouvrir', btnFeedback: 'avis', btnImport: 'gpx_importer_tuile', eaGpx: 'vide_gpx', eaLoop: 'vide_boucle', eaRoutes: 'vide_balises', btnLive: 'live_ouvrir', npLive: 'live_ouvrir_nav',
+  btnSaveTr: 'trace_enregistrer', btnOpen: 'gpx_ouvrir', btnSorties: 'mes_sorties', btnMaps: 'mes_cartes', btnStrava: 'strava_ouvrir', btnBackup: 'sauvegarde_ouvrir', btnFeedback: 'avis', btnHelp: 'prise_en_main', eaGpx: 'vide_gpx', eaLoop: 'vide_boucle', eaRoutes: 'vide_balises', btnLive: 'live_ouvrir', npLive: 'live_ouvrir_nav',
   stvConnect: 'strava_connecter', sdStrava: 'sortie_strava', sdStvView: 'strava_voir', sdShare: 'sortie_partager', sdExport: 'sortie_export', sdFollow: 'sortie_refaire', sdPhAdd: 'photo_ajouter', phCam: 'photo_camera',
   gdNow: 'drive_maintenant', gdRestore: 'drive_restaurer', btnRejoin: 'retour_trace', btnOverview: 'vue_ensemble', npHome: 'retour_depart', npResume: 'reprendre_parcours', btnLayer: 'fond_changer',
   btnPip: 'pip', btnEcoFab: 'eco_bouton', btnRecFab: 'rec_bouton', npRec: 'rec_panneau', npReport: 'signaler_osm', npProfOnly: 'profil_seul', btnExit: 'terminer', finSave: 'sortie_garder', finDelete: 'sortie_jeter', finContinue: 'sortie_continuer',

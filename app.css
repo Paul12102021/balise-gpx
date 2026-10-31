@@ -712,6 +712,8 @@ body.choosing #sheet, body.choosing .fab-col { display: none !important; }
 .onb-art img { width: 92px; height: 92px; border-radius: 24px; }
 .onb-art svg { width: 46px; height: 46px; fill: none; stroke: var(--go-ink); stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
 .onb-s h2 { margin: 0 0 10px; font-size: 22px; }
+.onb-list { margin: 4px 0 0; padding: 0 0 0 18px; text-align: left; display: flex; flex-direction: column; gap: 10px; font-size: 15px; line-height: 1.4; color: var(--muted); }
+.onb-list b { color: var(--ink); font-weight: 600; }
 .onb-s p { margin: 0; font-size: 16px; line-height: 1.5; color: var(--muted); }
 .onb-s p b { color: var(--ink); }
 .onb-dots { display: flex; justify-content: center; gap: 8px; margin: 18px 0 16px; }

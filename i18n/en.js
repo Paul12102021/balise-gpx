@@ -8,6 +8,19 @@ const km = (n, half) => n === 1 && !half ? '1 kilometre' : (half ? n + '.5' : n)
 const nd = s => String(s).replace(/\.$/, '');
 const plural = (n, one, many) => n + ' ' + (+n > 1 ? many : one);
 const exact = {
+  "Astuces": "Tips",
+  "Glisse le panneau du bas vers le bas": "Swipe the bottom panel down",
+  " : la carte passe en plein écran.": ": the map goes full screen.",
+  "« … » à côté du nom de la trace": "\"…\" next to the track name",
+  " : météo, éclairage, inverser le sens, envoyer, suivi en direct par un proche.": ": weather, lighting, reverse, send, live tracking for someone close.",
+  "Fais glisser ton doigt sur le profil": "Slide your finger along the profile",
+  " pour voir l'altitude et la distance à cet endroit.": " to see the altitude and distance at that point.",
+  "En navigation, touche une case du bas": "While navigating, tap a box at the bottom",
+  " pour choisir ce qu'elle affiche.": " to choose what it shows.",
+  "Avant de partir en montagne": "Before heading into the mountains",
+  ", télécharge la carte : Réglages › Mes cartes.": ", download the map: Settings › My maps.",
+  "Prise en main": "Getting started",
+  "Accueil et astuces": "Welcome and tips",
   "parcourus": "covered",
   "restants": "left",
   "Suivi en direct par un proche": "Live tracking for someone close",

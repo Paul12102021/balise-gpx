@@ -9,13 +9,13 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<meta name="balise-version" content="288">
+<meta name="balise-version" content="289">
 <title>Pisteo</title>
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" href="icon.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
 <link rel="stylesheet" href="vendor/maplibre-gl.css">
-<link rel="stylesheet" href="app.css?v=288">
+<link rel="stylesheet" href="app.css?v=289">
 </head>
 <body>
 <div id="map" aria-label="Carte"></div>
@@ -228,7 +228,7 @@
       <button id="btnStrava" class="set-tile"><svg viewBox="0 0 24 24"><path d="M7 18a4.5 4.5 0 0 1-.6-9 6 6 0 0 1 11.4 1.5A3.75 3.75 0 0 1 17.5 18"/><path d="M12 12v8"/><path d="m9 15 3-3 3 3"/></svg><b>Strava</b><small id="stvStatus">Non connecté</small></button>
       <button id="btnBackup" class="set-tile"><svg viewBox="0 0 24 24"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M4 17v3h16v-3"/></svg><b>Sauvegarde</b><small>Sorties et traces</small></button>
       <button id="btnFeedback" class="set-tile"><svg viewBox="0 0 24 24"><path d="M4 5h16v11H9l-5 4V5Z"/></svg><b>Mon avis</b><small id="fbSub">Un souci, une idée ?</small></button>
-      <button id="btnImport" class="set-tile"><svg viewBox="0 0 24 24"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8l-5-5Z"/><path d="M14 3v5h5"/><path d="M12 11v6"/><path d="m9 14 3 3 3-3"/></svg><b>Ouvrir un GPX</b><small>Depuis ton téléphone</small></button>
+      <button id="btnHelp" class="set-tile"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M9.6 9.3a2.5 2.5 0 1 1 3.4 2.3c-.6.3-1 .8-1 1.5v.4"/><path d="M12 16.8v.2"/></svg><b>Prise en main</b><small>Accueil et astuces</small></button>
       <button id="btnShareApp" class="set-tile"><svg viewBox="0 0 24 24"><circle cx="18" cy="5" r="2.5"/><circle cx="6" cy="12" r="2.5"/><circle cx="18" cy="19" r="2.5"/><path d="m8.2 10.8 7.6-4.4M8.2 13.2l7.6 4.4"/></svg><b>Partager Pisteo</b><small>À un ami, un club</small></button>
     </div>
 
@@ -647,6 +647,16 @@
 <div id="onb" class="onb" hidden role="dialog" aria-label="Bienvenue dans Pisteo">
   <div class="onb-card">
     <div class="onb-slides">
+      <section class="onb-s onb-tips">
+        <h2>Astuces</h2>
+        <ul class="onb-list">
+          <li><b>Glisse le panneau du bas vers le bas</b> : la carte passe en plein écran.</li>
+          <li><b>« … » à côté du nom de la trace</b> : météo, éclairage, inverser le sens, envoyer, suivi en direct par un proche.</li>
+          <li><b>Fais glisser ton doigt sur le profil</b> pour voir l'altitude et la distance à cet endroit.</li>
+          <li><b>En navigation, touche une case du bas</b> pour choisir ce qu'elle affiche.</li>
+          <li><b>Avant de partir en montagne</b>, télécharge la carte : Réglages › Mes cartes.</li>
+        </ul>
+      </section>
       <section class="onb-s on">
         <div class="onb-art"><img src="icon.svg" alt=""></div>
         <h2>Bienvenue dans Pisteo</h2>
@@ -671,7 +681,7 @@
         <p class="onb-tip">Astuce : en montagne, télécharge la carte avant de partir (Réglages › Mes cartes).</p>
       </section>
     </div>
-    <div class="onb-dots"><i class="on"></i><i></i><i></i></div>
+    <div class="onb-dots"></div>
     <div class="onb-acts"><button id="onbSkip" class="btn ghost">Passer</button><button id="onbNext" class="btn go">Suivant</button></div>
   </div>
 </div>
@@ -1013,8 +1023,8 @@
 
 <script src="vendor/maplibre-gl.js"></script>
 <script src="vendor/qrcode.js"></script>
-<script src="i18n/en.js?v=288"></script>
-<script src="i18n/es.js?v=288"></script>
-<script src="app.js?v=288"></script>
+<script src="i18n/en.js?v=289"></script>
+<script src="i18n/es.js?v=289"></script>
+<script src="app.js?v=289"></script>
 </body>
 </html>
