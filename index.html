@@ -9,19 +9,20 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<meta name="balise-version" content="283">
+<meta name="balise-version" content="284">
 <title>Pisteo</title>
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" href="icon.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
 <link rel="stylesheet" href="vendor/maplibre-gl.css">
-<link rel="stylesheet" href="app.css?v=283">
+<link rel="stylesheet" href="app.css?v=284">
 </head>
 <body>
 <div id="map" aria-label="Carte"></div>
 
 <!-- Aperçu -->
 <header class="hud ov-only">
+  <div class="stat hud-hint"><span class="lbl">Pisteo</span><span class="hint-txt">Ouvre une trace pour voir distance et dénivelé</span></div>
   <div class="stat"><span class="lbl">Reste</span><span class="val" id="sDist">–</span></div>
   <div class="stat"><span class="lbl">D+ restant</span><span class="val" id="sUp">–</span></div>
   <div class="stat"><span class="lbl" id="sOffL">Écart</span><span class="val" id="sOff">–</span></div>
@@ -147,28 +148,37 @@
 <div id="nbPick" class="nb-pick nav-only" hidden role="menu"></div>
 
 <!-- Aperçu : panneau du bas -->
+<div id="trMenu" class="tr-menu ov-only" role="menu" hidden>
+      <button role="menuitem" id="btnWx" class="closebtn icon wx-btn" hidden aria-label="Météo le long du parcours" title="Météo">
+        <svg viewBox="0 0 24 24"><path d="M8 3v1.5M3.5 8H5M4.8 4.8l1 1M12.2 4.8l-1 1"/><path d="M5.6 10.4A3.5 3.5 0 1 1 11.6 7"/><path d="M8.5 20h9a3.5 3.5 0 0 0 .4-7 5 5 0 0 0-9.6 1.2A3 3 0 0 0 8.5 20z"/></svg>
+        <span>Météo le long du parcours</span>
+      </button>
+      <button role="menuitem" id="btnLit" class="closebtn icon wx-btn" hidden aria-label="Éclairage le long du parcours" title="Éclairage">
+        <svg viewBox="0 0 24 24"><path d="M9 18h6M10 21h4"/><path d="M12 3a6 6 0 0 0-3.5 10.9c.6.5 1 1.2 1 2.1h5c0-.9.4-1.6 1-2.1A6 6 0 0 0 12 3z"/></svg>
+        <span>Éclairage la nuit</span>
+      </button>
+      <button role="menuitem" id="btnReverse" class="closebtn icon" hidden aria-label="Inverser le sens de la trace" title="Inverser le sens">
+        <svg viewBox="0 0 24 24"><path d="M7 4 3 8l4 4"/><path d="M3 8h13"/><path d="m17 12 4 4-4 4"/><path d="M21 16H8"/></svg>
+        <span>Inverser le sens</span>
+      </button>
+      <button role="menuitem" id="btnWatch" class="closebtn icon" hidden aria-label="Envoyer le parcours (lien, montre, fichier GPX)" title="Envoyer">
+        <svg viewBox="0 0 24 24"><circle cx="18" cy="5" r="2.5"/><circle cx="6" cy="12" r="2.5"/><circle cx="18" cy="19" r="2.5"/><path d="m8.2 10.8 7.6-4.4M8.2 13.2l7.6 4.4"/></svg>
+        <span>Envoyer (lien, montre, GPX)</span>
+      </button>
+</div>
 <section class="sheet ov-only" id="sheet">
   <div class="grip" id="grip" role="button" aria-label="Agrandir ou réduire le panneau"></div>
   <div class="trackrow">
     <div class="trackname" id="trackName">Aucune trace chargée</div>
     <button id="btnSaveTr" class="closebtn save" hidden aria-label="Enregistrer la trace dans Mes traces"></button>
-    <button id="btnLit" class="closebtn icon wx-btn" hidden aria-label="Éclairage le long du parcours" title="Éclairage">
-      <svg viewBox="0 0 24 24"><path d="M9 18h6M10 21h4"/><path d="M12 3a6 6 0 0 0-3.5 10.9c.6.5 1 1.2 1 2.1h5c0-.9.4-1.6 1-2.1A6 6 0 0 0 12 3z"/></svg>
+    <button id="btnTrMore" class="closebtn icon" hidden aria-label="Plus d'actions" aria-haspopup="menu" aria-expanded="false" title="Plus d'actions">
+      <svg viewBox="0 0 24 24"><circle cx="5" cy="12" r="1.3"/><circle cx="12" cy="12" r="1.3"/><circle cx="19" cy="12" r="1.3"/></svg>
     </button>
     <button id="wxInfo" class="closebtn icon" hidden aria-label="Légende météo" title="Légende météo">
       <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><path d="M12 11v5.5M12 7.6v.1"/></svg>
     </button>
     <button id="wxDepBtn" class="closebtn icon wx-btn" hidden aria-label="Heure de départ" title="Heure de départ">
       <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2"/></svg>
-    </button>
-    <button id="btnWx" class="closebtn icon wx-btn" hidden aria-label="Météo le long du parcours" title="Météo">
-      <svg viewBox="0 0 24 24"><path d="M8 3v1.5M3.5 8H5M4.8 4.8l1 1M12.2 4.8l-1 1"/><path d="M5.6 10.4A3.5 3.5 0 1 1 11.6 7"/><path d="M8.5 20h9a3.5 3.5 0 0 0 .4-7 5 5 0 0 0-9.6 1.2A3 3 0 0 0 8.5 20z"/></svg>
-    </button>
-    <button id="btnReverse" class="closebtn icon" hidden aria-label="Inverser le sens de la trace" title="Inverser le sens">
-      <svg viewBox="0 0 24 24"><path d="M7 4 3 8l4 4"/><path d="M3 8h13"/><path d="m17 12 4 4-4 4"/><path d="M21 16H8"/></svg>
-    </button>
-    <button id="btnWatch" class="closebtn icon" hidden aria-label="Envoyer le parcours (lien, montre, fichier GPX)" title="Envoyer">
-      <svg viewBox="0 0 24 24"><circle cx="18" cy="5" r="2.5"/><circle cx="6" cy="12" r="2.5"/><circle cx="18" cy="19" r="2.5"/><path d="m8.2 10.8 7.6-4.4M8.2 13.2l7.6 4.4"/></svg>
     </button>
     <button id="btnClose" class="closebtn icon" hidden aria-label="Fermer la trace" title="Fermer la trace">
       <svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></svg>
@@ -181,6 +191,11 @@
   <div id="litChip" class="lit-chip" hidden></div>
   <div class="prof-wrap">
     <canvas id="profile" aria-label="Profil altimétrique"></canvas>
+  </div>
+  <div id="emptyActs" class="empty-acts">
+    <button id="eaGpx"><svg viewBox="0 0 24 24"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8l-5-5Z"/><path d="M14 3v5h5"/><path d="M12 11v6"/><path d="m9 14 3 3 3-3"/></svg><b>Ouvrir un GPX</b><small>Un fichier du téléphone</small></button>
+    <button id="eaLoop"><svg viewBox="0 0 24 24"><path d="M20 12a8 8 0 1 1-2.3-5.7"/><path d="M20 4v5h-5"/></svg><b>Une boucle</b><small>Autour de moi</small></button>
+    <button id="eaRoutes"><svg viewBox="0 0 24 24"><path d="M5 21V4"/><path d="M5 4h11l-2 4 2 4H5"/></svg><b>Parcours balisés</b><small>GR, PR, véloroutes</small></button>
   </div>
   <button id="btnPrep" class="prep-btn" hidden>
     <svg viewBox="0 0 24 24"><path d="M8 7V5a4 4 0 0 1 8 0v2"/><rect x="5" y="7" width="14" height="14" rx="3"/><path d="M9 13h6M5 13h2M17 13h2"/></svg>
@@ -212,7 +227,7 @@
       <button id="btnShareApp" class="set-tile"><svg viewBox="0 0 24 24"><circle cx="18" cy="5" r="2.5"/><circle cx="6" cy="12" r="2.5"/><circle cx="18" cy="19" r="2.5"/><path d="m8.2 10.8 7.6-4.4M8.2 13.2l7.6 4.4"/></svg><b>Partager Pisteo</b><small>À un ami, un club</small></button>
     </div>
 
-    <h3 class="set-h">Navigation</h3>
+    <h3 class="set-h">Avant de partir</h3>
     <div class="set-group">
       <div class="row">
         <label for="prof">Je me déplace<br><small>Pour les itinéraires et le temps estimé</small></label>
@@ -230,6 +245,19 @@
         </select>
       </div>
       <div class="row">
+        <label for="optVoice">Guidage vocal et bips<br><small><button id="voiceTest" class="linkbtn">écouter</button></small></label>
+        <input type="checkbox" id="optVoice" class="check">
+      </div>
+      <div class="row">
+        <label for="optEco">Économie de batterie<br><small>Écran noir entre les virages · <button id="ecoInfoLink" class="linkbtn">en savoir plus</button></small></label>
+        <input type="checkbox" id="optEco" class="check">
+      </div>
+    </div>
+    <button id="setMoreBtn" class="set-more-btn" aria-expanded="false" aria-controls="setRare"><span>Plus de réglages</span><i>▸</i></button>
+    <div id="setRare" hidden>
+    <h3 class="set-h">Navigation</h3>
+    <div class="set-group">
+      <div class="row">
         <label for="optBanner">Indications<br><small>Taille du bandeau de direction</small></label>
         <select id="optBanner"><option value="normal">Grandes</option><option value="compact">Réduites</option><option value="hidden">Masquées</option></select>
       </div>
@@ -245,18 +273,10 @@
         <label for="autoRec">Enregistrer automatiquement<br><small>Dès que la navigation démarre</small></label>
         <input type="checkbox" id="autoRec" class="check">
       </div>
-      <div class="row">
-        <label for="optEco">Économie de batterie<br><small>Écran noir entre les virages · <button id="ecoInfoLink" class="linkbtn">en savoir plus</button></small></label>
-        <input type="checkbox" id="optEco" class="check">
-      </div>
     </div>
 
     <h3 class="set-h">Voix et vibrations</h3>
     <div class="set-group">
-      <div class="row">
-        <label for="optVoice">Guidage vocal et bips<br><small><button id="voiceTest" class="linkbtn">écouter</button></small></label>
-        <input type="checkbox" id="optVoice" class="check">
-      </div>
       <div class="row" id="rowVStyle">
         <label for="optVStyle">Voix<br><small id="voiceHelpRow">Robotique ? <button id="voiceHelp" class="linkbtn">une voix plus naturelle</button></small><small id="voiceCredit">Voix UPMC, licence <a href="voice/LICENSE.txt" target="_blank" rel="noopener">CC BY-SA</a></small></label>
         <select id="optVStyle"><option value="system">Voix du téléphone</option><option value="pisteo">Jessica (enregistrée)</option></select>
@@ -293,6 +313,7 @@
         <label for="optUnits">Unités</label>
         <select id="optUnits"><option value="">Automatique</option><option value="metric">Kilomètres, mètres</option><option value="imperial">Miles, pieds</option></select>
       </div>
+    </div>
     </div>
     <p class="note version-line"><span id="note"></span> · <button id="btnRepair" class="linkbtn" title="Recharge l'appli sans toucher à tes traces ni à tes cartes">Réparer l'appli</button> · <a href="confidentialite.html" target="_blank" rel="noopener" class="linkbtn">Confidentialité</a></p>
   </div>
@@ -900,6 +921,7 @@
     <button id="dlStop" class="btn ghost" hidden>Arrêter le téléchargement</button>
 
     <div class="dl-title">Téléchargées</div>
+    <div id="packClean" class="pack-clean" hidden><span id="packCleanTxt"></span><button id="packCleanBtn" class="btn small">Supprimer</button></div>
     <ul id="packList" class="lib-list"></ul>
     <p id="packEmpty" class="note">Aucune carte téléchargée pour l'instant.</p>
     <div class="row"><label for="showPacks">Montrer ces zones sur la carte</label><input type="checkbox" id="showPacks" class="check"></div>
@@ -986,8 +1008,8 @@
 
 <script src="vendor/maplibre-gl.js"></script>
 <script src="vendor/qrcode.js"></script>
-<script src="i18n/en.js?v=283"></script>
-<script src="i18n/es.js?v=283"></script>
-<script src="app.js?v=283"></script>
+<script src="i18n/en.js?v=284"></script>
+<script src="i18n/es.js?v=284"></script>
+<script src="app.js?v=284"></script>
 </body>
 </html>

@@ -5,7 +5,7 @@
 
 // La page et le code doivent être de la même version. Sinon (page gardée en cache
 // par le téléphone ou par GitHub), on recharge une page fraîche, au plus 3 fois.
-const APP_VERSION = 283;
+const APP_VERSION = 284;
 // lien « pisteo.app/?moi=1 » (ou ?moi=0) : cet appareil est compté à part dans les statistiques (développeur).
 // Lu avant tout rechargement de version, qui ne garde pas les paramètres de l'adresse.
 try {
@@ -6694,6 +6694,9 @@ async function renderPacks() {
   list.innerHTML = ''; $('packEmpty').hidden = packs.length > 0;
   const todo = packs.filter(p => p.restored && !p.complete);
   $('packRestore').hidden = !todo.length || !!restoreRun;
+  const stale = stalePacks(packs);
+  $('packClean').hidden = !stale.length || !!dl;
+  if (stale.length) $('packCleanTxt').textContent = `${stale.length > 1 ? stale.length + ' ' + tr('cartes incomplètes') : tr('1 carte incomplète')} ${tr('depuis plus de 2 jours')} · ${fmtMo(stale.reduce((t, p) => t + (p.bytes || 0), 0) / 1024)}`;
   if (todo.length) {
     const kb = todo.reduce((s, p) => s + (p.missing || p.count || 0) * provKB(p.prov || 'ign'), 0);
     $('packRestoreTxt').textContent = `${bkMaps(todo.length)} de ta sauvegarde ${todo.length > 1 ? 'sont' : 'est'} à retélécharger (~${fmtMo(kb)}). Mieux vaut être en Wi-Fi.`;
@@ -6755,9 +6758,9 @@ async function renderPacks() {
     li.className = 'pack-li'; li.append(info, del, acts); list.appendChild(li);
   }
 }
-async function deletePack(p) {
+async function deletePack(p, quiet) {
   if (dl) { toast('Attends la fin du téléchargement.'); return; }
-  toast('Suppression…', 8000);
+  if (!quiet) toast('Suppression…', 8000);
   try {
     const prov = p.prov || 'ign', others = new Set();
     (await listPacks()).filter(q => q.id !== p.id && (q.prov || 'ign') === prov).forEach(q => (q.tiles || []).forEach(t => others.add(t)));
@@ -6767,10 +6770,37 @@ async function deletePack(p) {
     await idb('readwrite', st => st.delete(p.id), 'packs');
     try { await idb('readwrite', st => st.delete(p.id), 'graphs'); graphs = null; } catch {}
     try { await idb('readwrite', st => st.delete(IDBKeyRange.bound(p.id + '#', p.id + '#\uffff')), 'graphChunks'); } catch {}
-    toast(`${p.name} supprimée`);
-  } catch { toast('Suppression impossible.'); }
-  renderPacks(); updateStorageInfo(); drawPacks();
+    if (!quiet) toast(`${p.name} supprimée`);
+  } catch { if (!quiet) toast('Suppression impossible.'); }
+  if (!quiet) { renderPacks(); updateStorageInfo(); drawPacks(); }
 }
+// cartes commencées puis abandonnées (incomplètes depuis plus de 2 jours) : on propose de faire le ménage d'un coup
+const stalePacks = packs => packs.filter(p => !p.complete && !p.restored && Date.now() - (p.date || 0) > 2 * 864e5 && !(dl && dl.packId === p.id));
+$('packCleanBtn').onclick = async () => {
+  if (dl) { toast('Attends la fin du téléchargement.'); return; }
+  const old = stalePacks(await listPacks()); if (!old.length) return;
+  $('packCleanBtn').disabled = true; toast('Suppression…', 8000);
+  for (const p of old) await deletePack(p, true);
+  $('packCleanBtn').disabled = false; stat('cartes_menage');
+  toast(old.length > 1 ? `${old.length} cartes incomplètes supprimées` : 'Carte incomplète supprimée', 3000);
+  renderPacks(); updateStorageInfo(); drawPacks();
+};
+// en Wi-Fi, un téléchargement resté incomplet (moins de 14 jours) reprend tout seul, une fois par jour au plus
+async function autoResume() {
+  try {
+    const c = navigator.connection;
+    if (dl || restoreRun || nav || document.hidden || !c || c.type !== 'wifi' || navigator.onLine === false) return;
+    const day = new Date().toDateString();
+    const p = (await listPacks()).find(q => !q.complete && !q.restored && Date.now() - (q.date || 0) < 14 * 864e5 && store.get('autoRes|' + q.id) !== day && (q.tiles || []).length);
+    if (!p || dl || nav) return;
+    store.set('autoRes|' + p.id, day); stat('carte_reprise_wifi');
+    toast(`${tr('Wi-Fi : le téléchargement de')} « ${p.name} » ${tr('reprend')}`, 6000, { label: tr('Arrêter'), run: () => { if (dl) dl.stop = true; } });
+    downloadPack(p, p.tiles);
+  } catch {}
+}
+try { navigator.connection && navigator.connection.addEventListener('change', () => setTimeout(autoResume, 4000)); } catch {}
+setTimeout(autoResume, 15000);
+document.addEventListener('visibilitychange', () => { if (!document.hidden) setTimeout(autoResume, 6000); });
 $('btnClearTiles').onclick = async () => {
   if (dl) { toast('Attends la fin du téléchargement.'); return; }
   try {
@@ -7274,6 +7304,17 @@ $('btnFeedback').onclick = () => {
   ]);
 };
 $('btnImport').onclick = () => $('fileIn').click();
+// réglages : l'essentiel d'abord, le reste derrière « Plus de réglages »
+$('setMoreBtn').onclick = () => {
+  const b = $('setMoreBtn'), r = $('setRare'), open = r.hidden;
+  r.hidden = !open; b.setAttribute('aria-expanded', open); b.classList.toggle('on', open);
+  b.querySelector('span').textContent = tr(open ? 'Moins de réglages' : 'Plus de réglages');
+  if (open) setTimeout(() => b.scrollIntoView({ behavior: 'smooth', block: 'start' }), 50);
+};
+// écran sans trace : trois points de départ
+$('eaGpx').onclick = () => $('fileIn').click();
+$('eaLoop').onclick = () => $('destLoop').click();
+$('eaRoutes').onclick = () => $('destRoutes').click();
 $('btnShareApp').onclick = async () => {
   try { stat('partage_appli'); } catch {}
   // tant que l'appli n'est pas publique, le lien Play Store ne marche que pour les testeurs : on partage le site
@@ -7311,6 +7352,39 @@ startActivity = (fn => function () { if (!nav) setTimeout(battCheck, 1500); retu
   if (had) { store.set('onb', '1'); return; }
   onbShow(0); $('onb').hidden = false; try { stat('onb_vu'); } catch {}
 })();
+// ---------- sortie de plusieurs jours en cours : à l'ouverture, proposer l'étape du jour ----------
+// (dossier gardé, départ prévu enregistré ; jour 1 = jour du départ) · une seule fois par jour et par sortie
+async function todayStage() {
+  try {
+    if (nav || actState !== 'idle' || !$('onb').hidden) return;
+    const ac = document.getElementById('askCard'); if (ac && !ac.hidden) return;
+    const day0 = t => { const d = new Date(t); d.setHours(0, 0, 0, 0); return d.getTime(); };
+    const today = day0(Date.now()), dayStr = new Date().toDateString();
+    for (let i = 0; i < localStorage.length; i++) {
+      const k = localStorage.key(i), m = k && k.match(/^prepTrip\|(.+)$/);
+      if (!m || /\|(ids|sig)$/.test(k)) continue;
+      const tk = m[1], folder = store.get(k), dep = +store.get('prepDep|' + tk);
+      if (!folder || !(dep > 0) || store.get('todayAsk|' + tk) === dayStr) continue;
+      let ids = []; try { ids = JSON.parse(store.get(k + '|ids') || '[]'); } catch {}
+      const d = Math.round((today - day0(dep)) / 864e5);
+      if (d < 0 || d >= ids.length) continue;
+      const it = await idb('readonly', st => st.get(ids[d])).catch(() => null);
+      if (!it || !it.text) continue;
+      if (track && trKey() === it.id) continue; // l'étape est déjà ouverte
+      store.set('todayAsk|' + tk, dayStr); stat('etape_du_jour');
+      const info = `${folder} · ${fmtDist(it.dist)}${it.up != null ? ' · D+ ' + fmtM(it.up) : ''}`;
+      const open = () => { loadText(it.text, false); store.set('gpx', it.text.length < 4.5e6 ? it.text : ''); };
+      askCard(`${tr('Aujourd\'hui : Jour')} ${d + 1}`, info, [
+        ['Plus tard', 'ghost'],
+        ['Voir', 'ghost', () => { stat('etape_du_jour_voir'); open(); }],
+        ['Naviguer', 'go', () => { stat('etape_du_jour_nav'); open(); setTimeout(() => startNav(), 300); }]
+      ]);
+      return;
+    }
+  } catch {}
+}
+setTimeout(todayStage, 2500);
+document.addEventListener('visibilitychange', () => { if (!document.hidden) setTimeout(todayStage, 1500); });
 
 // =====================================================================
 // Exemple, panneau, démarrage
@@ -7353,6 +7427,30 @@ function toggleMore(open, instant) {
   want ? moreMotion().open(instant) : moreMotion().close(instant);
 }
 $('btnMore').onclick = () => toggleMore(); $('grip').onclick = () => toggleMore();
+// ---------- ligne du titre : météo, éclairage, inverser, envoyer rangés dans « … » ----------
+(() => {
+  const menu = $('trMenu'), more = $('btnTrMore'), items = [...menu.querySelectorAll('button')];
+  const sync = () => {
+    more.hidden = items.every(b => b.hidden);
+    more.classList.toggle('dot', items.some(b => !b.hidden && b.classList.contains('on'))); // météo ou éclairage affichés
+    if (more.hidden) close();
+  };
+  function close() { if (menu.hidden) return; menu.hidden = true; more.setAttribute('aria-expanded', 'false'); }
+  function open() {
+    const r = more.getBoundingClientRect();
+    menu.hidden = false; more.setAttribute('aria-expanded', 'true');
+    const h = menu.offsetHeight, w = menu.offsetWidth;
+    // au-dessus du bouton s'il y a la place (panneau en bas), sinon en dessous
+    const top = r.top - h - 8 > 8 ? r.top - h - 8 : r.bottom + 8;
+    menu.style.top = top + 'px'; menu.style.left = clamp(r.right - w, 8, innerWidth - w - 8) + 'px';
+  }
+  more.onclick = e => { e.stopPropagation(); menu.hidden ? open() : close(); };
+  items.forEach(b => b.addEventListener('click', () => setTimeout(close, 0)));
+  document.addEventListener('pointerdown', e => { if (!menu.hidden && !menu.contains(e.target) && e.target !== more && !more.contains(e.target)) close(); }, true);
+  addEventListener('resize', close);
+  new MutationObserver(sync).observe(menu, { subtree: true, attributes: true, attributeFilter: ['hidden', 'class'] });
+  sync();
+})();
 // sortir de la vue mini (trace ouverte ou fermée, navigation lancée, grand écran…)
 function sheetFull() { if (document.body.classList.contains('sheet-mini')) moreMotion().exitMini(); }
 // un toucher sur le titre en vue mini remonte aussi le panneau
@@ -9485,7 +9583,7 @@ const STAT_BTN = {
   btnNav: 'nav_btn', btnNew: 'autre_trajet', destLoop: 'boucle_ouvrir', lpGo: 'boucle', lbAgain: 'boucle_autre', lbEdit: 'boucle_modifier', lbKeep: 'boucle_garder', lbGo: 'boucle_naviguer',
   destPlan: 'point_par_point', ptView: 'pp_apercu', ptDone: 'pp_naviguer', destPick: 'choisir_carte', destFree: 'balade_libre', destRoutes: 'balises_ouvrir', rtpGo: 'balise_naviguer', rtpKeep: 'balise_garder',
   btnWx: 'meteo', wxDepBtn: 'meteo_depart', depOk: 'meteo_depart_ok', wxInfo: 'meteo_legende', btnLit: 'eclairage', btnReverse: 'inverser', btnWatch: 'envoyer_parcours', wtLink: 'lien_partage', wtQr: 'qr_code', wtPropose: 'catalogue_proposer',
-  btnSaveTr: 'trace_enregistrer', btnOpen: 'gpx_ouvrir', btnSorties: 'mes_sorties', btnMaps: 'mes_cartes', btnStrava: 'strava_ouvrir', btnBackup: 'sauvegarde_ouvrir', btnFeedback: 'avis', btnImport: 'gpx_importer_tuile',
+  btnSaveTr: 'trace_enregistrer', btnOpen: 'gpx_ouvrir', btnSorties: 'mes_sorties', btnMaps: 'mes_cartes', btnStrava: 'strava_ouvrir', btnBackup: 'sauvegarde_ouvrir', btnFeedback: 'avis', btnImport: 'gpx_importer_tuile', eaGpx: 'vide_gpx', eaLoop: 'vide_boucle', eaRoutes: 'vide_balises',
   stvConnect: 'strava_connecter', sdStrava: 'sortie_strava', sdStvView: 'strava_voir', sdShare: 'sortie_partager', sdExport: 'sortie_export', sdFollow: 'sortie_refaire', sdPhAdd: 'photo_ajouter', phCam: 'photo_camera',
   gdNow: 'drive_maintenant', gdRestore: 'drive_restaurer', btnRejoin: 'retour_trace', btnOverview: 'vue_ensemble', npHome: 'retour_depart', npResume: 'reprendre_parcours', btnLayer: 'fond_changer',
   btnPip: 'pip', btnEcoFab: 'eco_bouton', btnRecFab: 'rec_bouton', npRec: 'rec_panneau', npReport: 'signaler_osm', npProfOnly: 'profil_seul', btnExit: 'terminer', finSave: 'sortie_garder', finDelete: 'sortie_jeter', finContinue: 'sortie_continuer',

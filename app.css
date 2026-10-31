@@ -68,6 +68,11 @@ body { font: 15px/1.35 var(--font); color: var(--ink); background: var(--paper);
   background: var(--hud); color: var(--hud-ink);
 }
 .stat { display: flex; flex-direction: column; min-width: 0; }
+/* sans trace : pas de « – » vides, une phrase à la place (l'altitude reste) */
+.hud-hint { display: none; grid-column: span 3; }
+.hud-hint .hint-txt { font-size: 13.5px; line-height: 1.25; opacity: .85; padding-top: 3px; }
+body:not(.trk) .hud-hint { display: flex; }
+body:not(.trk) .hud .stat:not(.hud-hint):not(:last-child) { display: none; }
 .lbl { font-size: 10px; text-transform: uppercase; letter-spacing: .08em; opacity: .65; white-space: nowrap; }
 .val { font: 600 20px/1.15 var(--num); font-variant-numeric: tabular-nums; white-space: nowrap; }
 .val.bad { color: #ff8a80; }
@@ -84,6 +89,27 @@ body { font: 15px/1.35 var(--font); color: var(--ink); background: var(--paper);
 /* vue mini : on a glissé le panneau vers le bas, seul le titre reste → la carte prend l'écran */
 body.sheet-mini:not(.side):not(.nav) .sheet > :not(.grip):not(.trackrow) { display: none !important; }
 body.sheet-mini:not(.side):not(.nav) .sheet .trackname { cursor: pointer; }
+/* menu « … » de la ligne du titre */
+.tr-menu { position: fixed; z-index: 40; min-width: 230px; max-width: calc(100vw - 16px); padding: 6px; border-radius: 16px; background: var(--panel); border: 1px solid var(--line); box-shadow: 0 10px 32px rgba(0,0,0,.28); display: flex; flex-direction: column; gap: 2px; }
+.tr-menu[hidden] { display: none; }
+.tr-menu .closebtn.icon { width: auto; min-height: 46px; padding: 0 14px; gap: 14px; justify-content: flex-start; border: 0; border-radius: 11px; background: none; color: var(--ink); font: 500 15px system-ui, sans-serif; text-align: left; }
+.tr-menu .closebtn.icon svg { width: 20px; height: 20px; flex: none; }
+.tr-menu .closebtn.icon:active { background: var(--line); }
+.tr-menu .closebtn.icon.wx-btn.on { background: color-mix(in srgb, var(--go) 16%, transparent); color: var(--go-ink); }
+.tr-menu .closebtn.icon.wx-btn.on svg { stroke: currentColor; }
+.tr-menu .closebtn.icon.wx-btn.on span::after { content: " ✓"; }
+#btnTrMore { position: relative; }
+#btnTrMore svg circle { fill: currentColor; stroke: none; }
+#btnTrMore.dot::after { content: ""; position: absolute; top: 3px; right: 3px; width: 8px; height: 8px; border-radius: 50%; background: var(--go); border: 2px solid var(--panel); }
+/* sans trace : trois points de départ au lieu d'un profil vide */
+.empty-acts { display: none; grid-template-columns: repeat(3, 1fr); gap: 8px; margin: 6px 0 12px; }
+body:not(.trk) .sheet:has(#actBar[hidden]) .empty-acts { display: grid; }
+body:not(.trk) .sheet:has(#actBar[hidden]) .prof-wrap { display: none; }
+.empty-acts button { display: flex; flex-direction: column; align-items: flex-start; gap: 3px; padding: 12px 10px; border-radius: 14px; border: 1px solid var(--line); background: var(--field); color: var(--ink); font: inherit; text-align: left; cursor: pointer; min-width: 0; }
+.empty-acts button:active { background: var(--line); }
+.empty-acts svg { width: 24px; height: 24px; margin-bottom: 4px; fill: none; stroke: var(--go-ink); stroke-width: 1.9; stroke-linecap: round; stroke-linejoin: round; }
+.empty-acts b { font-size: 14px; font-weight: 600; line-height: 1.2; }
+.empty-acts small { font-size: 11.5px; color: var(--muted); line-height: 1.25; }
 .trackrow { display: flex; align-items: center; gap: 8px; margin-bottom: 4px; min-height: 34px; }
 .trackname { flex: 1; min-width: 0; font-weight: 600; font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .closebtn { flex: none; display: inline-flex; align-items: center; gap: 4px; min-height: 34px; padding: 0 10px; border-radius: 17px;
@@ -109,6 +135,9 @@ button:focus-visible, .btn:focus-visible, select:focus-visible { outline: 3px so
 
 .more { display: flex; flex-direction: column; gap: 10px; margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--line); }
 /* Réglages : 4 raccourcis en tuiles, puis des groupes de réglages façon liste */
+.set-more-btn { display: flex; align-items: center; justify-content: space-between; width: 100%; margin: 14px 0 4px; padding: 14px 16px; border-radius: 14px; border: 1px solid var(--line); background: none; color: var(--ink); font: 600 15px system-ui, sans-serif; cursor: pointer; }
+.set-more-btn i { font-style: normal; color: var(--muted); transition: transform .2s; }
+.set-more-btn.on i { transform: rotate(90deg); }
 .set-tiles { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
 .set-tile { display: grid; grid-template-columns: 22px 1fr; column-gap: 10px; align-items: center; text-align: left;
   min-height: 60px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 12px; background: var(--field); color: var(--ink); font: inherit; cursor: pointer; }
@@ -356,6 +385,8 @@ body.nav .toast { top: auto; bottom: calc(var(--nav-h, 92px) + 90px); }
 .dl-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
 .dl-row small { color: var(--muted); min-width: 0; }
 .dl-box select { width: 100%; }
+.pack-clean { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin: 8px 0 4px; padding: 10px 12px; border-radius: 12px; background: color-mix(in srgb, #F0B354 14%, transparent); font-size: 13px; }
+.pack-clean[hidden] { display: none; }
 .pack-acts { display: flex; align-items: center; gap: 4px; flex: none; }
 /* cartes téléchargées : nom et détails sur toute la largeur, boutons en dessous */
 .lib-list li.pack-li { flex-wrap: wrap; align-items: flex-start; }
