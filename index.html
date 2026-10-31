@@ -466,7 +466,7 @@
   <form class="lib-dlg-box" role="dialog" aria-labelledby="libDlgTitle" onsubmit="return false">
     <b id="libDlgTitle"></b>
     <p id="libDlgText"></p>
-    <input id="libDlgIn" type="text" maxlength="40" autocomplete="off" enterkeyhint="done" placeholder="Ex. : Alpes été 2026">
+    <input id="libDlgIn" aria-label="Nom" type="text" maxlength="40" autocomplete="off" enterkeyhint="done" placeholder="Ex. : Alpes été 2026">
     <div id="libDlgSug" class="lib-dlg-sug"></div>
     <div class="lib-dlg-btns"><button id="libDlgNo" type="button" class="btn">Annuler</button><button id="libDlgOk" type="button" class="btn go">Créer</button><button id="libDlgAlt" type="button" class="btn danger" hidden></button></div>
   </form>
@@ -528,7 +528,7 @@
       <b id="pkTitle"></b>
       <button id="pkClose" class="closebtn" aria-label="Fermer"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></svg>Fermer</button>
     </div>
-    <input id="pkSearch" class="search" type="search" placeholder="Rechercher…" hidden>
+    <input id="pkSearch" aria-label="Rechercher dans la liste" class="search" type="search" placeholder="Rechercher…" hidden>
     <div id="pkList" class="pk-list" role="listbox"></div>
   </div>
 </div>
@@ -582,7 +582,7 @@
     </div>
     <p class="note">Ton parcours apparaîtra pour tous les utilisateurs de Pisteo, avec les parcours balisés, dès qu'il aura passé les vérifications automatiques.</p>
     <div class="seg"><button id="cpFoot">À pied</button><button id="cpBike">À vélo</button></div>
-    <input id="cpName" class="search" type="text" maxlength="60" placeholder="Nom du parcours (ex. : Tour du lac de Vassivière)" autocomplete="off">
+    <input id="cpName" aria-label="Nom du parcours" class="search" type="text" maxlength="60" placeholder="Nom du parcours (ex. : Tour du lac de Vassivière)" autocomplete="off">
     <textarea id="cpDesc" class="rep-text" rows="3" maxlength="500" placeholder="Description : difficulté, départ et parking, ce qu'on y voit, la meilleure saison…"></textarea>
     <div class="so-ph-head"><b>Photos</b><span class="note">3 au plus, visibles après validation</span><button id="cpPhAdd" class="btn small">＋ Ajouter</button></div>
     <div id="cpPhotos" class="so-photos"></div>
@@ -601,7 +601,7 @@
       <button id="ndClose" class="closebtn" aria-label="Fermer"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></svg>Fermer</button>
     </div>
     <div id="ndKinds" class="nd-kinds"></div>
-    <input id="ndText" class="search" type="text" maxlength="120" placeholder="Un mot pour les autres (facultatif)" autocomplete="off" enterkeyhint="done">
+    <input id="ndText" aria-label="Message pour les autres" class="search" type="text" maxlength="120" placeholder="Un mot pour les autres (facultatif)" autocomplete="off" enterkeyhint="done">
     <button id="ndOk" class="btn go">Ajouter le point</button>
     <button id="ndReport" class="linkbtn nd-rep">Problème sur le chemin ? Le signaler à OpenStreetMap</button>
   </div>
@@ -786,7 +786,7 @@
     <div class="lp-block">
       <span class="lp-l">Je veux faire</span>
       <div class="seg"><button id="lpByKm" class="on">Une distance</button><button id="lpByTime">Une durée</button></div>
-      <div class="lp-val"><input id="lpVal" class="search" type="number" inputmode="decimal" min="1" step="any"><span id="lpUnit">km</span></div>
+      <div class="lp-val"><input id="lpVal" aria-label="Distance ou durée de la boucle" class="search" type="number" inputmode="decimal" min="1" step="any"><span id="lpUnit">km</span></div>
       <div id="lpQuick" class="lp-quick"></div>
     </div>
     <button id="lpGo" class="btn go">Proposer un itinéraire</button>
@@ -813,7 +813,7 @@
         <button id="rtToggle" class="rt-toggle">Liste ▴</button>
         <button id="rtClose" class="closebtn" aria-label="Fermer"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></svg>Fermer</button>
       </div>
-      <div class="rt-bar"><input id="rtQ" class="search rt-q" type="search" placeholder="Chercher un lieu…" autocomplete="off" enterkeyhint="search"><div class="seg rt-mode"><button id="rtFoot">À pied</button><button id="rtBike">À vélo</button></div></div>
+      <div class="rt-bar"><input id="rtQ" aria-label="Chercher un lieu" class="search rt-q" type="search" placeholder="Chercher un lieu…" autocomplete="off" enterkeyhint="search"><div class="seg rt-mode"><button id="rtFoot">À pied</button><button id="rtBike">À vélo</button></div></div>
       <ul id="rtQList" class="lib-list rt-qlist" hidden></ul>
       <p id="rtStatus" class="note"></p>
       <div id="rtPick" class="rt-pick" hidden>
@@ -959,7 +959,7 @@
       <b>Où aller ?</b>
       <button id="destClose" class="closebtn" aria-label="Fermer"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></svg>Fermer</button>
     </div>
-    <input id="destQ" class="search" type="search" placeholder="Adresse, lieu, piscine…" autocomplete="off" enterkeyhint="search">
+    <input id="destQ" aria-label="Chercher une destination" class="search" type="search" placeholder="Adresse, lieu, piscine…" autocomplete="off" enterkeyhint="search">
     <ul id="destList" class="lib-list"></ul>
     <div class="dest-btns">
       <button id="destLoop" class="btn go wide2">⟳ Proposer une boucle</button>
