@@ -5,7 +5,7 @@
 
 // La page et le code doivent être de la même version. Sinon (page gardée en cache
 // par le téléphone ou par GitHub), on recharge une page fraîche, au plus 3 fois.
-const APP_VERSION = 286;
+const APP_VERSION = 287;
 // lien « pisteo.app/?moi=1 » (ou ?moi=0) : cet appareil est compté à part dans les statistiques (développeur).
 // Lu avant tout rechargement de version, qui ne garde pas les paramètres de l'adresse.
 try {
@@ -9187,6 +9187,8 @@ $('npExit').onclick = exitNearest;
 $('prepOffMore').onclick = () => { prepOffOpen = !prepOffOpen; prepOffline(); };
 $('prepOffBatt').onclick = () => prepAct('batt', {});
 // retour prévu : une ligne ; le choix du jour et de l'heure s'ouvre avec « Modifier »
+// départ : une ligne (jour, heure, arrivée) ; le choix s'ouvre avec « Modifier », pour laisser la place aux étapes
+$('prepDepEdit').onclick = () => { const p = $('prepDepPick'); p.hidden = !p.hidden; $('prepDepEdit').textContent = tr(p.hidden ? 'Modifier' : 'OK'); if (!p.hidden) pillCenter($('prepDepDays')); };
 $('prepRetEdit').onclick = () => { const p = $('prepRetPick'); p.hidden = !p.hidden; $('prepRetEdit').textContent = tr(p.hidden ? 'Modifier' : 'OK'); if (!p.hidden) pillCenter($('prepRetDays')); };
 $('prepOffGo').onclick = async () => {
   if (!track) return;
@@ -9450,7 +9452,7 @@ $('fabSub').addEventListener('click', () => { clearTimeout(fabSubT); fabSubT = s
 map.on('mousedown', () => { if (!$('fabSub').hidden) fabSub(false); });
 map.on('touchstart', () => { if (!$('fabSub').hidden) fabSub(false); });
 fabMoreDot();
-$('btnPrep').onclick = () => { stat('prep_ouvre'); if ($('prepSheet').hidden) { prepOffOpen = false; $('prepRetPick').hidden = true; $('prepRetEdit').textContent = tr('Modifier'); $('prepSheet').querySelector('.lib-panel').scrollTop = 0; } prepOpen(); };
+$('btnPrep').onclick = () => { stat('prep_ouvre'); if ($('prepSheet').hidden) { prepOffOpen = false; $('prepRetPick').hidden = true; $('prepRetEdit').textContent = tr('Modifier'); $('prepDepPick').hidden = true; $('prepDepEdit').textContent = tr('Modifier'); $('prepSheet').querySelector('.lib-panel').scrollTop = 0; } prepOpen(); };
 $('prepClose').onclick = () => { $('prepSheet').hidden = true; };
 $('prepSheet').onclick = e => { if (e.target === $('prepSheet')) $('prepSheet').hidden = true; };
 // ajuster sur la carte : on montre toute la trace, les repères J1, J2… se font glisser

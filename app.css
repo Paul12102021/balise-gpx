@@ -1088,6 +1088,8 @@ body.wx-on:not(.side) .trackrow { justify-content: space-between; } /* les bouto
 @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .off-batt.warn { background: #4a3a17; color: #ffe2a8; } }
 :root[data-theme="dark"] .off-batt.warn { background: #4a3a17; color: #ffe2a8; }
 #prepOff:not([hidden]) { margin-top: 4px; }
+.dep-info { display: block; margin: 6px 2px 0; font-size: 13px; line-height: 1.45; }
+#prepDepPick { margin-top: 8px; }
 .ret-line { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; padding: 10px 12px; border: 1px solid var(--line); border-radius: 12px; background: var(--field); }
 .ret-line > span { font-size: 13px; color: var(--muted); }
 .ret-line b { flex: 1; font-size: 15px; color: var(--go-ink); }

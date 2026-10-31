@@ -9,13 +9,13 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<meta name="balise-version" content="286">
+<meta name="balise-version" content="287">
 <title>Pisteo</title>
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" href="icon.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
 <link rel="stylesheet" href="vendor/maplibre-gl.css">
-<link rel="stylesheet" href="app.css?v=286">
+<link rel="stylesheet" href="app.css?v=287">
 </head>
 <body>
 <div id="map" aria-label="Carte"></div>
@@ -333,16 +333,16 @@
     <p id="prepSum" class="lib-sum"></p>
     <section class="prep-sec">
       <h4>Départ</h4>
-      <div class="ret-pick">
-        <div class="ret-head"><span>Départ prévu</span><b id="prepDepSum"></b></div>
+      <div class="ret-line"><span>Départ prévu</span><b id="prepDepSum"></b><button id="prepDepEdit" type="button">Modifier</button></div>
+      <div class="ret-pick" id="prepDepPick" hidden>
         <div class="ret-days" id="prepDepDays" role="listbox" aria-label="Jour du départ"></div>
         <div class="ret-time" id="prepDepTimeRow">
           <button data-t="-60" aria-label="Une heure plus tôt">−1 h</button><button data-t="-15" aria-label="Un quart d'heure plus tôt">−15</button>
           <b id="prepDepTime">–</b>
           <button data-t="15" aria-label="Un quart d'heure plus tard">+15</button><button data-t="60" aria-label="Une heure plus tard">+1 h</button>
         </div>
-        <small id="prepDepInfo" class="note"></small>
       </div>
+      <small id="prepDepInfo" class="note dep-info"></small>
     </section>
     <section class="prep-sec">
       <div class="prep-h"><h4>Étapes</h4>
@@ -1013,8 +1013,8 @@
 
 <script src="vendor/maplibre-gl.js"></script>
 <script src="vendor/qrcode.js"></script>
-<script src="i18n/en.js?v=286"></script>
-<script src="i18n/es.js?v=286"></script>
-<script src="app.js?v=286"></script>
+<script src="i18n/en.js?v=287"></script>
+<script src="i18n/es.js?v=287"></script>
+<script src="app.js?v=287"></script>
 </body>
 </html>
